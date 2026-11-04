@@ -1,0 +1,14 @@
+# .NET build artifacts
+**/bin/
+**/obj/
+**/node_modules/
+**/.angular/
+
+# IDE and OS files
+.vs/
+.idea/
+.DS_Store
+
+# Local secrets and environment overrides
+**/appsettings.Development.local.json
+**/.env

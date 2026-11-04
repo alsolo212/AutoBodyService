@@ -1,0 +1,4 @@
+@baseUrl = https://localhost:7097
+
+### Check that the AutoBodyService API is available
+GET {{baseUrl}}/api/health

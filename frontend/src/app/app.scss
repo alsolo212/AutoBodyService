@@ -1,0 +1,40 @@
+ :host {
+  display: block;
+  min-height: 100dvh;
+}
+
+.app-shell {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+.status-card {
+  width: min(100%, 36rem);
+  border: 1px solid #d8dee9;
+  border-radius: 1rem;
+  padding: 2rem;
+  background: #ffffff;
+  box-shadow: 0 1rem 2.5rem rgb(32 42 60 / 10%);
+}
+
+.eyebrow {
+  margin: 0 0 0.5rem;
+  color: #546e7a;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  color: #172033;
+}
+
+.api-status {
+  margin: 1.5rem 0 0;
+  color: #075985;
+  font-weight: 700;
+}
