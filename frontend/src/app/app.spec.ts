@@ -1,34 +1,14 @@
-import { of } from 'rxjs';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter, Router } from '@angular/router';
 import { App } from './app';
-import { ApiHealth } from './core/api-health';
+import { routes } from './app.routes';
 
 describe('App', () => {
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [App],
-      providers: [
-        {
-          provide: ApiHealth,
-          useValue: {
-            getStatus: () => of({ status: 'Healthy' }),
-          },
-        },
-      ],
-    })
-      .compileComponents();
-  });
-
-  it('should create the app', () => {
+  it('renders the public shell through the router', async () => {
+    await TestBed.configureTestingModule({ imports: [App], providers: [provideRouter(routes)] }).compileComponents();
     const fixture = TestBed.createComponent(App);
-    const app = fixture.componentInstance;
-    expect(app).toBeTruthy();
-  });
-
-  it('should render api status after health check', async () => {
-    const fixture = TestBed.createComponent(App);
+    await TestBed.inject(Router).navigateByUrl('/');
     await fixture.whenStable();
-    const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('[data-testid="api-status"]')?.textContent).toContain('API: Healthy');
+    expect((fixture.nativeElement as HTMLElement).querySelector('h1')?.textContent).toContain('Турбота про авто');
   });
 });
