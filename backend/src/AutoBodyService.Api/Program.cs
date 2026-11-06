@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using AutoBodyService.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -6,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 const string AngularDevelopmentCorsPolicy = "AngularDevelopment";
 
+builder.Services.AddInfrastructure(builder.Configuration.GetConnectionString("AutoBodyService"));
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));

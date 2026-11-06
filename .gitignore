@@ -3,6 +3,17 @@
 **/obj/
 **/node_modules/
 **/.angular/
+**/dist/
+**/coverage/
+**/test-results/
+**/playwright-report/
+
+# Local database files and dumps
+**/postgres-data/
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+**/*.dump
 
 # IDE and OS files
 .vs/
