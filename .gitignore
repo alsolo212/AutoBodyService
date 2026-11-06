@@ -10,5 +10,10 @@
 .DS_Store
 
 # Local secrets and environment overrides
-**/appsettings.Development.local.json
+**/appsettings.*.local.json
 **/.env
+**/.env.*
+!**/.env.example
+**/*.pfx
+**/*.p12
+**/*.key
