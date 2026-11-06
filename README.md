@@ -20,6 +20,28 @@ export ConnectionStrings__AutoBodyService='Host=127.0.0.1;Port=55432;Database=au
 dotnet run --project backend/src/AutoBodyService.Api
 ```
 
-Match the host port, database and user to `.env`. The API registers an empty EF Core context with the Npgsql provider; it does not connect at startup, create tables, or apply migrations. The existing API health endpoint reports API availability only, not database readiness.
+Match the host port, database and user to `.env`. Apply the migration only after verifying the target is the dedicated development database:
+
+```sh
+dotnet ef database update --project backend/src/AutoBodyService.Infrastructure --startup-project backend/src/AutoBodyService.Api
+```
+
+This command requires `dotnet-ef` compatible with EF Core 10. The API does not apply migrations automatically. Its health endpoint reports API availability only, not database readiness.
+
+## First SuperAdmin
+
+After applying the migration, an operator can initialize the first SuperAdmin through a one-time local command. It requires an empty users table, takes a database lock, creates the user and assigns the role in one transaction. The phone must already be in `+380` format followed by nine digits; the password must satisfy the configured Identity policy (at least 12 characters with upper- and lowercase letters, a digit and a non-alphanumeric character). Use a secret manager or environment variables; do not put credentials in source files, command arguments, logs, or shell history. For an interactive shell, the password can be entered without echo:
+
+```sh
+read -r 'InitialSuperAdmin__Name?Administrator name: '
+read -r 'InitialSuperAdmin__Phone?Phone (+380...): '
+read -rs 'InitialSuperAdmin__Password?Password: '
+echo
+export InitialSuperAdmin__Name InitialSuperAdmin__Phone InitialSuperAdmin__Password
+dotnet run --project backend/src/AutoBodyService.Api -- --initialize-superadmin
+unset InitialSuperAdmin__Name InitialSuperAdmin__Phone InitialSuperAdmin__Password
+```
+
+The `read` syntax above is for zsh. Remove the bootstrap secrets from the secret store after successful initialization. This command does not expose an HTTP endpoint and refuses to run once any user exists. Registration, login, CSRF validation for future state-changing endpoints, and account-management flows are not implemented yet; they must enforce the configured lockout, persistent sign-in, blocked-account and password-change rules.
 
 See [frontend/README.md](frontend/README.md) for frontend commands.

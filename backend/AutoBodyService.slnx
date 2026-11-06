@@ -5,4 +5,7 @@
     <Project Path="src/AutoBodyService.Domain/AutoBodyService.Domain.csproj" />
     <Project Path="src/AutoBodyService.Infrastructure/AutoBodyService.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AutoBodyService.IntegrationTests/AutoBodyService.IntegrationTests.csproj" />
+  </Folder>
 </Solution>

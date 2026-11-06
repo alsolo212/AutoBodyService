@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using AutoBodyService.Infrastructure;
+using AutoBodyService.Infrastructure.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +27,17 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+if (args.Contains("--initialize-superadmin", StringComparer.Ordinal))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var initializer = scope.ServiceProvider.GetRequiredService<SuperAdminInitializer>();
+    await initializer.InitializeAsync(
+        builder.Configuration["InitialSuperAdmin:Name"],
+        builder.Configuration["InitialSuperAdmin:Phone"],
+        builder.Configuration["InitialSuperAdmin:Password"]);
+    return;
+}
+
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();
 app.UseStatusCodePages();
@@ -39,6 +51,7 @@ app.UseHttpsRedirection();
 
 app.UseCors(AngularDevelopmentCorsPolicy);
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
