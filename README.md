@@ -45,3 +45,32 @@ unset InitialSuperAdmin__Name InitialSuperAdmin__Phone InitialSuperAdmin__Passwo
 The `read` syntax above is for zsh. Remove the bootstrap secrets from the secret store after successful initialization. This command does not expose an HTTP endpoint and refuses to run once any user exists. Registration, login, CSRF validation for future state-changing endpoints, and account-management flows are not implemented yet; they must enforce the configured lockout, persistent sign-in, blocked-account and password-change rules.
 
 See [frontend/README.md](frontend/README.md) for frontend commands.
+
+## Local HTTPS frontend and API
+
+The browser uses `https://localhost:4200` and same-origin `/api` URLs. Angular's development server forwards `/api/**` to `https://localhost:7097` and verifies the API certificate against the local certificate file. Production hosting must provide its own HTTPS reverse proxy for the same `/api` path; the Angular dev proxy is not a production server.
+
+For local development, create a dedicated self-signed localhost certificate and private key (do not overwrite an existing pair). These files are Git-ignored; keep the directory and key private. This requires OpenSSL with `-addext` support:
+
+```sh
+mkdir -p frontend/.local-https
+chmod 700 frontend/.local-https
+test ! -e frontend/.local-https/localhost.pem && test ! -e frontend/.local-https/localhost.key && \
+  (umask 077; openssl req -x509 -newkey rsa:2048 -sha256 -nodes \
+    -keyout frontend/.local-https/localhost.key -out frontend/.local-https/localhost.pem \
+    -days 365 -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1')
+```
+
+The certificate is not automatically trusted by your browser. To use the UI without a certificate warning, explicitly trust this local certificate in your development machine's trust store, following your OS/browser instructions. Never distribute its private key or use it in production. The Playwright browser ignores the frontend certificate warning only in tests; the dev proxy itself validates the API certificate.
+
+Start the verified development database with `docker compose up -d --wait`. In a shell at the repository root, set `ConnectionStrings__AutoBodyService` as described above, then start the API with the local certificate:
+
+```sh
+export Kestrel__Certificates__Default__Path="$PWD/frontend/.local-https/localhost.pem"
+export Kestrel__Certificates__Default__KeyPath="$PWD/frontend/.local-https/localhost.key"
+dotnet run --project backend/src/AutoBodyService.Api --launch-profile https
+```
+
+In a second shell, run `cd frontend && npm ci && npm start`. With all three services running, `curl --cacert frontend/.local-https/localhost.pem https://localhost:4200/api/health` checks the HTTPS proxy from the repository root. Set `E2E_LIVE_API=1` when running `npm run test:e2e` from `frontend` to include the real backend request. The health response confirms API availability only; it does not check PostgreSQL.
+
+The same-origin setup lets the browser send future secure cookies without cross-origin credentials. Angular is configured to read an `XSRF-TOKEN` cookie and send the `RequestVerificationToken` header expected by ASP.NET Core's default antiforgery configuration. This is preparation only: the backend still needs to issue the request token and enforce antiforgery validation on each future state-changing endpoint.

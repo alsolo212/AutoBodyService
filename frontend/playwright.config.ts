@@ -7,13 +7,16 @@ export default defineConfig({
   retries: process.env['CI'] ? 2 : 0,
   reporter: 'list',
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: 'https://localhost:4173',
+    // The test browser has an isolated profile and does not inherit OS trust settings.
+    ignoreHTTPSErrors: true,
     trace: 'retain-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'npm start -- --host 127.0.0.1 --port 4173',
-    url: 'http://127.0.0.1:4173',
+    command: 'npm start -- --host localhost --port 4173',
+    url: 'https://localhost:4173',
+    ignoreHTTPSErrors: true,
     reuseExistingServer: false,
     timeout: 120_000,
   },

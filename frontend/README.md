@@ -1,10 +1,10 @@
 # AutoBodyService frontend
 
-Install dependencies with `npm ci`, then run `npm start` for the development server or `npm run build` for a production build. The pinned Node.js version is in the repository's `.nvmrc`.
+Install dependencies with `npm ci`. Follow the root README's local HTTPS setup before `npm start`; run `npm run build` for a production build. The pinned Node.js version is in the repository's `.nvmrc`.
 
 The application uses Angular Router, HttpClient, RxJS and the Angular Reactive Forms package. Add forms when their features are implemented. `src/app/core` holds application-wide services, `shared` reusable UI, `layout` application shells, and `features` feature-specific code.
 
-For the Playwright smoke test, install its Chromium browser with `npx playwright install chromium`, then run `npm run test:e2e`. Playwright starts its own Angular development server; the shell smoke test does not require a running backend. Run the Angular unit tests with `npm test`.
+For Playwright, install its Chromium browser with `npx playwright install chromium`, then run `npm run test:e2e`. Playwright starts its own HTTPS Angular server. The live API test is skipped unless the API is running and `E2E_LIVE_API=1` is set. The isolated Playwright browser accepts the local self-signed certificate; the Angular proxy still validates the API certificate. Run the Angular unit tests with `npm test`.
 
 ## UI foundation
 

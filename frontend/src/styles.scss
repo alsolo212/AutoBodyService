@@ -30,6 +30,9 @@ button { cursor: pointer; }
 .field__input[aria-invalid='true'] { border-color: var(--danger); }
 .field__hint, .field__error { margin: 0; font-size: .8rem; line-height: 1.5; }
 .field__hint { color: var(--muted); } .field__error { color: var(--danger); }
+.api-connectivity { margin-top: 1.5rem; max-width: 32rem; }
+.api-connectivity__success { color: #436c4c; font-size: .8rem; }
+.api-connectivity__retry { margin-top: .9rem; min-height: 2.4rem; }
 .ui-state { display: flex; gap: 1rem; align-items: flex-start; padding: 1.25rem; border: 1px solid var(--line); border-radius: var(--radius); background: #f8faf6; line-height: 1.55; }
 .ui-state strong { font-size: .94rem; } .ui-state p { margin: .35rem 0 0; color: var(--muted); font-size: .86rem; }
 .ui-state--error { background: var(--danger-bg); border-color: #efc9c2; color: var(--danger); }

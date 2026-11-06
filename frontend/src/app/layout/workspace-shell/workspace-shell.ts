@@ -1,10 +1,11 @@
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { UiState } from '../../shared/ui-state/ui-state';
+import { ApiStatus } from '../../core/api-status/api-status';
 
 @Component({
   selector: 'app-workspace-shell',
-  imports: [RouterLink, UiState],
+  imports: [RouterLink, UiState, ApiStatus],
   template: `
     <a class="skip-link" [attr.href]="isAdmin ? '/admin#workspace-main' : '/account/appointments#workspace-main'">Перейти до вмісту</a>
     <div class="workspace">
@@ -35,6 +36,7 @@ import { UiState } from '../../shared/ui-state/ui-state';
               <app-ui-state kind="empty" title="Розділ у підготовці" [description]="isAdmin ? 'Функції керування з’являться після підключення сервісу.' : 'Запис на огляд і перегляд замовлень з’являться після підключення сервісу.'" />
             </section>
             <p class="workspace-footnote">{{ isAdmin ? 'Доступ до даних і дій перевірятиметься сервером.' : 'Інформація про ваші записи буде доступна після входу.' }}</p>
+            <app-api-status />
           </div>
         </main>
       </div>

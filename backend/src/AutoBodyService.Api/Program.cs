@@ -6,8 +6,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
-const string AngularDevelopmentCorsPolicy = "AngularDevelopment";
-
 builder.Services.AddInfrastructure(builder.Configuration.GetConnectionString("AutoBodyService"));
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -15,15 +13,6 @@ builder.Services.AddControllers()
 builder.Services.AddProblemDetails();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy(AngularDevelopmentCorsPolicy, policy =>
-    {
-        policy.WithOrigins("http://localhost:4200")
-            .AllowAnyHeader()
-            .AllowAnyMethod();
-    });
-});
 
 var app = builder.Build();
 
@@ -48,8 +37,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-app.UseCors(AngularDevelopmentCorsPolicy);
 
 app.UseAuthentication();
 app.UseAuthorization();
