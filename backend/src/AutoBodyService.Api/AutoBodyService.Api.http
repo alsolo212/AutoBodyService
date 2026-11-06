@@ -2,3 +2,6 @@
 
 ### Check that the AutoBodyService API is available
 GET {{baseUrl}}/api/health
+
+### Check the ProblemDetails response for an unknown route
+GET {{baseUrl}}/api/unknown
