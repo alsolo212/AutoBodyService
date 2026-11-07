@@ -8,6 +8,49 @@ namespace AutoBodyService.Infrastructure.Persistence;
 public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
     : IdentityDbContext<ApplicationUser>(options)
 {
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        var roleUserIds = ChangedRoleUserIds();
+        var users = roleUserIds.Length == 0 ? [] : Users.Where(user => roleUserIds.Contains(user.Id)).ToList();
+        var blockedIds = ModifiedUserIds();
+        var previousBlocks = blockedIds.Length == 0 ? [] : Users.AsNoTracking()
+            .Where(user => blockedIds.Contains(user.Id)).Select(user => new { user.Id, user.IsBlocked }).ToList();
+        RevokeChangedSessions(users, previousBlocks.ToDictionary(user => user.Id, user => user.IsBlocked));
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        var roleUserIds = ChangedRoleUserIds();
+        var users = roleUserIds.Length == 0 ? [] : await Users.Where(user => roleUserIds.Contains(user.Id)).ToListAsync(cancellationToken);
+        var blockedIds = ModifiedUserIds();
+        var previousBlocks = blockedIds.Length == 0 ? [] : await Users.AsNoTracking()
+            .Where(user => blockedIds.Contains(user.Id)).Select(user => new { user.Id, user.IsBlocked }).ToListAsync(cancellationToken);
+        RevokeChangedSessions(users, previousBlocks.ToDictionary(user => user.Id, user => user.IsBlocked));
+        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private string[] ChangedRoleUserIds() => ChangeTracker.Entries<IdentityUserRole<string>>()
+        .Where(entry => entry.State is EntityState.Added or EntityState.Deleted)
+        .Select(entry => entry.Entity.UserId).Distinct().ToArray();
+
+    private string[] ModifiedUserIds() => ChangeTracker.Entries<ApplicationUser>()
+        .Where(entry => entry.State == EntityState.Modified && entry.Property(user => user.IsBlocked).IsModified)
+        .Select(entry => entry.Entity.Id).ToArray();
+
+    private void RevokeChangedSessions(List<ApplicationUser> roleUsers, Dictionary<string, bool> previousBlocks)
+    {
+        var blockedUsers = ChangeTracker.Entries<ApplicationUser>()
+            .Where(entry => entry.State == EntityState.Modified && entry.Property(user => user.IsBlocked).IsModified
+                && previousBlocks.TryGetValue(entry.Entity.Id, out var wasBlocked) && wasBlocked != entry.Entity.IsBlocked)
+            .Select(entry => entry.Entity);
+        foreach (var user in roleUsers.Concat(blockedUsers).DistinctBy(user => user.Id))
+        {
+            user.SecurityStamp = Guid.NewGuid().ToString();
+            user.ConcurrencyStamp = Guid.NewGuid().ToString();
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);

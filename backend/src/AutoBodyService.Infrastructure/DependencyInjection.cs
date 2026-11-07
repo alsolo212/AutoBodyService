@@ -1,6 +1,7 @@
 using AutoBodyService.Infrastructure.Persistence;
 using AutoBodyService.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authentication;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -32,6 +33,8 @@ public static class DependencyInjection
             options.Cookie.SameSite = SameSiteMode.Lax;
             options.ExpireTimeSpan = TimeSpan.FromDays(7);
             options.SlidingExpiration = true;
+            options.Events.OnRedirectToLogin = context => { context.Response.StatusCode = StatusCodes.Status401Unauthorized; return Task.CompletedTask; };
+            options.Events.OnRedirectToAccessDenied = context => { context.Response.StatusCode = StatusCodes.Status403Forbidden; return Task.CompletedTask; };
             options.Events.OnValidatePrincipal = async context =>
             {
                 await SecurityStampValidator.ValidatePrincipalAsync(context);
@@ -39,7 +42,9 @@ public static class DependencyInjection
                 {
                     var manager = context.HttpContext.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
                     var user = await manager.GetUserAsync(context.Principal);
-                    if (user is null || user.IsBlocked)
+                    var roles = user is null ? Array.Empty<string>() : await manager.GetRolesAsync(user);
+                    var cookieRoles = context.Principal.FindAll(ClaimTypes.Role).Select(claim => claim.Value);
+                    if (user is null || user.IsBlocked || !roles.ToHashSet(StringComparer.Ordinal).SetEquals(cookieRoles))
                     {
                         context.RejectPrincipal();
                         await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
@@ -48,7 +53,6 @@ public static class DependencyInjection
             };
         });
         services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.Zero);
-        services.AddAntiforgery();
         services.AddScoped<SuperAdminInitializer>();
 
         return services;
