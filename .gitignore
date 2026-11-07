@@ -1,4 +1,5 @@
 # .NET build artifacts
+.dotnet/
 **/bin/
 **/obj/
 **/node_modules/
@@ -7,6 +8,13 @@
 **/coverage/
 **/test-results/
 **/playwright-report/
+
+# Local project instructions and learning documents
+/AGENTS.md
+/PROJECT_PLAN.md
+/SKILLS_GUIDE.md
+/LEARNING_GUIDE.md
+/PROGRESS.md
 
 # Local database files and dumps
 **/postgres-data/

@@ -1,5 +1,16 @@
 # AutoBodyService
 
+## .NET SDK
+
+The repository selects .NET SDK 10.0.403 or a later stable patch in the same feature band. Before running any .NET command, activate the project-local SDK and runtimes in each new bash or zsh session (including a new Codex session). From the repository root:
+
+```sh
+source scripts/activate-dotnet.sh
+dotnet --info
+```
+
+The activation checks the local SDK and both runtimes, sets `DOTNET_ROOT` and `PATH`, and clears conflicting architecture-specific `DOTNET_ROOT_*` values in the current shell. It fails if the local installation is missing or too old. Install SDK 10.0.403 in the ignored `.dotnet` directory using the [official .NET install script](https://learn.microsoft.com/dotnet/core/tools/dotnet-install-script) if needed. `global.json` selects an SDK only: without activation the system host may run an application using an older system runtime. The activation does not change system-wide installations or shell startup files.
+
 ## Local PostgreSQL
 
 Docker Desktop (or another running Docker daemon) and Docker Compose are required. The Compose project `autobodyservice-dev` creates a dedicated PostgreSQL 18 container and named volume. The database is published only on `127.0.0.1:55432` by default.
