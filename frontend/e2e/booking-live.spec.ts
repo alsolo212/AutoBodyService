@@ -97,4 +97,29 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await expect(page.getByText('1HGCM82633A004352')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 
+  await page.getByLabel('Дії із записом').click();
+  await page.getByRole('button', { name: 'Скасувати запис' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  const cancellation = page.waitForResponse(r => /\/api\/appointments\/[^/]+\/cancel$/.test(r.url()) && r.request().method() === 'POST');
+  const updated = page.waitForResponse(r => /\/api\/appointments\/[^/]+$/.test(r.url()) && r.request().method() === 'GET');
+  await page.getByRole('button', { name: 'Підтвердити', exact: true }).click();
+  expect((await cancellation).status()).toBe(204); expect((await updated).status()).toBe(200);
+  await expect(page.getByText('Запис скасовано.')).toBeVisible();
+  await expect(page.getByText('Скасовано', { exact: true }).first()).toBeVisible();
+  await expect(page.getByLabel('Дії із записом')).toHaveCount(0);
+  await page.getByRole('link', { name: 'Запис на огляд' }).click();
+  await page.getByLabel('Дата', { exact: true }).fill('2099-01-16');
+  await page.getByLabel('09:00', { exact: true }).check();
+  await page.getByRole('button', { name: 'Далі' }).click();
+  await page.getByLabel('VIN').fill('1HGCM82633A004352');
+  await page.getByLabel('Марка').fill('Клієнт'); await page.getByLabel('Модель').fill('Авто');
+  await page.getByRole('button', { name: 'Далі' }).click();
+  await page.getByLabel('Що потрібно оглянути?').fill('Повторний запис');
+  await page.getByRole('button', { name: 'Далі' }).click();
+  const rebooked = page.waitForResponse(r => r.url().endsWith('/api/appointments') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Підтвердити запис' }).click();
+  expect((await rebooked).status()).toBe(201);
+  await expect(page).toHaveURL(/\/account\/book\/success$/);
+  await expect(page.getByText(/09:00/)).toBeVisible();
+
 });

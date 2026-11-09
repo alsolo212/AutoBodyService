@@ -5,6 +5,8 @@ import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/route
 import { BehaviorSubject } from 'rxjs';
 import { AppointmentList } from './appointment-list/appointment-list';
 import { AppointmentDetail } from './appointment-detail/appointment-detail';
+import { CancelAppointment } from './cancel-appointment/cancel-appointment';
+import { By } from '@angular/platform-browser';
 
 const summary = { id: 'one', make: 'Марка', model: 'Модель', maskedVin: '*************4352', inspectionStartUtc: '2026-07-01T08:00:00Z', status: 'AwaitingInspection', repairPlan: null };
 const plan = { agreedPrice: 1250.5, currency: 'UAH', plannedStartUtc: '2026-07-01T08:00:00Z', estimatedFinishUtc: '2026-12-01T08:00:00Z' };
@@ -34,8 +36,16 @@ describe('personal appointments pages', () => {
     c.select('cancelled'); http.expectOne('/api/appointments/my?category=cancelled').flush([{ ...summary, status: 'Cancelled', repairPlan: plan }]); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Скасовано'); expect(fixture.nativeElement.textContent).toContain('₴'); expect(fixture.nativeElement.textContent).toContain('Планові терміни');
   });
+  it('refreshes the selected list after cancellation', () => {
+    const fixture = TestBed.createComponent(AppointmentList); fixture.detectChanges();
+    http.expectOne('/api/health').flush({ status: 'Healthy' }); http.expectOne('/api/appointments/my').flush([summary]);
+    fixture.componentInstance.select('active'); http.expectOne('/api/appointments/my?category=active').flush([summary]);
+    fixture.componentInstance.onCancelled(); http.expectOne('/api/appointments/my?category=active').flush([]); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Запис скасовано.'); expect(fixture.nativeElement.textContent).toContain('Записів не знайдено');
+  });
   it('renders details, history, participants and Kyiv dates without administrative fields', () => {
     const fixture = TestBed.createComponent(AppointmentDetail); fixture.detectChanges();
+    http.expectOne('/api/appointments/my').flush([]);
     expect(fixture.nativeElement.textContent).toContain('Завантажуємо запис');
     http.expectOne('/api/appointments/one').flush(detail); fixture.detectChanges();
     const text = fixture.nativeElement.textContent as string;
@@ -44,6 +54,7 @@ describe('personal appointments pages', () => {
   });
   it('distinguishes missing, session and retriable errors and handles absent optional data', () => {
     const fixture = TestBed.createComponent(AppointmentDetail); fixture.detectChanges();
+    http.expectOne('/api/appointments/my').flush([]);
     http.expectOne('/api/appointments/one').flush(null, { status: 404, statusText: 'Not Found' }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Запис не знайдено');
     fixture.componentInstance.reload(); http.expectOne('/api/appointments/one').flush(null, { status: 401, statusText: 'Unauthorized' }); fixture.detectChanges();
@@ -55,4 +66,21 @@ describe('personal appointments pages', () => {
     expect(fixture.nativeElement.textContent).toContain('Історія статусів поки недоступна');
     expect(fixture.nativeElement.textContent).toContain('Дані про учасників поки недоступні');
   });
+  it('hides cancellation for a foreign detail even when administrative details are readable', () => {
+    const fixture = TestBed.createComponent(AppointmentDetail); fixture.detectChanges();
+    http.expectOne('/api/appointments/my').flush([{ ...summary, id: 'another' }]);
+    http.expectOne('/api/appointments/one').flush({ ...detail, inspectionStartUtc: '2099-01-01T00:00:00Z' }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('summary')).toBeNull();
+  });
+  it('refreshes details from the server after successful cancellation', () => {
+    const fixture = TestBed.createComponent(AppointmentDetail); fixture.detectChanges();
+    http.expectOne('/api/appointments/my').flush([{ ...summary, inspectionStartUtc: '2099-01-01T00:00:00Z' }]);
+    http.expectOne('/api/appointments/one').flush({ ...detail, inspectionStartUtc: '2099-01-01T00:00:00Z' }); fixture.detectChanges();
+    const action = fixture.debugElement.query(By.directive(CancelAppointment)).componentInstance as CancelAppointment;
+    expect(action.available()).toBe(true); action.confirm();
+    http.expectOne('/api/auth/antiforgery').flush(null); http.expectOne('/api/appointments/one/cancel').flush(null);
+    http.expectOne('/api/appointments/one').flush({ ...detail, inspectionStartUtc: '2099-01-01T00:00:00Z', status: 'Cancelled' }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Скасовано'); expect(fixture.nativeElement.querySelector('summary')).toBeNull();
+  });
+
 });

@@ -42,6 +42,8 @@ public sealed class CreateAppointmentPostgresTests(PostgresIdentityFixture fixtu
         var forbiddenOwner = new { inspectionStartUtc = Start(FirstDate, 9, 0), vin = "1HGCM82633A123456", make = "Test", model = "Model", problemDescription = "Issue", userId = admin };
         Assert.Equal(HttpStatusCode.BadRequest, (await userClient.PostAsJsonAsync(Url, forbiddenOwner)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await userClient.PostAsJsonAsync(Url, new { inspectionStartUtc = Start(FirstDate, 9, 0), vin = "invalid", make = "Test", model = "Model", problemDescription = "Issue" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await userClient.PostAsJsonAsync(Url, new { inspectionStartUtc = Start(FirstDate, 9, 0), vin = "1HGCM82633A12345I", make = "Test", model = "Model", problemDescription = "Issue" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await userClient.PostAsJsonAsync(Url, new { inspectionStartUtc = Start(FirstDate, 9, 0), vin = "1HGCM82633A123456", make = "Test", model = "Model", problemDescription = "" })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await userClient.PostAsJsonAsync(Url, new { inspectionStartUtc = Start(FirstDate, 9, 0), vin = "1HGCM82633A123456", make = "Test", model = "Model", problemDescription = "  " })).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await userClient.PostAsJsonAsync(Url, Payload(Start(FirstDate, 9, 15)))).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await userClient.PostAsJsonAsync(Url, Payload(new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero)))).StatusCode);

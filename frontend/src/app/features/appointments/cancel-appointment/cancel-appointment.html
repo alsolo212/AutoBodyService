@@ -1,0 +1,6 @@
+@if (available()) {
+  <details class="actions"><summary [attr.aria-label]="'Дії із записом'" title="Дії із записом">⋯</summary><button type="button" (click)="open()" [disabled]="saving()">Скасувати запис</button></details>
+  <app-confirm-dialog [dialogId]="'cancel-' + id()" title="Скасувати запис?" description="Запис на огляд буде скасовано, а час знову стане доступним." (confirmed)="confirm()" />
+}
+@if (saving()) { <p role="status">Скасовуємо запис…</p> }
+@if (error()) { <p class="field__error" role="alert">{{ error() }}</p> }

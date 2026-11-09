@@ -1,5 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
+import { switchMap } from 'rxjs';
 
 export type AppointmentStatus = 'AwaitingInspection' | 'Scheduled' | 'InProgress' | 'AwaitingPayment' | 'Completed' | 'Cancelled';
 export type AppointmentCategory = 'all' | 'active' | 'completed' | 'cancelled';
@@ -24,5 +25,6 @@ export class AppointmentsApi {
   mine(category: AppointmentCategory) {
     return this.http.get<AppointmentSummary[]>('/api/appointments/my', category === 'all' ? {} : { params: { category } });
   }
+  cancel(id: string) { return this.http.get<void>('/api/auth/antiforgery').pipe(switchMap(() => this.http.post<void>(`/api/appointments/${encodeURIComponent(id)}/cancel`, {}))); }
   details(id: string) { return this.http.get<AppointmentDetails>(`/api/appointments/${encodeURIComponent(id)}`); }
 }
