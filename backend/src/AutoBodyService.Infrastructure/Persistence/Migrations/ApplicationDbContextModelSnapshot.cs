@@ -22,6 +22,118 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("AutoBodyService.Domain.Appointments.Appointment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("InspectionStartUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Make")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProblemDescription")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("Vin")
+                        .IsRequired()
+                        .HasMaxLength(17)
+                        .HasColumnType("character varying(17)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InspectionStartUtc")
+                        .IsUnique()
+                        .HasFilter("\"Status\" <> 5");
+
+                    b.HasIndex("UserId", "InspectionStartUtc");
+
+                    b.ToTable("Appointments", t =>
+                        {
+                            t.HasCheckConstraint("CK_Appointment_RequiredText", "length(btrim(\"Make\")) > 0 AND length(btrim(\"Model\")) > 0 AND length(btrim(\"ProblemDescription\")) > 0");
+
+                            t.HasCheckConstraint("CK_Appointment_Status", "\"Status\" BETWEEN 0 AND 5");
+
+                            t.HasCheckConstraint("CK_Appointment_Vin", "\"Vin\" ~ '^[A-HJ-NPR-Z0-9]{17}$'");
+                        });
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionDateInterval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<TimeOnly>("End")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<Guid>("OverrideId")
+                        .HasColumnType("uuid");
+
+                    b.Property<TimeOnly>("Start")
+                        .HasColumnType("time without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OverrideId");
+
+                    b.ToTable("InspectionDateInterval", t =>
+                        {
+                            t.HasCheckConstraint("CK_InspectionDateInterval_Valid", "\"Start\" < \"End\"");
+                        });
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionDateOverride", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date")
+                        .IsUnique();
+
+                    b.ToTable("InspectionDateOverrides", t =>
+                        {
+                            t.HasCheckConstraint("CK_InspectionDateOverride_Mode", "\"Mode\" BETWEEN 0 AND 2");
+                        });
+                });
+
             modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionSchedule", b =>
                 {
                     b.Property<int>("Id")
@@ -46,6 +158,32 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         {
                             Id = 1,
                             Version = new Guid("b1050732-661b-48b8-a1bf-11d338a4b001")
+                        });
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionSlotOverride", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OverrideId")
+                        .HasColumnType("uuid");
+
+                    b.Property<TimeOnly>("Start")
+                        .HasColumnType("time without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OverrideId", "Start")
+                        .IsUnique();
+
+                    b.ToTable("InspectionSlotOverride", t =>
+                        {
+                            t.HasCheckConstraint("CK_InspectionSlotOverride_Mode", "\"Mode\" BETWEEN 0 AND 1");
                         });
                 });
 
@@ -351,6 +489,33 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("AutoBodyService.Domain.Appointments.Appointment", b =>
+                {
+                    b.HasOne("AutoBodyService.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionDateInterval", b =>
+                {
+                    b.HasOne("AutoBodyService.Domain.InspectionSchedule.InspectionDateOverride", null)
+                        .WithMany("Intervals")
+                        .HasForeignKey("OverrideId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionSlotOverride", b =>
+                {
+                    b.HasOne("AutoBodyService.Domain.InspectionSchedule.InspectionDateOverride", null)
+                        .WithMany("Slots")
+                        .HasForeignKey("OverrideId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionWeeklyHours", b =>
                 {
                     b.HasOne("AutoBodyService.Domain.InspectionSchedule.InspectionSchedule", null)
@@ -418,6 +583,13 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionDateOverride", b =>
+                {
+                    b.Navigation("Intervals");
+
+                    b.Navigation("Slots");
                 });
 
             modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionSchedule", b =>

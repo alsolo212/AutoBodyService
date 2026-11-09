@@ -76,3 +76,25 @@ RequestVerificationToken: {{xsrfToken}}
     { "dayOfWeek": "Monday", "start": "09:00", "end": "12:00" }
   ]
 }
+
+### Inspection exception and effective template for a local date
+GET {{baseUrl}}/api/admin/inspection-exceptions?date=2026-11-09
+
+### Replace one date's rule; copy version from GET and refresh the antiforgery token.
+PUT {{baseUrl}}/api/admin/inspection-exceptions
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{
+  "version": "{{scheduleVersion}}",
+  "date": "2026-11-09",
+  "exception": {
+    "mode": "Weekly",
+    "reason": "",
+    "intervals": [],
+    "slots": [{ "start": "09:00", "mode": "Closed" }]
+  }
+}
+
+### Free inspection slots for a Kyiv calendar date (authenticated cookie)
+GET {{baseUrl}}/api/inspection-slots?date=2026-11-16

@@ -1,5 +1,6 @@
 using AutoBodyService.Infrastructure.Identity;
 using AutoBodyService.Domain.InspectionSchedule;
+using AutoBodyService.Domain.Appointments;
 using WeeklyScheduleEntity = AutoBodyService.Domain.InspectionSchedule.InspectionSchedule;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -12,6 +13,9 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 {
     public DbSet<WeeklyScheduleEntity> InspectionSchedules => Set<WeeklyScheduleEntity>();
     public DbSet<InspectionWeeklyHours> InspectionWeeklyHours => Set<InspectionWeeklyHours>();
+
+    public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<InspectionDateOverride> InspectionDateOverrides => Set<InspectionDateOverride>();
 
     public DbSet<RevokedSession> RevokedSessions => Set<RevokedSession>();
 
@@ -73,6 +77,49 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         {
             entity.HasKey(hours => hours.Id);
             entity.ToTable(table => table.HasCheckConstraint("CK_InspectionWeeklyHours_Valid", "\"DayOfWeek\" BETWEEN 0 AND 6 AND \"Start\" < \"End\""));
+        });
+        builder.Entity<Appointment>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.UserId).IsRequired();
+            entity.Property(x => x.InspectionStartUtc).IsRequired();
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.Property(x => x.Vin).HasMaxLength(17).IsRequired();
+            entity.Property(x => x.Make).IsRequired();
+            entity.Property(x => x.Model).IsRequired();
+            entity.Property(x => x.ProblemDescription).IsRequired();
+            // Repair plan persistence is introduced with its own workflow.
+            entity.Ignore(x => x.RepairPlan);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.InspectionStartUtc).IsUnique().HasFilter("\"Status\" <> 5");
+            entity.HasIndex(x => new { x.UserId, x.InspectionStartUtc });
+            entity.Property<uint>("Version").IsRowVersion();
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_Appointment_Status", "\"Status\" BETWEEN 0 AND 5");
+                table.HasCheckConstraint("CK_Appointment_Vin", "\"Vin\" ~ '^[A-HJ-NPR-Z0-9]{17}$'");
+                table.HasCheckConstraint("CK_Appointment_RequiredText", "length(btrim(\"Make\")) > 0 AND length(btrim(\"Model\")) > 0 AND length(btrim(\"ProblemDescription\")) > 0");
+            });
+        });
+        builder.Entity<InspectionDateOverride>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.Date).IsUnique();
+            entity.Property(x => x.Reason).HasMaxLength(500);
+            entity.HasMany(x => x.Intervals).WithOne().HasForeignKey(x => x.OverrideId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(x => x.Slots).WithOne().HasForeignKey(x => x.OverrideId).OnDelete(DeleteBehavior.Cascade);
+            entity.ToTable(table => table.HasCheckConstraint("CK_InspectionDateOverride_Mode", "\"Mode\" BETWEEN 0 AND 2"));
+        });
+        builder.Entity<InspectionDateInterval>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.ToTable(table => table.HasCheckConstraint("CK_InspectionDateInterval_Valid", "\"Start\" < \"End\""));
+        });
+        builder.Entity<InspectionSlotOverride>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.OverrideId, x.Start }).IsUnique();
+            entity.ToTable(table => table.HasCheckConstraint("CK_InspectionSlotOverride_Mode", "\"Mode\" BETWEEN 0 AND 1"));
         });
         builder.Entity<RevokedSession>(entity =>
         {

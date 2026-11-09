@@ -88,6 +88,9 @@ public static class DependencyInjection
         services.AddScoped<IRegistrationService, RegistrationService>();
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IInspectionScheduleService, InspectionScheduleService>();
+        services.AddScoped<IInspectionExceptionsService, InspectionExceptionsService>();
+        services.AddScoped<IInspectionSlotsService, InspectionSlotsService>();
+        services.AddSingleton(TimeProvider.System);
 
         return services;
     }
