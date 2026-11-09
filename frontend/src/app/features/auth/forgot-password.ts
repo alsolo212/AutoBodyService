@@ -1,0 +1,5 @@
+import { Component } from '@angular/core';
+import { RouterLink } from '@angular/router';
+@Component({ selector: 'app-forgot-password', imports: [RouterLink], template: `
+<div class="auth-page"><header class="auth-header"><a class="brand" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a><a class="auth-back" routerLink="/">← На головну</a></header><main class="auth-main"><div class="auth-card"><p class="eyebrow"><span class="eyebrow__line"></span> ДОПОМОГА З ДОСТУПОМ</p><h1>Забули пароль?</h1><p class="auth-intro">Зверніться до персоналу СТО, щоб відновити доступ до облікового запису.</p><div class="auth-note"><strong>Як це працює</strong><p>Співробітник допоможе підтвердити вашу особу та надасть тимчасовий пароль. Після входу його потрібно буде змінити.</p></div><a class="button button--primary auth-submit" routerLink="/login">Повернутися до входу ↗</a><p class="auth-switch"><a routerLink="/">Повернутися на головну</a></p></div></main></div>` })
+export class ForgotPassword {}

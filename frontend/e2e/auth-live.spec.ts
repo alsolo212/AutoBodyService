@@ -1,0 +1,31 @@
+import { expect, test } from '@playwright/test';
+
+test('registers, signs in and signs out through the real API', async ({ page }) => {
+  test.skip(process.env['E2E_LIVE_AUTH'] !== '1', 'Requires an isolated API and database.');
+  const phone = '0000' + String(Date.now() % 1_000_000).padStart(6, '0');
+  const password = 'Example-password-123!';
+  await page.goto('/register');
+  await page.getByLabel('Ім’я').fill('Тест');
+  await page.getByLabel('Номер телефону').fill(phone);
+  await page.getByLabel('Пароль', { exact: true }).fill(password);
+  await page.getByLabel('Повторіть пароль').fill(password);
+  const registration = page.waitForResponse(response => response.url().endsWith('/api/auth/register'));
+  await page.getByRole('button', { name: 'Зареєструватися' }).click();
+  expect((await registration).status()).toBe(202);
+  await expect(page.getByRole('status')).toContainText('Запит прийнято');
+  await page.getByRole('link', { name: /Перейти до входу/ }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole('heading', { name: 'Вітаємо знову.' })).toBeVisible();
+  await expect(page.getByLabel('Номер телефону')).toHaveClass(/ng-untouched/);
+  await page.getByLabel('Номер телефону').fill(phone);
+  await page.getByLabel('Пароль', { exact: true }).fill(password);
+  await expect(page.getByLabel('Номер телефону')).toHaveValue(phone);
+  await expect(page.getByLabel('Пароль', { exact: true })).toHaveValue(password);
+  await page.getByRole('button', { name: 'Увійти' }).click();
+  await expect(page).toHaveURL(/\/account\/appointments$/);
+  await expect(page.getByRole('heading', { name: 'Мої записи' })).toBeVisible();
+  await page.getByRole('button', { name: 'Вийти', exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.goto('/account/appointments');
+  await expect(page).toHaveURL(/\/login$/);
+});
