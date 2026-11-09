@@ -36,6 +36,9 @@ export class AuthService {
   register(request: Registration) {
     return this.token().pipe(switchMap(() => this.http.post<void>('/api/auth/register', request)));
   }
+  changePassword(currentPassword: string, newPassword: string) {
+    return this.token().pipe(switchMap(() => this.http.post<void>('/api/auth/change-password', { currentPassword, newPassword })));
+  }
   logout() {
     return this.token().pipe(
       switchMap(() => this.http.post<void>('/api/auth/logout', {})),

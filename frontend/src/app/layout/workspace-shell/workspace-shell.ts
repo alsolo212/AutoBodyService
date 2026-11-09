@@ -15,6 +15,8 @@ import { finalize } from 'rxjs';
         <a class="brand brand--compact" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a>
         <span class="workspace-topbar__label">{{ isAdmin ? 'Панель керування' : 'Особистий кабінет' }}</span>
         <a class="workspace-home" routerLink="/">На головну</a>
+        @if (isAdmin) { <a class="workspace-switch" routerLink="/account/appointments">Особистий кабінет</a> }
+        @else if (isStaff()) { <a class="workspace-switch" routerLink="/admin">Панель керування</a> }
         <button class="button button--secondary" type="button" (click)="logout()" [disabled]="loggingOut()">{{ loggingOut() ? 'Виходимо…' : 'Вийти' }}</button>
         <button class="menu-toggle button button--secondary" type="button" (click)="menuOpen.update(value => !value)" [attr.aria-expanded]="menuOpen()" aria-controls="workspace-nav">{{ menuOpen() ? 'Закрити меню' : 'Меню' }}</button>
       </header>
@@ -27,7 +29,7 @@ import { finalize } from 'rxjs';
               @for (item of primaryItems; track item) { <li><span class="sidebar__item" [class.sidebar__item--active]="$first" [attr.aria-current]="$first ? 'page' : null">{{ item }}</span></li> }
             </ul>
             <p class="sidebar__label">{{ isAdmin ? 'КЕРУВАННЯ' : 'ОСОБИСТЕ' }}</p>
-            <ul>@for (item of secondaryItems; track item) { <li><span class="sidebar__item">{{ item }}</span></li> }</ul>
+            <ul>@for (item of secondaryItems; track item) { <li>@if (item === 'Мій профіль') { <a class="sidebar__item" [routerLink]="isAdmin ? '/admin/profile' : '/account/profile'">{{ item }}</a> } @else { <span class="sidebar__item">{{ item }}</span> }</li> }</ul>
           </nav>
           <div class="sidebar__note"><span>УВАГА ДО ДЕТАЛЕЙ</span><p>Усе важливе про автомобіль — в одному місці.</p></div>
         </aside>
@@ -60,6 +62,7 @@ export class WorkspaceShell {
       error: () => this.logoutError.set('Не вдалося вийти. Перевірте з’єднання та спробуйте ще раз.'),
     });
   }
+  readonly isStaff = () => this.auth.session()?.roles.some(role => role === 'Admin' || role === 'SuperAdmin') ?? false;
   readonly isAdmin = inject(ActivatedRoute).snapshot.data['area'] === 'admin';
   readonly menuOpen = signal(false);
   readonly primaryItems = this.isAdmin ? ['Огляд', 'Замовлення', 'Розподіл робіт', 'Календар оглядів'] : ['Мої записи', 'Запис на огляд'];

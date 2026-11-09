@@ -34,6 +34,14 @@ describe('AuthService', () => {
     http.expectOne('/api/auth/session').error(new ProgressEvent('error'));
     expect(status).toBe(0);
   });
+  it('requests antiforgery before submitting a password change', () => {
+    service.changePassword('old-test', 'new-test').subscribe();
+    http.expectOne('/api/auth/antiforgery').flush(null);
+    const request = http.expectOne('/api/auth/change-password');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ currentPassword: 'old-test', newPassword: 'new-test' });
+    request.flush(null);
+  });
   it('refreshes antiforgery before logout and clears session on success', () => {
     service.session.set({ name: 'Test', phone: '+380000000000', roles: ['User'], mustChangePassword: false });
     service.logout().subscribe();

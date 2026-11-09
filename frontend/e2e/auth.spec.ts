@@ -42,7 +42,8 @@ test('forces temporary password screen and keeps it protected', async ({ page })
   await page.goto('/admin');
   await expect(page).toHaveURL(/\/account\/change-temporary-password$/);
   await expect(page.getByRole('heading', { name: 'Потрібно змінити пароль.' })).toBeVisible();
-  await expect(page.getByText('Зміна пароля поки недоступна')).toBeVisible();
+  await expect(page.getByLabel('Тимчасовий пароль')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Змінити пароль' })).toBeVisible();
 });
 
 test('blocks a user from administration and explains forgotten password', async ({ page }) => {
