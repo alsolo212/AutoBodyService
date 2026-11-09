@@ -17,7 +17,7 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -112,6 +112,28 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_Users_PhoneNormalized", "\"PhoneNormalized\" ~ '^\\+380[0-9]{9}$'");
                         });
+                });
+
+            modelBuilder.Entity("AutoBodyService.Infrastructure.Identity.RevokedSession", b =>
+                {
+                    b.Property<string>("IdHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("ExpiresUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("IdHash");
+
+                    b.HasIndex("ExpiresUtc");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("RevokedSessions");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -272,6 +294,15 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("AspNetUserTokens", (string)null);
+                });
+
+            modelBuilder.Entity("AutoBodyService.Infrastructure.Identity.RevokedSession", b =>
+                {
+                    b.HasOne("AutoBodyService.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

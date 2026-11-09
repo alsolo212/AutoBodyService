@@ -8,6 +8,8 @@ namespace AutoBodyService.Infrastructure.Persistence;
 public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
     : IdentityDbContext<ApplicationUser>(options)
 {
+    public DbSet<RevokedSession> RevokedSessions => Set<RevokedSession>();
+
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         var roleUserIds = ChangedRoleUserIds();
@@ -54,6 +56,14 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.Entity<RevokedSession>(entity =>
+        {
+            entity.HasKey(session => session.IdHash);
+            entity.Property(session => session.IdHash).HasMaxLength(64);
+            entity.Property(session => session.UserId).IsRequired();
+            entity.HasIndex(session => session.ExpiresUtc);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(session => session.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
         builder.Entity<ApplicationUser>(entity =>
         {
             entity.Property(user => user.Name).HasMaxLength(200).IsRequired();

@@ -3,6 +3,9 @@ using AutoBodyService.Application.Authentication;
 using AutoBodyService.Application.Profiles;
 using AutoBodyService.Infrastructure.Identity;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -76,8 +79,16 @@ public sealed class AuthController(SignInManager<ApplicationUser> signIn, UserMa
 
     [HttpPost("logout")]
     [Authorize]
-    public async Task<IActionResult> Logout()
+    public async Task<IActionResult> Logout([FromServices] SessionRevocations revocations, [FromServices] IOptionsMonitor<CookieAuthenticationOptions> cookieOptions)
     {
+        var id = users.GetUserId(User);
+        var sessionId = User.FindFirst(SessionRevocations.ClaimType)?.Value;
+        var ticket = await HttpContext.AuthenticateAsync(IdentityConstants.ApplicationScheme);
+        if (id is null || sessionId is null || ticket.Properties?.ExpiresUtc is not { } expires) return Unauthorized();
+        // A concurrent request can renew the same cookie while logout is in flight.
+        // Keep the revocation beyond the original expiry by one full sliding window.
+        var retention = cookieOptions.Get(IdentityConstants.ApplicationScheme).ExpireTimeSpan;
+        await revocations.RevokeAsync(sessionId, id, expires.Add(retention));
         await signIn.SignOutAsync();
         return NoContent();
     }
