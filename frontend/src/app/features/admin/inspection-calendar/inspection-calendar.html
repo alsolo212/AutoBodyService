@@ -1,0 +1,58 @@
+<div class="profile-page">
+  <a class="skip-link" href="#calendar-main">Перейти до вмісту</a>
+  <header class="profile-header">
+    <a class="brand" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a>
+    <nav aria-label="Навігація панелі керування"><a routerLink="/admin">Панель керування</a><a routerLink="/admin/profile">Мій профіль</a><a routerLink="/account/appointments">Особистий кабінет</a></nav>
+    <button class="button button--secondary" type="button" [disabled]="loggingOut()" (click)="logout()">{{ loggingOut() ? 'Виходимо…' : 'Вийти' }}</button>
+  </header>
+  <main class="calendar-main" id="calendar-main">
+    <div class="breadcrumbs"><a routerLink="/admin">Панель керування</a><span>/</span><span>Календар оглядів</span></div>
+    <div class="calendar-heading"><p class="eyebrow"><span class="eyebrow__line"></span> ПАНЕЛЬ КЕРУВАННЯ</p><h1>Календар оглядів</h1><p>Розклад і доступний час для первинних оглядів. Час СТО — Київ.</p></div>
+    @if (logoutError()) { <p class="auth-alert" role="alert">{{ logoutError() }}</p> }
+    <div class="calendar-tabs" aria-label="Розділи календаря">
+      <button type="button" [class.active]="tab() === 'appointments'" [attr.aria-pressed]="tab() === 'appointments'" (click)="setTab('appointments')">Записи на огляд</button>
+      <button type="button" [class.active]="tab() === 'settings'" [attr.aria-pressed]="tab() === 'settings'" (click)="setTab('settings')">Налаштування графіка</button>
+    </div>
+    <section class="calendar-panel">
+      <form class="date-picker" [formGroup]="dateForm" (ngSubmit)="load()">
+        <div class="field"><label class="field__label" for="calendar-date">Дата огляду</label><input id="calendar-date" type="date" class="field__input" formControlName="date" min="0002-01-01" max="9998-12-31" /></div>
+        <button class="button button--secondary" type="submit" [disabled]="loading() || saving() || dateForm.invalid">Показати дату</button>
+      </form>
+      @if (error()) { <div class="auth-alert" role="alert">{{ error() }} <button type="button" class="text-link" (click)="load()">Оновити дані</button></div> }
+      @if (message()) { <div class="profile-success" role="status">{{ message() }}</div> }
+      @if (loading()) { <p role="status">Завантажуємо календар…</p> }
+      @if (warning()) { <div class="calendar-warning" role="status"><strong>Увага до наявних записів</strong><p>{{ warning() }} Перевірте записи та зв’яжіться з клієнтами перед зміною графіка.</p></div> }
+      @if (loaded() && tab() === 'appointments') {
+        <div class="section-title"><div><p class="panel-eyebrow">ОБРАНА ДАТА</p><h2>Час для огляду · {{ displayedDate() }}</h2></div><span class="calendar-zone">EUROPE / KYIV</span></div>
+        <div class="calendar-warning"><strong>Список записів поки недоступний</strong><p>Дані про зайняті слоти, клієнтів і автомобілі ще не надаються сервером. Нижче показано лише вільний майбутній час.</p></div>
+        @if (!loading()) {
+          @if (slots().length) { <ul class="slot-list" aria-label="Вільний час">@for (slot of slots(); track slot.startUtc) { <li><span>{{ formatTime(slot.startUtc) }} – {{ formatTime(slot.endUtc) }}</span><strong>Вільно</strong></li> }</ul> }
+          @else { <p class="empty-note">На цю дату немає доступних майбутніх інтервалів.</p> }
+        }
+      } @else if (loaded()) {
+        <div class="section-title"><div><p class="panel-eyebrow">ЩОТИЖНЯ</p><h2>Робочі дні та години</h2></div></div>
+        <p class="calendar-help">День без інтервалів зачинений. Тривалість інтервалу — кратна 30 хвилинам; інтервали не можуть перетинатися.</p>
+        <form [formGroup]="weeklyForm" (ngSubmit)="requestSave('weekly')"><div formArrayName="intervals">
+          @for (day of days; track day.value) {
+            <div class="day-row"><div class="day-label"><strong>{{ day.label }}</strong><button type="button" class="text-link" (click)="addWeekly(day.value)">+ Додати час</button></div>
+              <div>@for (row of weeklyIntervals.controls; track row; let i = $index) { @if (row.controls.dayOfWeek.value === day.value) { <div class="interval-row" [formGroupName]="i"><label>Від <input type="time" class="field__input" formControlName="start" [attr.aria-label]="day.label + ', початок'" /></label><label>До <input type="time" class="field__input" formControlName="end" [attr.aria-label]="day.label + ', кінець'" /></label><button type="button" class="text-link remove" (click)="removeWeekly(i)" [attr.aria-label]="'Видалити інтервал: ' + day.label">Видалити</button></div> } }</div>
+            </div>
+          }
+        </div><button type="submit" class="button button--primary" [disabled]="loading() || saving()">Зберегти тижневий графік</button></form>
+        <div class="section-title section-title--border"><div><p class="panel-eyebrow">ОБРАНА ДАТА</p><h2>Виняток для дати · {{ displayedDate() }}</h2></div></div>
+        <form [formGroup]="exceptionForm" (ngSubmit)="requestSave('date')" class="exception-form">
+          <div class="field"><label class="field__label" for="date-mode">Правило дня</label><select id="date-mode" class="field__input" formControlName="mode"><option value="Weekly">За тижневим графіком</option><option value="Closed">Зачинено весь день</option><option value="Replace">Особливі години</option></select></div>
+          @if (exceptionForm.controls.mode.value === 'Replace') {
+            <div formArrayName="intervals"><h3>Години для цієї дати</h3>@for (row of dateIntervals.controls; track row; let i = $index) { <div class="interval-row" [formGroupName]="i"><label>Від <input type="time" class="field__input" formControlName="start" [attr.aria-label]="'Початок інтервалу ' + (i + 1)" /></label><label>До <input type="time" class="field__input" formControlName="end" [attr.aria-label]="'Кінець інтервалу ' + (i + 1)" /></label><button type="button" class="text-link remove" (click)="removeInterval(i)">Видалити</button></div> }<button type="button" class="text-link" (click)="addInterval()">+ Додати інтервал</button></div>
+          }
+          @if (exceptionForm.controls.mode.value !== 'Closed') {
+            <div formArrayName="slots"><h3>Окремі слоти</h3><p class="calendar-help">Кожне правило охоплює 30 хвилин від зазначеного часу.</p>@for (row of slotRules.controls; track row; let i = $index) { <div class="interval-row" [formGroupName]="i"><label>Початок <input type="time" class="field__input" formControlName="start" [attr.aria-label]="'Початок слота ' + (i + 1)" /></label><label>Дія <select class="field__input" formControlName="mode" [attr.aria-label]="'Дія для слота ' + (i + 1)"><option value="Closed">Закрити</option><option value="Open">Відкрити</option></select></label><button type="button" class="text-link remove" (click)="removeSlot(i)">Видалити</button></div> }<button type="button" class="text-link" (click)="addSlot()">+ Додати слот</button></div>
+          }
+          <div class="field"><label class="field__label" for="date-reason">Причина (необов’язково)</label><input id="date-reason" class="field__input" formControlName="reason" maxlength="500" /></div>
+          <div class="actions"><button class="button button--primary" type="submit" [disabled]="loading() || saving()">Зберегти виняток</button><button class="button button--secondary" type="button" [disabled]="loading() || saving()" (click)="requestSave('reset')">Прибрати виняток</button></div>
+        </form>
+      }
+    </section>
+  </main>
+  <app-confirm-dialog dialogId="confirm-schedule" title="Змінити графік?" description="Перевірка конфліктів із записами недоступна. Наявні записи не скасовуються; перевірте їх і зв’яжіться з клієнтами за потреби." confirmLabel="Зберегти" (confirmed)="save()" />
+</div>

@@ -26,7 +26,7 @@ import { finalize } from 'rxjs';
           <nav [attr.aria-label]="isAdmin ? 'Навігація панелі керування' : 'Навігація особистого кабінету'">
             <p class="sidebar__label">{{ isAdmin ? 'ОСНОВНЕ' : 'АВТОМОБІЛЬ' }}</p>
             <ul>
-              @for (item of primaryItems; track item) { <li><span class="sidebar__item" [class.sidebar__item--active]="$first" [attr.aria-current]="$first ? 'page' : null">{{ item }}</span></li> }
+              @for (item of primaryItems; track item) { <li>@if (isAdmin && item === 'Календар оглядів') { <a class="sidebar__item" routerLink="/admin/inspection-calendar">{{ item }}</a> } @else { <span class="sidebar__item" [class.sidebar__item--active]="$first" [attr.aria-current]="$first ? 'page' : null">{{ item }}</span> }</li> }
             </ul>
             <p class="sidebar__label">{{ isAdmin ? 'КЕРУВАННЯ' : 'ОСОБИСТЕ' }}</p>
             <ul>@for (item of secondaryItems; track item) { <li>@if (item === 'Мій профіль') { <a class="sidebar__item" [routerLink]="isAdmin ? '/admin/profile' : '/account/profile'">{{ item }}</a> } @else { <span class="sidebar__item">{{ item }}</span> }</li> }</ul>

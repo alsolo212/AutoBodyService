@@ -15,6 +15,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<InspectionWeeklyHours> InspectionWeeklyHours => Set<InspectionWeeklyHours>();
 
     public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<AppointmentStatusEvent> AppointmentStatusEvents => Set<AppointmentStatusEvent>();
     public DbSet<InspectionDateOverride> InspectionDateOverrides => Set<InspectionDateOverride>();
 
     public DbSet<RevokedSession> RevokedSessions => Set<RevokedSession>();
@@ -94,12 +95,23 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasIndex(x => x.InspectionStartUtc).IsUnique().HasFilter("\"Status\" <> 5");
             entity.HasIndex(x => new { x.UserId, x.InspectionStartUtc });
             entity.Property<uint>("Version").IsRowVersion();
+            entity.HasMany(x => x.StatusEvents).WithOne().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.Navigation(x => x.StatusEvents).UsePropertyAccessMode(PropertyAccessMode.Field);
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint("CK_Appointment_Status", "\"Status\" BETWEEN 0 AND 5");
                 table.HasCheckConstraint("CK_Appointment_Vin", "\"Vin\" ~ '^[A-HJ-NPR-Z0-9]{17}$'");
-                table.HasCheckConstraint("CK_Appointment_RequiredText", "length(btrim(\"Make\")) > 0 AND length(btrim(\"Model\")) > 0 AND length(btrim(\"ProblemDescription\")) > 0");
+                table.HasCheckConstraint("CK_Appointment_RequiredText", "\"Make\" ~ '[^[:space:]]' AND \"Model\" ~ '[^[:space:]]' AND \"ProblemDescription\" ~ '[^[:space:]]'");
             });
+        });
+        builder.Entity<AppointmentStatusEvent>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ActorId).IsRequired();
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.AppointmentId, x.ChangedAtUtc });
+            entity.HasIndex(x => x.AppointmentId).IsUnique().HasFilter("\"FromStatus\" IS NULL");
+            entity.ToTable(table => table.HasCheckConstraint("CK_AppointmentStatusEvent_Status", "(\"FromStatus\" BETWEEN 0 AND 5 OR \"FromStatus\" IS NULL) AND \"ToStatus\" BETWEEN 0 AND 5 AND (\"FromStatus\" IS NOT NULL OR \"ToStatus\" = 0)"));
         });
         builder.Entity<InspectionDateOverride>(entity =>
         {

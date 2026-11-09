@@ -74,11 +74,52 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Appointments", t =>
                         {
-                            t.HasCheckConstraint("CK_Appointment_RequiredText", "length(btrim(\"Make\")) > 0 AND length(btrim(\"Model\")) > 0 AND length(btrim(\"ProblemDescription\")) > 0");
+                            t.HasCheckConstraint("CK_Appointment_RequiredText", "\"Make\" ~ '[^[:space:]]' AND \"Model\" ~ '[^[:space:]]' AND \"ProblemDescription\" ~ '[^[:space:]]'");
 
                             t.HasCheckConstraint("CK_Appointment_Status", "\"Status\" BETWEEN 0 AND 5");
 
                             t.HasCheckConstraint("CK_Appointment_Vin", "\"Vin\" ~ '^[A-HJ-NPR-Z0-9]{17}$'");
+                        });
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.Appointments.AppointmentStatusEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("AppointmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("FromStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ToStatus")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("AppointmentId")
+                        .IsUnique()
+                        .HasFilter("\"FromStatus\" IS NULL");
+
+                    b.HasIndex("AppointmentId", "ChangedAtUtc");
+
+                    b.ToTable("AppointmentStatusEvents", t =>
+                        {
+                            t.HasCheckConstraint("CK_AppointmentStatusEvent_Status", "(\"FromStatus\" BETWEEN 0 AND 5 OR \"FromStatus\" IS NULL) AND \"ToStatus\" BETWEEN 0 AND 5 AND (\"FromStatus\" IS NOT NULL OR \"ToStatus\" = 0)");
                         });
                 });
 
@@ -498,6 +539,21 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("AutoBodyService.Domain.Appointments.AppointmentStatusEvent", b =>
+                {
+                    b.HasOne("AutoBodyService.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AutoBodyService.Domain.Appointments.Appointment", null)
+                        .WithMany("StatusEvents")
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionDateInterval", b =>
                 {
                     b.HasOne("AutoBodyService.Domain.InspectionSchedule.InspectionDateOverride", null)
@@ -583,6 +639,11 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.Appointments.Appointment", b =>
+                {
+                    b.Navigation("StatusEvents");
                 });
 
             modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionDateOverride", b =>
