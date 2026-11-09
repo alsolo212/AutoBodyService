@@ -24,7 +24,7 @@ import { PublicContacts } from '../../shared/public-contacts/public-contacts';
             <p class="eyebrow"><span class="eyebrow__line"></span> КУЗОВНИЙ РЕМОНТ</p>
             <h1>Увага до деталей.<br><em>Турбота про авто.</em></h1>
             <p class="hero__lead">Від першого огляду до повернення автомобіля — зрозумілий процес і вся інформація про ремонт в одному місці.</p>
-            <div class="hero__actions"><a class="button button--primary" routerLink="/account/appointments">Перейти до кабінету <span aria-hidden="true">↗</span></a><a class="text-link" href="#process">Як це працює <span aria-hidden="true">↓</span></a></div>
+            <div class="hero__actions"><a class="button button--primary" routerLink="/account/book">Записатися на огляд <span aria-hidden="true">↗</span></a><a class="text-link" href="#process">Як це працює <span aria-hidden="true">↓</span></a></div>
           </div>
           <aside class="hero-card" aria-label="Етапи обслуговування">
             <div class="hero-card__top"><span>ВАШ АВТОМОБІЛЬ</span><span>01 / 04</span></div>

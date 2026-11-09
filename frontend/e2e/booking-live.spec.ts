@@ -1,0 +1,53 @@
+import { expect, test } from '@playwright/test';
+
+test('booking uses the real API, preserves details on conflict and confirms another slot', async ({ page }) => {
+  test.skip(process.env['E2E_REAL_AUTH'] !== '1', 'Requires the isolated API and database.');
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto('/login');
+  await page.getByLabel('Номер телефону').fill(process.env['E2E_ADMIN_PHONE']!);
+  await page.getByLabel('Пароль', { exact: true }).fill(process.env['E2E_ADMIN_PASSWORD']!);
+  await page.getByRole('button', { name: 'Увійти' }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+  const scheduleStatus = await page.evaluate(async () => {
+    const schedule = await (await fetch('/api/admin/inspection-schedule')).json();
+    await fetch('/api/auth/antiforgery');
+    const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
+    const intervals = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(dayOfWeek => ({ dayOfWeek, start: '09:00', end: '10:00' }));
+    return (await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token }, body: JSON.stringify({ version: schedule.version, intervals }) })).status;
+  });
+  expect(scheduleStatus).toBe(204);
+  await page.goto('/account/book');
+  await page.getByLabel('Дата', { exact: true }).fill('2099-01-15');
+  await page.getByLabel('09:00', { exact: true }).check();
+  await page.getByRole('button', { name: 'Далі' }).click();
+  await page.getByLabel('VIN').fill('1HGCM82633A004352');
+  await page.getByLabel('Марка').fill('Test'); await page.getByLabel('Модель').fill('Model');
+  await page.getByRole('button', { name: 'Далі' }).click();
+  await page.getByLabel('Що потрібно оглянути?').fill('Тестовий опис');
+  await page.getByRole('button', { name: 'Далі' }).click();
+  const taken = await page.evaluate(async () => {
+    const slots = await (await fetch('/api/inspection-slots?date=2099-01-15')).json();
+    await fetch('/api/auth/antiforgery');
+    const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
+    return (await fetch('/api/appointments', { method: 'POST', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token }, body: JSON.stringify({ inspectionStartUtc: slots.slots[0].startUtc, vin: '1HGCM82633A004352', make: 'Test', model: 'Model', problemDescription: 'Issue' }) })).status;
+  });
+  expect(taken).toBe(201);
+  await page.getByRole('button', { name: 'Підтвердити запис' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Цей час уже недоступний' })).toBeVisible();
+  await page.getByLabel('09:30', { exact: true }).check();
+  await page.getByRole('button', { name: 'Далі' }).click();
+  await expect(page.getByLabel('VIN')).toHaveValue('1HGCM82633A004352');
+  await page.getByRole('button', { name: 'Далі' }).click();
+  await expect(page.getByLabel('Що потрібно оглянути?')).toHaveValue('Тестовий опис');
+  await page.getByRole('button', { name: 'Далі' }).click();
+  const created = page.waitForResponse(r => r.url().endsWith('/api/appointments') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Підтвердити запис' }).click();
+  expect((await created).status()).toBe(201);
+  await expect(page).toHaveURL(/\/account\/book\/success$/);
+  await expect(page.getByRole('heading', { name: 'Запис підтверджено' })).toBeVisible();
+  await expect(page.getByText(/09:30/)).toBeVisible();
+  await expect(page.getByRole('link', { name: process.env['E2E_TEST_CONTACT_PHONE']! })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('link', { name: 'Мої записи' }).last().click();
+  await expect(page).toHaveURL(/\/account\/appointments$/);
+});

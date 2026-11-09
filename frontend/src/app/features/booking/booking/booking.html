@@ -1,0 +1,32 @@
+<div class="profile-page">
+  <header class="profile-header"><a class="brand" routerLink="/"><span class="brand__name">AutoBody<span>Service</span></span></a><nav aria-label="Навігація"><a routerLink="/account/appointments">Мої записи</a><a routerLink="/account/profile">Мій профіль</a></nav></header>
+  <main class="profile-main">
+    <p class="eyebrow"><span class="eyebrow__line"></span> ОСОБИСТИЙ КАБІНЕТ</p><h1>Запис на огляд</h1>
+    <p class="profile-intro">Оберіть зручний час і розкажіть про автомобіль. Час вказано за Києвом.</p>
+    <p class="booking-progress" aria-live="polite">Крок {{ step() }} з 4</p>
+    <form class="profile-panel booking-form" [formGroup]="form" (ngSubmit)="step() === 4 ? submit() : next()">
+      @if (step() === 1) {
+        <h2>Дата і час огляду</h2>
+        @if (conflict()) { <p class="auth-alert" role="alert">Цей час уже недоступний. Оберіть інший слот — дані автомобіля та опис збережено.</p> }
+        <label class="field"><span class="field__label">Дата</span><input class="field__input" type="date" formControlName="date" [min]="today" required></label>
+        @if (loading()) { <p aria-live="polite">Завантажуємо вільний час…</p> }
+        @else if (loadError()) { <p role="alert">Не вдалося завантажити вільний час.</p><button type="button" class="button button--secondary" (click)="refresh()">Спробувати ще раз</button> }
+        @else if (slots().length) {
+          <fieldset><legend class="field__label">Вільний час (30 хвилин)</legend><div class="slots">@for (slot of slots(); track slot.startUtc) { <label class="slot"><input type="radio" formControlName="slot" [value]="slot.startUtc"><span>{{ format(slot.startUtc) }}</span></label> }</div></fieldset>
+        } @else { <p aria-live="polite">На цю дату вільного часу немає. Оберіть іншу дату.</p> }
+        @if (form.controls.slot.touched && form.controls.slot.invalid) { <p class="field__error" role="alert">Оберіть час огляду.</p> }
+      } @else if (step() === 2) {
+        <h2>Дані автомобіля</h2>
+        <label class="field"><span class="field__label">VIN</span><input class="field__input" formControlName="vin" maxlength="17" autocapitalize="characters" autocomplete="off" [attr.aria-invalid]="form.controls.vin.touched && form.controls.vin.invalid" (input)="form.controls.vin.setValue(form.controls.vin.value.toUpperCase())"><span class="field__hint">17 латинських літер і цифр, без I, O та Q.</span>@if (form.controls.vin.touched && form.controls.vin.invalid) { <span class="field__error">Введіть коректний VIN із 17 символів.</span> }</label>
+        <label class="field"><span class="field__label">Марка</span><input class="field__input" formControlName="make" maxlength="200" [attr.aria-invalid]="form.controls.make.touched && form.controls.make.invalid">@if (form.controls.make.touched && form.controls.make.invalid) { <span class="field__error">Вкажіть марку автомобіля.</span> }</label>
+        <label class="field"><span class="field__label">Модель</span><input class="field__input" formControlName="model" maxlength="200" [attr.aria-invalid]="form.controls.model.touched && form.controls.model.invalid">@if (form.controls.model.touched && form.controls.model.invalid) { <span class="field__error">Вкажіть модель автомобіля.</span> }</label>
+      } @else if (step() === 3) {
+        <h2>Опис проблеми</h2><label class="field"><span class="field__label">Що потрібно оглянути?</span><textarea class="field__input" formControlName="problem" rows="6" maxlength="5000" [attr.aria-invalid]="form.controls.problem.touched && form.controls.problem.invalid"></textarea>@if (form.controls.problem.touched && form.controls.problem.invalid) { <span class="field__error">Опишіть проблему текстом.</span> }</label>
+      } @else {
+        <h2>Перевірте дані</h2><dl class="summary"><div><dt>Дата і час</dt><dd>{{ format(form.controls.slot.value, true) }}</dd></div><div><dt>VIN</dt><dd>{{ form.controls.vin.value }}</dd></div><div><dt>Автомобіль</dt><dd>{{ form.controls.make.value }} {{ form.controls.model.value }}</dd></div><div><dt>Опис проблеми</dt><dd class="problem">{{ form.controls.problem.value }}</dd></div></dl>
+        @if (submitError()) { <p class="auth-alert" role="alert">{{ submitError() }}</p> }
+      }
+      <div class="booking-actions">@if (step() > 1) { <button class="button button--secondary" type="button" (click)="step.set(step() - 1)" [disabled]="submitting()">Назад</button> }<button class="button button--primary" type="submit" [disabled]="submitting() || (step() === 1 && loading())">{{ submitting() ? 'Створюємо запис…' : step() === 4 ? 'Підтвердити запис' : 'Далі' }}</button></div>
+    </form>
+  </main>
+</div>

@@ -1,0 +1,2 @@
+.success-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.5rem; }
+@media (max-width: 560px) { .success-actions { flex-direction: column; } }

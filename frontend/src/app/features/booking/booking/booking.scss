@@ -1,0 +1,13 @@
+.booking-form { display: grid; gap: 1.25rem; }
+.booking-progress { font-size: .85rem; font-weight: 700; color: #536d57; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.slots { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .7rem; }
+.slot { position: relative; cursor: pointer; }
+.slot input { position: absolute; opacity: 0; }
+.slot span { display: block; padding: .7rem 1rem; border: 1px solid #cbd4cb; border-radius: .5rem; }
+.slot input:checked + span { border-color: #426946; background: #e4eddb; font-weight: 700; }
+.slot input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 3px; }
+.booking-actions { display: flex; gap: .75rem; justify-content: flex-end; }
+.summary { margin: 0; display: grid; gap: 1rem; }
+.summary div { min-width: 0; } dt { color: var(--muted); font-size: .8rem; } dd { margin: .3rem 0 0; overflow-wrap: anywhere; } .problem { white-space: pre-wrap; }
+@media (max-width: 560px) { .booking-actions { flex-direction: column-reverse; } .booking-actions .button { width: 100%; } }

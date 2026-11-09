@@ -6,6 +6,8 @@ import { Register } from './features/auth/register';
 import { ForgotPassword } from './features/auth/forgot-password';
 import { ChangePasswordRequired } from './features/auth/change-password-required';
 import { Profile } from './features/profile/profile';
+import { Booking } from './features/booking/booking/booking';
+import { BookingSuccess } from './features/booking/booking-success/booking-success';
 import { InspectionCalendar } from './features/admin/inspection-calendar/inspection-calendar';
 import { authGuard, guestGuard, temporaryPasswordGuard } from './core/auth-guards';
 export const routes: Routes = [
@@ -16,6 +18,8 @@ export const routes: Routes = [
   { path: 'account/change-temporary-password', component: ChangePasswordRequired, canActivate: [temporaryPasswordGuard], title: 'Зміна пароля — AutoBodyService' },
   { path: 'account/profile', component: Profile, canActivate: [authGuard], data: { area: 'account' }, title: 'Мій профіль — AutoBodyService' },
   { path: 'admin/profile', component: Profile, canActivate: [authGuard], data: { area: 'admin' }, title: 'Мій профіль — AutoBodyService' },
+  { path: 'account/book/success', component: BookingSuccess, canActivate: [authGuard], data: { area: 'account' }, title: 'Запис підтверджено — AutoBodyService' },
+  { path: 'account/book', component: Booking, canActivate: [authGuard], data: { area: 'account' }, title: 'Запис на огляд — AutoBodyService' },
   { path: 'account/appointments', component: WorkspaceShell, canActivate: [authGuard], data: { area: 'account' }, title: 'Мої записи — AutoBodyService' },
   { path: 'admin/inspection-calendar', component: InspectionCalendar, canActivate: [authGuard], data: { area: 'admin' }, title: 'Календар оглядів — AutoBodyService' },
   { path: 'admin', component: WorkspaceShell, canActivate: [authGuard], data: { area: 'admin' }, title: 'Панель керування — AutoBodyService' },

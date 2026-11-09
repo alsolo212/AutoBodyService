@@ -26,7 +26,7 @@ import { finalize } from 'rxjs';
           <nav [attr.aria-label]="isAdmin ? 'Навігація панелі керування' : 'Навігація особистого кабінету'">
             <p class="sidebar__label">{{ isAdmin ? 'ОСНОВНЕ' : 'АВТОМОБІЛЬ' }}</p>
             <ul>
-              @for (item of primaryItems; track item) { <li>@if (isAdmin && item === 'Календар оглядів') { <a class="sidebar__item" routerLink="/admin/inspection-calendar">{{ item }}</a> } @else { <span class="sidebar__item" [class.sidebar__item--active]="$first" [attr.aria-current]="$first ? 'page' : null">{{ item }}</span> }</li> }
+              @for (item of primaryItems; track item) { <li>@if (isAdmin && item === 'Календар оглядів') { <a class="sidebar__item" routerLink="/admin/inspection-calendar">{{ item }}</a> } @else if (!isAdmin && item === 'Запис на огляд') { <a class="sidebar__item" routerLink="/account/book">{{ item }}</a> } @else { <span class="sidebar__item" [class.sidebar__item--active]="$first" [attr.aria-current]="$first ? 'page' : null">{{ item }}</span> }</li> }
             </ul>
             <p class="sidebar__label">{{ isAdmin ? 'КЕРУВАННЯ' : 'ОСОБИСТЕ' }}</p>
             <ul>@for (item of secondaryItems; track item) { <li>@if (item === 'Мій профіль') { <a class="sidebar__item" [routerLink]="isAdmin ? '/admin/profile' : '/account/profile'">{{ item }}</a> } @else { <span class="sidebar__item">{{ item }}</span> }</li> }</ul>
@@ -39,7 +39,7 @@ import { finalize } from 'rxjs';
             <div class="breadcrumbs"><a routerLink="/">Головна</a><span>/</span><span>{{ isAdmin ? 'Панель керування' : 'Особистий кабінет' }}</span></div>
             <div class="workspace-heading"><div><p class="eyebrow"><span class="eyebrow__line"></span> {{ isAdmin ? 'ПАНЕЛЬ КЕРУВАННЯ' : 'ОСОБИСТИЙ КАБІНЕТ' }}</p><h1>{{ isAdmin ? 'Робочий простір' : 'Мої записи' }}</h1><p>{{ isAdmin ? 'Замовлення, розклад і робота команди — в одному місці.' : 'Тут ви зможете переглядати свої записи та перебіг ремонту.' }}</p></div><span class="status-pill">У ПІДГОТОВЦІ</span></div>
             <section class="workspace-panel" aria-labelledby="workspace-panel-title"><div class="panel-heading"><div><p class="panel-eyebrow">{{ isAdmin ? 'ОГЛЯД' : 'ВАШІ АВТОМОБІЛІ' }}</p><h2 id="workspace-panel-title">{{ isAdmin ? 'Панель керування' : 'Записи на огляд' }}</h2></div><span class="panel-tag">AUTO / BODY</span></div>
-              <app-ui-state kind="empty" title="Розділ у підготовці" [description]="isAdmin ? 'Функції керування з’являться після підключення сервісу.' : 'Запис на огляд і перегляд замовлень з’являться після підключення сервісу.'" />
+              <app-ui-state kind="empty" title="Розділ у підготовці" [description]="isAdmin ? 'Функції керування з’являться після підключення сервісу.' : 'Перегляд замовлень з’явиться після підключення сервісу.'" />
             </section>
             <p class="workspace-footnote">{{ isAdmin ? 'Доступ до даних і дій перевірятиметься сервером.' : 'Інформація про ваші записи буде доступна після входу.' }}</p>
             <app-api-status />
