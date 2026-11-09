@@ -24,6 +24,11 @@ public sealed class InspectionExceptionsTests
         var postgres = Environment.GetEnvironmentVariable("EXCEPTION_TEST_POSTGRES");
         using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
+            if (postgres is null)
+            {
+                services.RemoveAll<AutoBodyService.Application.InspectionSchedule.IInspectionCalendarService>();
+                services.AddScoped<AutoBodyService.Application.InspectionSchedule.IInspectionCalendarService, InMemoryScheduleTestAdapter>();
+            }
             services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
             services.AddDbContext<ApplicationDbContext>(options => { if (postgres is null) options.UseInMemoryDatabase(database); else options.UseNpgsql(postgres); });
@@ -51,7 +56,6 @@ public sealed class InspectionExceptionsTests
         Assert.Equal(HttpStatusCode.BadRequest, (await admin.GetAsync(Url + "?date=2026-02-30")).StatusCode);
         var initial = await Read(admin, "2026-11-09");
         Assert.Equal("Europe/Kyiv", initial.GetProperty("timeZone").GetString());
-        Assert.False(initial.GetProperty("bookingConflictsChecked").GetBoolean());
         var version = initial.GetProperty("version").GetGuid();
         var weekly = new { version, intervals = new[] { new { dayOfWeek = "Monday", start = "09:00", end = "11:00" }, new { dayOfWeek = "Sunday", start = "02:30", end = "04:30" } } };
         Assert.Equal(HttpStatusCode.NoContent, (await admin.PutAsJsonAsync("/api/admin/inspection-schedule", weekly)).StatusCode);
@@ -66,7 +70,6 @@ public sealed class InspectionExceptionsTests
         using (var closed = await Put(admin, version, "2026-11-09", new { mode = "Closed", reason = "Вихідний", intervals = Array.Empty<object>(), slots = Array.Empty<object>() }))
         {
             Assert.Equal(HttpStatusCode.OK, closed.StatusCode);
-            Assert.False((await closed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("bookingConflictsChecked").GetBoolean());
         }
         var closedState = await Read(admin, "2026-11-09");
         Assert.Empty(closedState.GetProperty("templateSlots").EnumerateArray());

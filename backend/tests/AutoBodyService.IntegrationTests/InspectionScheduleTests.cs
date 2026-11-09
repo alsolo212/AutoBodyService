@@ -24,6 +24,11 @@ public sealed class InspectionScheduleTests
         var postgres = Environment.GetEnvironmentVariable("INSPECTION_TEST_POSTGRES");
         using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
+            if (postgres is null)
+            {
+                services.RemoveAll<AutoBodyService.Application.InspectionSchedule.IInspectionCalendarService>();
+                services.AddScoped<AutoBodyService.Application.InspectionSchedule.IInspectionCalendarService, InMemoryScheduleTestAdapter>();
+            }
             services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
             services.AddDbContext<ApplicationDbContext>(options =>

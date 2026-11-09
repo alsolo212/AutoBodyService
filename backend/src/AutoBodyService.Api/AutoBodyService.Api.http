@@ -65,13 +65,14 @@ GET {{baseUrl}}/api/public/contacts
 ### Weekly inspection hours (Admin or SuperAdmin cookie)
 GET {{baseUrl}}/api/admin/inspection-schedule
 
-### Replace all weekly hours; copy version from GET and refresh the antiforgery token.
+### Replace weekly hours after preview; copy version and confirmation token and refresh antiforgery.
 PUT {{baseUrl}}/api/admin/inspection-schedule
 Content-Type: application/json
 RequestVerificationToken: {{xsrfToken}}
 
 {
   "version": "{{scheduleVersion}}",
+  "confirmationToken": "{{confirmationToken}}",
   "intervals": [
     { "dayOfWeek": "Monday", "start": "09:00", "end": "12:00" }
   ]
@@ -80,7 +81,7 @@ RequestVerificationToken: {{xsrfToken}}
 ### Inspection exception and effective template for a local date
 GET {{baseUrl}}/api/admin/inspection-exceptions?date=2026-11-09
 
-### Replace one date's rule; copy version from GET and refresh the antiforgery token.
+### Replace one date rule after preview; copy version and confirmation token and refresh antiforgery.
 PUT {{baseUrl}}/api/admin/inspection-exceptions
 Content-Type: application/json
 RequestVerificationToken: {{xsrfToken}}
@@ -88,6 +89,7 @@ RequestVerificationToken: {{xsrfToken}}
 {
   "version": "{{scheduleVersion}}",
   "date": "2026-11-09",
+  "confirmationToken": "{{confirmationToken}}",
   "exception": {
     "mode": "Weekly",
     "reason": "",
@@ -124,3 +126,27 @@ GET {{baseUrl}}/api/appointments/00000000-0000-0000-0000-000000000000
 ### Cancel your own future inspection (authentication and antiforgery required).
 POST {{baseUrl}}/api/appointments/{{appointmentId}}/cancel
 RequestVerificationToken: {{xsrfToken}}
+
+### Administrative inspections for a Kyiv date (Admin/SuperAdmin cookie)
+GET {{baseUrl}}/api/admin/inspection-calendar?date=2099-01-15
+
+### Preview a weekly schedule change; refresh the antiforgery token first.
+POST {{baseUrl}}/api/admin/inspection-schedule/preview
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{
+  "version": "{{scheduleVersion}}",
+  "intervals": [{ "dayOfWeek": "Monday", "start": "09:00", "end": "12:00" }]
+}
+
+### Preview a date exception; pass the returned confirmationToken with the same proposal to PUT.
+POST {{baseUrl}}/api/admin/inspection-exceptions/preview
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{
+  "version": "{{scheduleVersion}}",
+  "date": "2026-11-09",
+  "exception": { "mode": "Weekly", "reason": "", "intervals": [], "slots": [{ "start": "09:00", "mode": "Closed" }] }
+}

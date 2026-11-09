@@ -12,9 +12,7 @@ export interface AppointmentDetails { id: string; vin: string; make: string; mod
 
 const labels: Record<AppointmentStatus, string> = { AwaitingInspection: 'Очікує огляду', Scheduled: 'Заплановано', InProgress: 'У роботі', AwaitingPayment: 'Очікує оплати', Completed: 'Завершено', Cancelled: 'Скасовано' };
 export function statusLabel(status: AppointmentStatus): string { return labels[status] ?? 'Невідомий статус'; }
-export function kyivTime(value: string): string {
-  return new Intl.DateTimeFormat('uk-UA', { timeZone: 'Europe/Kyiv', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
-}
+export { kyivTime } from '../../shared/time/kyiv-time';
 export function price(value: number, currency: string): string {
   return `${new Intl.NumberFormat('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)} ${currency === 'UAH' ? '₴' : currency}`;
 }

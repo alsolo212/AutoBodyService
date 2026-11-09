@@ -21,10 +21,11 @@
       @if (error()) { <div class="auth-alert" role="alert">{{ error() }} <button type="button" class="text-link" (click)="load()">Оновити дані</button></div> }
       @if (message()) { <div class="profile-success" role="status">{{ message() }}</div> }
       @if (loading()) { <p role="status">Завантажуємо календар…</p> }
-      @if (warning()) { <div class="calendar-warning" role="status"><strong>Увага до наявних записів</strong><p>{{ warning() }} Перевірте записи та зв’яжіться з клієнтами перед зміною графіка.</p></div> }
       @if (loaded() && tab() === 'appointments') {
         <div class="section-title"><div><p class="panel-eyebrow">ОБРАНА ДАТА</p><h2>Час для огляду · {{ displayedDate() }}</h2></div><span class="calendar-zone">EUROPE / KYIV</span></div>
-        <div class="calendar-warning"><strong>Список записів поки недоступний</strong><p>Дані про зайняті слоти, клієнтів і автомобілі ще не надаються сервером. Нижче показано лише вільний майбутній час.</p></div>
+        <h3>Записи на огляд</h3>
+        @if (appointments().length) { <ul class="slot-list" aria-label="Записи на огляд">@for (item of appointments(); track item.id) { <li><div><strong>{{ formatDate(item.inspectionStartUtc) }} – {{ formatTimeEnd(item.inspectionStartUtc) }}</strong><p>{{ item.make }} {{ item.model }} · {{ item.customerName }}</p><span>{{ statusLabel(item.status) }}{{ item.status === 'Cancelled' ? '' : ' · Зайнято' }}</span></div><a class="text-link" [routerLink]="['/admin/appointments', item.id]">Відкрити замовлення</a></li> }</ul> } @else { <p class="empty-note">На цю дату записів немає.</p> }
+        <h3>Вільний час</h3>
         @if (!loading()) {
           @if (slots().length) { <ul class="slot-list" aria-label="Вільний час">@for (slot of slots(); track slot.startUtc) { <li><span>{{ formatTime(slot.startUtc) }} – {{ formatTime(slot.endUtc) }}</span><strong>Вільно</strong></li> }</ul> }
           @else { <p class="empty-note">На цю дату немає доступних майбутніх інтервалів.</p> }
@@ -54,5 +55,7 @@
       }
     </section>
   </main>
-  <app-confirm-dialog dialogId="confirm-schedule" title="Змінити графік?" description="Перевірка конфліктів із записами недоступна. Наявні записи не скасовуються; перевірте їх і зв’яжіться з клієнтами за потреби." confirmLabel="Зберегти" (confirmed)="save()" />
+  <app-confirm-dialog dialogId="confirm-schedule" title="Змінити графік?" description="Наявні записи не скасовуються. Перевірте зачеплені записи перед збереженням." confirmLabel="Зберегти" (confirmed)="save()">
+    @if (preview(); as result) { @if (result.conflicts.length) { <p><strong>Зміна вплине на такі записи:</strong></p><ul>@for (item of result.conflicts; track item.id) { <li>{{ formatDate(item.inspectionStartUtc) }} · {{ item.make }} {{ item.model }} · {{ item.customerName }} · {{ statusLabel(item.status) }} <a [routerLink]="['/admin/appointments', item.id]">Відкрити</a></li> }</ul> } @else { <p>Зачеплених майбутніх записів немає.</p> } }
+  </app-confirm-dialog>
 </div>

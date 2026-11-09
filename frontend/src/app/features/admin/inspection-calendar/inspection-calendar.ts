@@ -4,8 +4,10 @@ import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { Router, RouterLink } from '@angular/router';
 import { Observable, finalize, forkJoin } from 'rxjs';
 import { AuthService } from '../../../core/auth';
+import { kyivTime } from '../../../shared/time/kyiv-time';
+import { statusLabel } from '../../appointments/appointments-api';
 import { ConfirmDialog } from '../../../shared/confirm-dialog/confirm-dialog';
-import { DateMode, Day, InspectionCalendarApi, SlotMode } from './inspection-calendar-api';
+import { CalendarAppointment, DateChange, DateMode, Day, InspectionCalendarApi, SchedulePreview, SlotMode, WeeklyChange } from './inspection-calendar-api';
 
 const todayKyiv = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const shortTime = (value: string) => value.slice(0, 5);
@@ -30,7 +32,7 @@ export class InspectionCalendar {
   readonly tab = signal<'appointments' | 'settings'>('appointments');
   readonly loaded = signal(false); readonly displayedDate = signal('');
   readonly loading = signal(false); readonly saving = signal(false); readonly error = signal(''); readonly message = signal('');
-  readonly warning = signal(''); readonly slots = signal<{ startUtc: string; endUtc: string }[]>([]);
+  readonly appointments = signal<CalendarAppointment[]>([]); readonly preview = signal<SchedulePreview | null>(null); readonly slots = signal<{ startUtc: string; endUtc: string }[]>([]);
   readonly loggingOut = signal(false); readonly logoutError = signal('');
   readonly dateForm = this.fb.group({ date: [todayKyiv(), Validators.required] });
   readonly weeklyForm = this.fb.group({ intervals: this.fb.array<ReturnType<InspectionCalendar['weeklyRow']>>([]) });
@@ -41,7 +43,8 @@ export class InspectionCalendar {
   private version = '';
   private loadedDate = '';
   private requestSerial = 0;
-  private saveKind: 'weekly' | 'date' | 'reset' = 'weekly';
+  private pending: { kind: 'weekly'; body: WeeklyChange } | { kind: 'date'; body: DateChange } | null = null;
+  readonly statusLabel = statusLabel; readonly formatDate = (value: string) => kyivTime(value, true);
 
   constructor() { this.load(); }
   weeklyRow(dayOfWeek: Day = 'Monday', start = '', end = '') { return this.fb.group({ dayOfWeek: this.fb.control<Day>(dayOfWeek), start: [shortTime(start), Validators.required], end: [shortTime(end), Validators.required] }); }
@@ -58,9 +61,9 @@ export class InspectionCalendar {
     if (this.dateForm.invalid || this.saving()) return;
     const date = this.dateForm.getRawValue().date;
     const serial = ++this.requestSerial;
-    this.loaded.set(false); this.version = ''; this.slots.set([]); this.warning.set('');
+    this.loaded.set(false); this.version = ''; this.slots.set([]); this.appointments.set([]); this.preview.set(null);
     this.loading.set(true); this.error.set(''); this.message.set('');
-    forkJoin({ weekly: this.api.weekly(), date: this.api.date(date), slots: this.api.available(date) }).pipe(finalize(() => { if (serial === this.requestSerial) this.loading.set(false); })).subscribe({
+    forkJoin({ weekly: this.api.weekly(), date: this.api.date(date), slots: this.api.available(date), appointments: this.api.appointments(date) }).pipe(finalize(() => { if (serial === this.requestSerial) this.loading.set(false); })).subscribe({
       next: result => {
         if (serial !== this.requestSerial) return;
         if (this.dateForm.getRawValue().date !== date) { this.error.set('Обрану дату змінено. Завантажте її.'); return; }
@@ -73,32 +76,40 @@ export class InspectionCalendar {
         exception?.slots.forEach(s => this.slotRules.push(this.slotRow(s.start, s.mode)));
         this.exceptionForm.patchValue({ mode: exception?.mode ?? 'Weekly', reason: exception?.reason ?? '' });
         this.weeklyForm.markAsPristine(); this.exceptionForm.markAsPristine();
-        this.warning.set(result.date.bookingConflictsChecked ? '' : result.date.warning);
-        this.slots.set(result.slots.slots);
+        this.slots.set(result.slots.slots); this.appointments.set(result.appointments);
       },
       error: () => { if (serial === this.requestSerial) this.error.set('Не вдалося завантажити календар. Перевірте з’єднання та спробуйте ще раз.'); },
     });
   }
   requestSave(kind: 'weekly' | 'date' | 'reset') {
     if (this.loading() || this.saving() || !this.version) return;
-    this.error.set('');
+    this.error.set(''); this.preview.set(null);
     if (this.dateForm.getRawValue().date !== this.loadedDate) { this.error.set('Спочатку завантажте обрану дату.'); return; }
     if (kind === 'weekly' && this.weeklyForm.invalid || kind === 'date' && (this.exceptionForm.controls.reason.invalid || (this.exceptionForm.controls.mode.value === 'Replace' && this.dateIntervals.invalid) || (this.exceptionForm.controls.mode.value !== 'Closed' && this.slotRules.invalid))) { this.error.set('Заповніть усі поля інтервалів.'); return; }
     if (kind === 'date' && this.exceptionForm.controls.mode.value === 'Replace' && this.dateIntervals.length === 0) { this.error.set('Додайте хоча б один інтервал для цієї дати.'); return; }
-    this.saveKind = kind; this.confirmDialog().open();
+    const date = this.dateForm.getRawValue().date; const value = this.exceptionForm.getRawValue();
+    const exception = kind === 'reset' ? null : { mode: value.mode, reason: value.reason.trim() || null, intervals: value.mode === 'Replace' ? value.intervals : [], slots: value.mode === 'Closed' ? [] : value.slots };
+    const pending = kind === 'weekly' ? { kind: 'weekly' as const, body: { version: this.version, intervals: this.weeklyForm.getRawValue().intervals } } : { kind: 'date' as const, body: { version: this.version, date, exception } };
+    const before = JSON.stringify([this.dateForm.getRawValue(), this.weeklyForm.getRawValue(), this.exceptionForm.getRawValue()]);
+    this.saving.set(true);
+    const operation = pending.kind === 'weekly' ? this.api.previewWeekly(pending.body) : this.api.previewDate(pending.body);
+    operation.pipe(finalize(() => this.saving.set(false))).subscribe({ next: result => {
+      if (before !== JSON.stringify([this.dateForm.getRawValue(), this.weeklyForm.getRawValue(), this.exceptionForm.getRawValue()])) { this.error.set('Дані змінилися. Повторіть перевірку.'); return; }
+      this.pending = pending; this.preview.set(result); this.confirmDialog().open();
+    }, error: (error: unknown) => this.showSaveError(error) });
   }
   save() {
-    if (this.saving() || this.loading()) return;
-    const date = this.dateForm.getRawValue().date;
-    const value = this.exceptionForm.getRawValue();
-    const exception = this.saveKind === 'reset' ? null : { mode: value.mode, reason: value.reason.trim() || null, intervals: value.mode === 'Replace' ? value.intervals : [], slots: value.mode === 'Closed' ? [] : value.slots };
-    const operation: Observable<unknown> = this.saveKind === 'weekly' ? this.api.saveWeekly(this.version, this.weeklyForm.getRawValue().intervals) : this.api.saveDate(this.version, date, exception);
-    this.saving.set(true); this.error.set('');
+    const pending = this.pending; const preview = this.preview();
+    if (this.saving() || this.loading() || !pending || !preview) return;
+    this.pending = null; this.saving.set(true); this.error.set('');
+    const operation: Observable<unknown> = pending.kind === 'weekly' ? this.api.saveWeekly({ ...pending.body, confirmationToken: preview.confirmationToken }) : this.api.saveDate({ ...pending.body, confirmationToken: preview.confirmationToken });
     operation.pipe(finalize(() => this.saving.set(false))).subscribe({
-      next: () => { this.saving.set(false); this.load(); this.message.set('Зміни збережено. Перевірте наявні записи та зв’яжіться з клієнтами за потреби.'); },
-      error: (error: unknown) => this.error.set(error instanceof HttpErrorResponse && error.status === 409 ? 'Графік змінився. Оновіть дані та повторіть спробу.' : error instanceof HttpErrorResponse && error.status === 400 ? 'Некоректні або перехресні інтервали. Перевірте час і тривалість.' : 'Не вдалося зберегти графік. Перевірте з’єднання.'),
+      next: () => { this.saving.set(false); this.load(); this.message.set('Зміни збережено. Наявні записи збережено.'); },
+      error: (error: unknown) => this.showSaveError(error),
     });
   }
+  private showSaveError(error: unknown) { this.error.set(error instanceof HttpErrorResponse && error.status === 409 ? 'Графік або записи змінилися. Оновіть дані та повторіть перевірку.' : error instanceof HttpErrorResponse && error.status === 400 ? 'Некоректні або перехресні інтервали. Перевірте час і тривалість.' : 'Не вдалося перевірити або зберегти графік. Спробуйте ще раз.'); }
+  formatTimeEnd(value: string) { return this.formatTime(new Date(new Date(value).getTime() + 30 * 60_000).toISOString()); }
   formatTime(value: string) { return new Intl.DateTimeFormat('uk-UA', { timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit', timeZoneName: 'shortOffset' }).format(new Date(value)); }
   logout() {
     if (this.loggingOut()) return;

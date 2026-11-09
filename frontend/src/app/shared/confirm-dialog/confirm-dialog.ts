@@ -7,6 +7,7 @@ import { Component, ElementRef, input, output, viewChild } from '@angular/core';
       [attr.aria-describedby]="dialogId() + '-description'" (close)="closed.emit()">
       <h2 [id]="dialogId() + '-title'">{{ title() }}</h2>
       <p [id]="dialogId() + '-description'">{{ description() }}</p>
+      <ng-content />
       <div class="dialog-actions">
         <button class="button button--secondary" type="button" (click)="close()">Скасувати</button>
         <button class="button button--danger" type="button" (click)="confirm()">{{ confirmLabel() }}</button>

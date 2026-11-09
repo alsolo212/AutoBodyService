@@ -3,6 +3,7 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { kyivTime } from '../../../shared/time/kyiv-time';
 import { Subject, catchError, finalize, map, merge, of, startWith, switchMap, tap } from 'rxjs';
 
 interface Slot { startUtc: string; endUtc: string; }
@@ -11,9 +12,7 @@ interface CreatedAppointment { id: string; inspectionStartUtc: string; status: s
 const nonBlank = (control: AbstractControl): ValidationErrors | null =>
   typeof control.value === 'string' && control.value.trim() ? null : { required: true };
 const kyivDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-export const formatInspection = (value: string, date = false): string => new Intl.DateTimeFormat('uk-UA', {
-  timeZone: 'Europe/Kyiv', ...(date ? { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit' }),
-}).format(new Date(value));
+export const formatInspection = kyivTime;
 
 @Component({ selector: 'app-booking', imports: [ReactiveFormsModule, RouterLink], templateUrl: './booking.html', styleUrl: './booking.scss' })
 export class Booking {

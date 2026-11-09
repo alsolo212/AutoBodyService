@@ -10,20 +10,23 @@ namespace AutoBodyService.Api.Controllers;
 [Authorize(Policy = "Admin")]
 [Route("api/admin/inspection-exceptions")]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public sealed class InspectionExceptionsController(IInspectionExceptionsService service) : ControllerBase
+public sealed class InspectionExceptionsController(IInspectionExceptionsService service, IInspectionCalendarService calendar) : ControllerBase
 {
-    private const string BookingWarning = "Перевірка наявних записів недоступна: модуль бронювання ще не реалізовано.";
-
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery, Required] DateOnly? date, CancellationToken cancellationToken)
     {
         if (date is null || !ValidDate(date.Value)) return BadRequest();
         var schedule = await service.GetAsync(date.Value, cancellationToken);
-        return Ok(new InspectionExceptionsResponse(schedule.Version, "Europe/Kyiv", schedule.Date, schedule.Exception, schedule.TemplateSlots, false, BookingWarning));
+        return Ok(new InspectionExceptionsResponse(schedule.Version, "Europe/Kyiv", schedule.Date, schedule.Exception, schedule.TemplateSlots));
     }
 
+    [HttpPost("preview")]
+    public Task<IActionResult> Preview(UpdateInspectionExceptionRequest request, CancellationToken cancellationToken) => Change(request, true, cancellationToken);
+
     [HttpPut]
-    public async Task<IActionResult> Put(UpdateInspectionExceptionRequest request, CancellationToken cancellationToken)
+    public Task<IActionResult> Put(UpdateInspectionExceptionRequest request, CancellationToken cancellationToken) => Change(request, false, cancellationToken);
+
+    private async Task<IActionResult> Change(UpdateInspectionExceptionRequest request, bool preview, CancellationToken cancellationToken)
     {
         if (!ValidDate(request.Date) || (request.Exception is not null &&
             (request.Exception.Mode is null || request.Exception.Intervals is null || request.Exception.Slots is null ||
@@ -33,27 +36,28 @@ public sealed class InspectionExceptionsController(IInspectionExceptionsService 
         var exception = item is null ? null : new InspectionException(request.Date, item.Mode!.Value, item.Reason,
             item.Intervals!.Select(x => new DateInterval(x!.Start!.Value, x.End!.Value)).ToArray(),
             item.Slots!.Select(x => new SlotOverride(x!.Start!.Value, x.Mode!.Value)).ToArray());
-        return await service.UpdateAsync(request.Version, exception, request.Date, cancellationToken) switch
+        var result = await calendar.ChangeDateAsync(request.Version, request.Date, exception, preview, request.ConfirmationToken, cancellationToken);
+        return result.Status switch
         {
-            ScheduleUpdateResult.Success => Ok(new InspectionExceptionUpdateResponse(false, BookingWarning)),
+            ScheduleUpdateResult.Success when preview => Ok(result.Preview),
+            ScheduleUpdateResult.Success => Ok(result.Preview),
             ScheduleUpdateResult.Invalid => BadRequest(new ProblemDetails { Status = 400, Title = "Некоректне виключення графіка." }),
-            _ => Conflict(new ProblemDetails { Status = 409, Title = "Графік змінено. Оновіть дані та спробуйте ще раз." })
+            _ => Conflict(new ProblemDetails { Status = 409, Title = "Графік або записи змінилися. Повторіть перевірку." })
         };
     }
 
     private static bool ValidDate(DateOnly date) => date.Year is >= 2 and <= 9998;
 }
 
-/// <summary>Effective schedule for a local date. Booking conflicts cannot yet be checked.</summary>
-public sealed record InspectionExceptionsResponse(Guid Version, string TimeZone, DateOnly Date, InspectionException? Exception, IReadOnlyList<EffectiveSlot> TemplateSlots, bool BookingConflictsChecked, string Warning);
-/// <summary>Confirms a saved exception and indicates whether bookings were checked.</summary>
-public sealed record InspectionExceptionUpdateResponse(bool BookingConflictsChecked, string Warning);
+/// <summary>Effective schedule for a Kyiv calendar date.</summary>
+public sealed record InspectionExceptionsResponse(Guid Version, string TimeZone, DateOnly Date, InspectionException? Exception, IReadOnlyList<EffectiveSlot> TemplateSlots);
 /// <summary>Replace or remove the exception for a local date using the current schedule version.</summary>
 public sealed record UpdateInspectionExceptionRequest
 {
     [Required] public required Guid Version { get; init; }
     [Required] public required DateOnly Date { get; init; }
     public required InspectionExceptionRequest? Exception { get; init; }
+    public string? ConfirmationToken { get; init; }
 }
 /// <summary>Date-level rule and individual half-hour slot rules.</summary>
 public sealed record InspectionExceptionRequest(DateOverrideMode? Mode, string? Reason, List<DateIntervalRequest?>? Intervals, List<SlotOverrideRequest?>? Slots);

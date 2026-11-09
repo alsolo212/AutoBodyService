@@ -51,4 +51,26 @@ describe('Booking', () => {
     component.form.controls.date.setValue('2099-01-16'); http.expectOne(r => r.url === '/api/inspection-slots').flush({ slots: [] }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('На цю дату вільного часу немає');
   });
+  it('distinguishes repeated Kyiv times and submits the selected UTC instant', () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    const { fixture, component } = setup();
+    component.form.controls.date.setValue('2027-10-31');
+    http.expectOne(r => r.url === '/api/inspection-slots').flush({ slots: [
+      { startUtc: '2027-10-31T00:00:00Z', endUtc: '2027-10-31T00:30:00Z' },
+      { startUtc: '2027-10-31T01:00:00Z', endUtc: '2027-10-31T01:30:00Z' },
+    ] }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('03:00 (UTC+03:00)');
+    expect(fixture.nativeElement.textContent).toContain('03:00 (UTC+02:00)');
+    const second = fixture.nativeElement.querySelectorAll('input[type=radio]')[1] as HTMLInputElement;
+    second.checked = true; second.dispatchEvent(new Event('change'));
+    expect(component.form.controls.slot.value).toBe('2027-10-31T01:00:00Z'); component.next();
+    component.form.patchValue({ vin: '1HGCM82633A004352', make: 'Test', model: 'Model', problem: 'Issue' }); component.next(); component.next(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('03:00 (UTC+02:00)');
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    component.submit(); http.expectOne('/api/auth/antiforgery').flush(null);
+    const request = http.expectOne('/api/appointments'); expect(request.request.body.inspectionStartUtc).toBe('2027-10-31T01:00:00Z');
+    request.flush({ id: 'id', inspectionStartUtc: '2027-10-31T01:00:00Z', status: 'AwaitingInspection' });
+    vi.useRealTimers();
+  });
+
 });
