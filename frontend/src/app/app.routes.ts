@@ -6,11 +6,11 @@ import { Register } from './features/auth/register';
 import { ForgotPassword } from './features/auth/forgot-password';
 import { ChangePasswordRequired } from './features/auth/change-password-required';
 import { Profile } from './features/profile/profile';
-import { authGuard, temporaryPasswordGuard } from './core/auth-guards';
+import { authGuard, guestGuard, temporaryPasswordGuard } from './core/auth-guards';
 export const routes: Routes = [
   { path: '', component: PublicShell, title: 'AutoBodyService' },
-  { path: 'login', component: Login, title: 'Вхід — AutoBodyService' },
-  { path: 'register', component: Register, title: 'Реєстрація — AutoBodyService' },
+  { path: 'login', component: Login, canActivate: [guestGuard], title: 'Вхід — AutoBodyService' },
+  { path: 'register', component: Register, canActivate: [guestGuard], title: 'Реєстрація — AutoBodyService' },
   { path: 'forgot-password', component: ForgotPassword, title: 'Відновлення доступу — AutoBodyService' },
   { path: 'account/change-temporary-password', component: ChangePasswordRequired, canActivate: [temporaryPasswordGuard], title: 'Зміна пароля — AutoBodyService' },
   { path: 'account/profile', component: Profile, canActivate: [authGuard], data: { area: 'account' }, title: 'Мій профіль — AutoBodyService' },

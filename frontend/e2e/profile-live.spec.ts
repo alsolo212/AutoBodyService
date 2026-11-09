@@ -38,6 +38,10 @@ test('profile and mandatory password changes work with the real API', async ({ p
   execFileSync('docker', ['exec', container, 'psql', '-U', 'auth_test', '-d', 'auth_test', '-v', 'ON_ERROR_STOP=1', '-c', `UPDATE "AspNetUsers" SET "MustChangePassword" = TRUE WHERE "PhoneNormalized" = '${normalized}'`], { stdio: 'ignore' });
   await page.goto('/account/profile');
   await expect(page).toHaveURL(/\/account\/change-temporary-password$/);
+  for (const path of ['/login', '/register']) {
+    await page.goto(path);
+    await expect(page).toHaveURL(/\/account\/change-temporary-password$/);
+  }
   await page.getByLabel('Тимчасовий пароль').fill(nextPassword);
   await page.getByLabel('Новий пароль', { exact: true }).fill(finalPassword);
   await page.getByLabel('Повторіть новий пароль').fill(finalPassword);

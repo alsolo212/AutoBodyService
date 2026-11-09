@@ -25,3 +25,14 @@ export const temporaryPasswordGuard: CanActivateFn = () => {
     catchError(() => of(router.createUrlTree(['/login'], { queryParams: { session: 'unavailable' } }))),
   );
 };
+
+// Wait for the server's session result before rendering a guest-only page.
+export const guestGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  return auth.getSession().pipe(
+    map(session => session ? router.parseUrl(destination(session)) : true),
+    // The login page can report connectivity errors; do not redirect back to itself.
+    catchError(() => of(true)),
+  );
+};

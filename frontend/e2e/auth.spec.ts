@@ -4,6 +4,10 @@ const phone = '0000000000';
 const password = 'Example-password-123!';
 const session = (roles: string[], mustChangePassword = false) => ({ name: 'Test', phone: '+380000000000', roles, mustChangePassword });
 
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/auth/session', route => route.fulfill({ status: 401 }));
+});
+
 test('validates registration and shows a non-enumerating response', async ({ page }) => {
   let body: unknown;
   await page.route('**/api/auth/antiforgery', route => route.fulfill({ status: 204 }));
@@ -26,8 +30,9 @@ test('validates registration and shows a non-enumerating response', async ({ pag
 for (const [role, url] of [['User', '/account/appointments'], ['Admin', '/admin'], ['SuperAdmin', '/admin']] as const) {
   test(`routes ${role} after login`, async ({ page }) => {
     await page.route('**/api/auth/antiforgery', route => route.fulfill({ status: 204 }));
-    await page.route('**/api/auth/login', route => route.fulfill({ status: 204 }));
-    await page.route('**/api/auth/session', route => route.fulfill({ json: session([role]) }));
+    let signedIn = false;
+    await page.route('**/api/auth/login', route => { signedIn = true; return route.fulfill({ status: 204 }); });
+    await page.route('**/api/auth/session', route => signedIn ? route.fulfill({ json: session([role]) }) : route.fulfill({ status: 401 }));
     await page.route('**/api/health', route => route.fulfill({ json: { status: 'Healthy' } }));
     await page.goto('/login');
     await page.getByLabel('Номер телефону').fill(phone);
@@ -74,4 +79,47 @@ test('auth pages fit a narrow screen', async ({ page }) => {
   await page.goto('/register');
   await expect(page.getByRole('heading', { name: 'Створіть обліковий запис.' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+});
+
+test('guest and expired session can open both guest pages', async ({ page }) => {
+  for (const [path, heading] of [['/login', 'Вітаємо знову.'], ['/register', 'Створіть обліковий запис.']] as const) {
+    await page.goto(path);
+    await expect(page).toHaveURL(new RegExp(path + '$'));
+    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
+  }
+});
+
+for (const [role, mustChange, destination] of [
+  ['User', false, '/account/appointments'], ['Admin', false, '/admin'],
+  ['SuperAdmin', false, '/admin'], ['User', true, '/account/change-temporary-password'],
+  ['SuperAdmin', true, '/account/change-temporary-password'],
+] as const) {
+  test(`${role} session, mandatory change ${mustChange}, redirects guest routes after reload`, async ({ page }) => {
+    await page.route('**/api/auth/session', route => route.fulfill({ json: session([role], mustChange) }));
+    await page.route('**/api/health', route => route.fulfill({ json: { status: 'Healthy' } }));
+    for (const path of ['/login', '/register']) {
+      await page.goto(path);
+      await expect(page).toHaveURL(new RegExp(destination + '$'));
+      await page.reload();
+      await expect(page).toHaveURL(new RegExp(destination + '$'));
+      await expect(page.getByRole('heading', { name: 'Вітаємо знову.' })).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: 'Створіть обліковий запис.' })).toHaveCount(0);
+    }
+  });
+}
+
+test('does not render a guest form while session restoration is pending', async ({ page }) => {
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => release = resolve);
+  let requested!: () => void;
+  const received = new Promise<void>(resolve => requested = resolve);
+  await page.route('**/api/auth/session', async route => { requested(); await pending; await route.fulfill({ json: session(['User']) }); });
+  await page.route('**/api/health', route => route.fulfill({ json: { status: 'Healthy' } }));
+  await page.goto('/login');
+  await received;
+  await expect(page.getByRole('heading', { name: 'Вітаємо знову.' })).toHaveCount(0);
+  release();
+  await expect(page).toHaveURL(/\/account\/appointments$/);
 });

@@ -52,6 +52,12 @@ test.describe('real authentication', () => {
     await page.getByRole('button', { name: 'Увійти' }).click();
     expect((await login).status()).toBe(204);
     await expect(page).toHaveURL(/\/account\/appointments$/);
+    for (const path of ['/login', '/register']) {
+      await page.goto(path);
+      await expect(page).toHaveURL(/\/account\/appointments$/);
+      await page.reload();
+      await expect(page).toHaveURL(/\/account\/appointments$/);
+    }
     const authCookie = (await context.cookies()).find(cookie => cookie.name === '.AspNetCore.Identity.Application');
     expect(authCookie).toBeDefined();
     expect(authCookie?.httpOnly).toBe(true);
@@ -114,6 +120,10 @@ test.describe('real authentication', () => {
     await page.getByLabel('Пароль', { exact: true }).fill(adminPassword);
     await page.getByRole('button', { name: 'Увійти' }).click();
     await expect(page).toHaveURL(/\/admin$/);
+    for (const path of ['/login', '/register']) {
+      await page.goto(path);
+      await expect(page).toHaveURL(/\/admin$/);
+    }
     const current = await page.evaluate(async () => (await fetch('/api/auth/session')).json());
     expect(current.roles).toContain('SuperAdmin');
     await page.getByRole('link', { name: 'Мій профіль' }).click();
