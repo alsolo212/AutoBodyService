@@ -36,3 +36,25 @@ GET {{baseUrl}}/api/auth/session
 ### Logout (requires authentication cookie and a fresh antiforgery token)
 POST {{baseUrl}}/api/auth/logout
 RequestVerificationToken: {{xsrfToken}}
+
+### Own profile (requires authentication cookie)
+GET {{baseUrl}}/api/profile
+
+### Change only your name (requires a fresh antiforgery token)
+PATCH {{baseUrl}}/api/profile
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{
+  "name": "{{testName}}"
+}
+
+### Change your password (use locally supplied credentials; refresh antiforgery token first)
+POST {{baseUrl}}/api/auth/change-password
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{
+  "currentPassword": "{{testPassword}}",
+  "newPassword": "{{newTestPassword}}"
+}

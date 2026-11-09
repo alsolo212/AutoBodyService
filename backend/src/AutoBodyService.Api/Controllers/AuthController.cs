@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using AutoBodyService.Application.Authentication;
+using AutoBodyService.Application.Profiles;
 using AutoBodyService.Infrastructure.Identity;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
@@ -10,7 +11,7 @@ namespace AutoBodyService.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public sealed class AuthController(SignInManager<ApplicationUser> signIn, UserManager<ApplicationUser> users, IAntiforgery antiforgery, IRegistrationService registration) : ControllerBase
+public sealed class AuthController(SignInManager<ApplicationUser> signIn, UserManager<ApplicationUser> users, IAntiforgery antiforgery, IRegistrationService registration, IProfileService profiles) : ControllerBase
 {
     [HttpGet("antiforgery")]
     [AllowAnonymous]
@@ -55,6 +56,24 @@ public sealed class AuthController(SignInManager<ApplicationUser> signIn, UserMa
         return NoContent();
     }
 
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword(ChangePasswordRequest request)
+    {
+        var id = users.GetUserId(User);
+        if (id is null) return Unauthorized();
+        var result = await profiles.ChangePasswordAsync(id, request.CurrentPassword, request.NewPassword);
+        if (result == PasswordChangeResult.NotFound) return Unauthorized();
+        if (result == PasswordChangeResult.Conflict)
+            return Conflict(new ProblemDetails { Status = 409, Title = "Account has changed. Please sign in again." });
+        if (result != PasswordChangeResult.Success)
+            return BadRequest(new ProblemDetails { Status = 400, Title = "Password could not be changed." });
+        var user = await users.FindByIdAsync(id);
+        if (user is null || user.IsBlocked) return Unauthorized();
+        await signIn.RefreshSignInAsync(user);
+        return NoContent();
+    }
+
     [HttpPost("logout")]
     [Authorize]
     public async Task<IActionResult> Logout()
@@ -90,4 +109,11 @@ public sealed record RegisterRequest
     [Required, StringLength(200)] public required string Name { get; init; }
     [Required, StringLength(32)] public required string Phone { get; init; }
     [Required, StringLength(256)] public required string Password { get; init; }
+}
+
+/// <summary>Current and new passwords for the signed-in account.</summary>
+public sealed record ChangePasswordRequest
+{
+    [Required, StringLength(256)] public required string CurrentPassword { get; init; }
+    [Required, StringLength(256)] public required string NewPassword { get; init; }
 }
