@@ -80,6 +80,20 @@ public sealed class Appointment
 
     public IReadOnlyCollection<AppointmentStatusEvent> StatusEvents => _statusEvents.AsReadOnly();
 
+    /// <summary>Cancels a future inspection only for its owner and records the transition.</summary>
+    public AppointmentStatusEvent? CancelByOwner(string actorId, DateTimeOffset nowUtc)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
+        if (nowUtc.Offset != TimeSpan.Zero) throw new ArgumentException("Time must use the UTC offset.", nameof(nowUtc));
+        if (UserId != actorId || Status != AppointmentStatus.AwaitingInspection || InspectionStartUtc <= nowUtc)
+            return null;
+
+        var statusEvent = new AppointmentStatusEvent(Guid.NewGuid(), Id, Status, AppointmentStatus.Cancelled, actorId, nowUtc, null);
+        Status = AppointmentStatus.Cancelled;
+        _statusEvents.Add(statusEvent);
+        return statusEvent;
+    }
+
     public void Schedule(RepairPlan repairPlan)
     {
         ArgumentNullException.ThrowIfNull(repairPlan);

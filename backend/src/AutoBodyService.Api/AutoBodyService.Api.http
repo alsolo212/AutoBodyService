@@ -120,3 +120,7 @@ GET {{baseUrl}}/api/appointments/{{appointmentId}}
 
 ### Absent or inaccessible appointment.
 GET {{baseUrl}}/api/appointments/00000000-0000-0000-0000-000000000000
+
+### Cancel your own future inspection (authentication and antiforgery required).
+POST {{baseUrl}}/api/appointments/{{appointmentId}}/cancel
+RequestVerificationToken: {{xsrfToken}}

@@ -12,7 +12,7 @@ namespace AutoBodyService.Api.Controllers;
 [Authorize(Policy = "User")]
 [Route("api/appointments")]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public sealed class AppointmentsController(ICreateAppointmentService service, IAppointmentQueries queries, UserManager<ApplicationUser> users) : ControllerBase
+public sealed class AppointmentsController(ICreateAppointmentService service, IAppointmentQueries queries, ICancelAppointmentService cancellations, UserManager<ApplicationUser> users) : ControllerBase
 {
     /// <summary>List only the current account's appointments, optionally by category.</summary>
     [HttpGet("my")]
@@ -53,6 +53,25 @@ public sealed class AppointmentsController(ICreateAppointmentService service, IA
         }
         var own = await queries.GetOwnAsync(id, owner, cancellationToken);
         return own is null ? NotFound() : Ok(own);
+    }
+
+    /// <summary>Cancel the current account's future inspection.</summary>
+    [HttpPost("{id:guid}/cancel")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Cancel(Guid id, CancellationToken cancellationToken)
+    {
+        var owner = users.GetUserId(User);
+        if (owner is null) return Unauthorized();
+        return await cancellations.CancelOwnAsync(id, owner, cancellationToken) switch
+        {
+            CancelAppointmentResult.Cancelled => NoContent(),
+            CancelAppointmentResult.NotFound => NotFound(),
+            _ => Conflict(new ProblemDetails { Status = 409, Title = "Запис неможливо скасувати." })
+        };
     }
 
     [HttpPost]
