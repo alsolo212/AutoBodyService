@@ -58,3 +58,6 @@ RequestVerificationToken: {{xsrfToken}}
   "currentPassword": "{{testPassword}}",
   "newPassword": "{{newTestPassword}}"
 }
+
+### Public contacts (only configured public fields are returned)
+GET {{baseUrl}}/api/public/contacts

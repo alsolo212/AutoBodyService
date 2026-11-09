@@ -80,6 +80,7 @@ public static class DependencyInjection
                 return Task.CompletedTask;
             };
         });
+        services.AddSingleton<DummyPasswordVerifier>();
         services.AddScoped<SessionRevocations>();
         services.AddScoped<SuperAdminInitializer>();
         services.AddScoped<IRegistrationService, RegistrationService>();

@@ -48,6 +48,9 @@ export E2E_API_CERT="$E2E_TLS_CERT"
 export Kestrel__Certificates__Default__Path="$E2E_TLS_CERT"
 export Kestrel__Certificates__Default__KeyPath="$E2E_TLS_KEY"
 export ASPNETCORE_URLS="https://127.0.0.1:0"
+# Synthetic contact used exclusively by the isolated E2E deployment.
+export E2E_TEST_CONTACT_PHONE="+380000000000"
+export PublicContacts__Phone="$E2E_TEST_CONTACT_PHONE"
 (cd backend/src/AutoBodyService.Api && exec "$DOTNET_ROOT/dotnet" bin/Debug/net10.0/AutoBodyService.Api.dll >"$test_dir/api.log" 2>&1) &
 api_pid=$!
 api_port=""

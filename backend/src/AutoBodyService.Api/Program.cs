@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using AutoBodyService.Infrastructure;
 using AutoBodyService.Api.Security;
+using AutoBodyService.Api.Configuration;
 using Microsoft.AspNetCore.Mvc;
 using AutoBodyService.Infrastructure.Identity;
 
@@ -10,6 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddInfrastructure(builder.Configuration.GetConnectionString("AutoBodyService"));
 builder.Services.AddApiSecurity();
+builder.Services.Configure<PublicContactsOptions>(builder.Configuration.GetSection("PublicContacts"));
 builder.Services.AddControllersWithViews(options => options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute()))
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -50,7 +52,8 @@ app.Use(async (context, next) =>
         !context.Request.Path.Equals("/api/auth/session", StringComparison.OrdinalIgnoreCase) &&
         !context.Request.Path.Equals("/api/auth/logout", StringComparison.OrdinalIgnoreCase) &&
         !context.Request.Path.Equals("/api/auth/antiforgery", StringComparison.OrdinalIgnoreCase) &&
-        !context.Request.Path.Equals("/api/auth/change-password", StringComparison.OrdinalIgnoreCase))
+        !context.Request.Path.Equals("/api/auth/change-password", StringComparison.OrdinalIgnoreCase) &&
+        !(HttpMethods.IsGet(context.Request.Method) && (context.Request.Path.Equals("/api/public/contacts", StringComparison.OrdinalIgnoreCase) || context.Request.Path.Equals("/api/public/contacts/", StringComparison.OrdinalIgnoreCase))))
     {
         var users = context.RequestServices.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ApplicationUser>>();
         var user = await users.GetUserAsync(context.User);

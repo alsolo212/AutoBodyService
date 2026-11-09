@@ -142,6 +142,8 @@ public sealed class ProfileApiTests
         var user = await CreateUser(factory, "Test", mustChange: true);
         using var client = Client(factory);
         await SignIn(client, user.Phone);
+        using var contacts = await client.GetAsync("/api/public/contacts");
+        Assert.Equal(HttpStatusCode.OK, contacts.StatusCode);
         using var blockedGet = await client.GetAsync("/api/profile");
         using var blockedPatch = await client.PatchAsJsonAsync("/api/profile", new { name = "Blocked" });
         Assert.Equal(HttpStatusCode.Forbidden, blockedGet.StatusCode);

@@ -14,7 +14,7 @@ namespace AutoBodyService.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public sealed class AuthController(SignInManager<ApplicationUser> signIn, UserManager<ApplicationUser> users, IAntiforgery antiforgery, IRegistrationService registration, IProfileService profiles) : ControllerBase
+public sealed class AuthController(SignInManager<ApplicationUser> signIn, UserManager<ApplicationUser> users, IAntiforgery antiforgery, IRegistrationService registration, IProfileService profiles, DummyPasswordVerifier dummyPasswordVerifier) : ControllerBase
 {
     [HttpGet("antiforgery")]
     [AllowAnonymous]
@@ -48,13 +48,20 @@ public sealed class AuthController(SignInManager<ApplicationUser> signIn, UserMa
     public async Task<IActionResult> Login(LoginRequest request)
     {
         var phone = PhoneNumberNormalizer.Normalize(request.Phone);
-        if (phone is null) return Unauthorized();
-        var user = await users.FindByNameAsync(phone);
+        var user = phone is null ? null : await users.FindByNameAsync(phone);
         if (user is null || user.IsBlocked)
+        {
+            dummyPasswordVerifier.Verify(users.PasswordHasher, request.Password);
             return Unauthorized();
+        }
         var result = await signIn.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
         if (!result.Succeeded)
+        {
+            // Identity may reject a locked or disallowed account before verifying its password.
+            if (result.IsLockedOut || result.IsNotAllowed || result.RequiresTwoFactor)
+                dummyPasswordVerifier.Verify(users.PasswordHasher, request.Password);
             return Unauthorized();
+        }
         await signIn.SignInAsync(user, isPersistent: true);
         return NoContent();
     }

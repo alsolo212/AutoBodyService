@@ -25,6 +25,17 @@ async function openLoginFromRegistration(page: Page) {
 test.describe('real authentication', () => {
   test.skip(process.env['E2E_REAL_AUTH'] !== '1', 'Run scripts/test-auth-e2e.sh with its disposable database.');
 
+  test('public contact is shared by home and recovery with the real API', async ({ page }) => {
+    const phone = process.env['E2E_TEST_CONTACT_PHONE'];
+    if (!phone) throw new Error('The synthetic contact fixture is missing.');
+    await page.goto('/');
+    await expect(page.locator('#contacts').getByRole('link', { name: phone })).toHaveAttribute('href', `tel:${phone}`);
+    await page.goto('/forgot-password');
+    await expect(page.getByRole('link', { name: phone })).toHaveAttribute('href', `tel:${phone}`);
+    await page.setViewportSize({ width: 320, height: 720 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  });
+
   test('home to registration, persistent session, profile update and logout', async ({ page, context }) => {
     const phone = phoneNumber();
     await page.goto('/');
