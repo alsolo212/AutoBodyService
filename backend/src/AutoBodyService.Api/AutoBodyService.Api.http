@@ -98,3 +98,16 @@ RequestVerificationToken: {{xsrfToken}}
 
 ### Free inspection slots for a Kyiv calendar date (authenticated cookie)
 GET {{baseUrl}}/api/inspection-slots?date=2026-11-16
+
+### Create an inspection for the signed-in account (use a future UTC slot from GET /api/inspection-slots).
+POST {{baseUrl}}/api/appointments
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{
+  "inspectionStartUtc": "{{inspectionStartUtc}}",
+  "vin": "{{testVin}}",
+  "make": "{{testMake}}",
+  "model": "{{testModel}}",
+  "problemDescription": "{{testProblemDescription}}"
+}

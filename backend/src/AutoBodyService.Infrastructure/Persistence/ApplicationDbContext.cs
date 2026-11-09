@@ -1,4 +1,5 @@
 using AutoBodyService.Infrastructure.Identity;
+using AutoBodyService.Infrastructure.Notifications;
 using AutoBodyService.Domain.InspectionSchedule;
 using AutoBodyService.Domain.Appointments;
 using WeeklyScheduleEntity = AutoBodyService.Domain.InspectionSchedule.InspectionSchedule;
@@ -14,6 +15,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<WeeklyScheduleEntity> InspectionSchedules => Set<WeeklyScheduleEntity>();
     public DbSet<InspectionWeeklyHours> InspectionWeeklyHours => Set<InspectionWeeklyHours>();
 
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<ScheduledReminder> ScheduledReminders => Set<ScheduledReminder>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<AppointmentStatusEvent> AppointmentStatusEvents => Set<AppointmentStatusEvent>();
     public DbSet<InspectionDateOverride> InspectionDateOverrides => Set<InspectionDateOverride>();
@@ -103,6 +106,28 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
                 table.HasCheckConstraint("CK_Appointment_Vin", "\"Vin\" ~ '^[A-HJ-NPR-Z0-9]{17}$'");
                 table.HasCheckConstraint("CK_Appointment_RequiredText", "\"Make\" ~ '[^[:space:]]' AND \"Model\" ~ '[^[:space:]]' AND \"ProblemDescription\" ~ '[^[:space:]]'");
             });
+        });
+        builder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.RecipientId).IsRequired();
+            entity.Property(x => x.Type).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Message).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.EventKey).HasMaxLength(256).IsRequired();
+            entity.HasIndex(x => x.EventKey).IsUnique();
+            entity.HasIndex(x => new { x.RecipientId, x.CreatedAtUtc });
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.RecipientId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Appointment>().WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<ScheduledReminder>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Type).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.EventKey).HasMaxLength(256).IsRequired();
+            entity.HasIndex(x => x.EventKey).IsUnique();
+            entity.HasIndex(x => new { x.ProcessedAtUtc, x.DueAtUtc });
+            entity.HasOne<Appointment>().WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<AppointmentStatusEvent>(entity =>
         {
