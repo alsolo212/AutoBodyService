@@ -22,6 +22,61 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionSchedule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("InspectionSchedules", t =>
+                        {
+                            t.HasCheckConstraint("CK_InspectionSchedule_Singleton", "\"Id\" = 1");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Version = new Guid("b1050732-661b-48b8-a1bf-11d338a4b001")
+                        });
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionWeeklyHours", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeOnly>("End")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<int>("ScheduleId")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeOnly>("Start")
+                        .HasColumnType("time without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScheduleId");
+
+                    b.ToTable("InspectionWeeklyHours", t =>
+                        {
+                            t.HasCheckConstraint("CK_InspectionWeeklyHours_Valid", "\"DayOfWeek\" BETWEEN 0 AND 6 AND \"Start\" < \"End\"");
+                        });
+                });
+
             modelBuilder.Entity("AutoBodyService.Infrastructure.Identity.ApplicationUser", b =>
                 {
                     b.Property<string>("Id")
@@ -296,6 +351,15 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionWeeklyHours", b =>
+                {
+                    b.HasOne("AutoBodyService.Domain.InspectionSchedule.InspectionSchedule", null)
+                        .WithMany("Hours")
+                        .HasForeignKey("ScheduleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AutoBodyService.Infrastructure.Identity.RevokedSession", b =>
                 {
                     b.HasOne("AutoBodyService.Infrastructure.Identity.ApplicationUser", null)
@@ -354,6 +418,11 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionSchedule", b =>
+                {
+                    b.Navigation("Hours");
                 });
 #pragma warning restore 612, 618
         }

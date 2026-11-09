@@ -1,4 +1,6 @@
 using AutoBodyService.Infrastructure.Persistence;
+using AutoBodyService.Application.InspectionSchedule;
+using AutoBodyService.Infrastructure.InspectionSchedule;
 using AutoBodyService.Application.Authentication;
 using AutoBodyService.Application.Profiles;
 using AutoBodyService.Infrastructure.Identity;
@@ -85,6 +87,7 @@ public static class DependencyInjection
         services.AddScoped<SuperAdminInitializer>();
         services.AddScoped<IRegistrationService, RegistrationService>();
         services.AddScoped<IProfileService, ProfileService>();
+        services.AddScoped<IInspectionScheduleService, InspectionScheduleService>();
 
         return services;
     }

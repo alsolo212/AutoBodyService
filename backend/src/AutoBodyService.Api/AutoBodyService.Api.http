@@ -61,3 +61,18 @@ RequestVerificationToken: {{xsrfToken}}
 
 ### Public contacts (only configured public fields are returned)
 GET {{baseUrl}}/api/public/contacts
+
+### Weekly inspection hours (Admin or SuperAdmin cookie)
+GET {{baseUrl}}/api/admin/inspection-schedule
+
+### Replace all weekly hours; copy version from GET and refresh the antiforgery token.
+PUT {{baseUrl}}/api/admin/inspection-schedule
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{
+  "version": "{{scheduleVersion}}",
+  "intervals": [
+    { "dayOfWeek": "Monday", "start": "09:00", "end": "12:00" }
+  ]
+}

@@ -1,4 +1,6 @@
 using AutoBodyService.Infrastructure.Identity;
+using AutoBodyService.Domain.InspectionSchedule;
+using WeeklyScheduleEntity = AutoBodyService.Domain.InspectionSchedule.InspectionSchedule;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +10,9 @@ namespace AutoBodyService.Infrastructure.Persistence;
 public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
     : IdentityDbContext<ApplicationUser>(options)
 {
+    public DbSet<WeeklyScheduleEntity> InspectionSchedules => Set<WeeklyScheduleEntity>();
+    public DbSet<InspectionWeeklyHours> InspectionWeeklyHours => Set<InspectionWeeklyHours>();
+
     public DbSet<RevokedSession> RevokedSessions => Set<RevokedSession>();
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -56,6 +61,19 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.Entity<WeeklyScheduleEntity>(entity =>
+        {
+            entity.HasKey(schedule => schedule.Id);
+            entity.Property(schedule => schedule.Version).IsConcurrencyToken();
+            entity.HasMany(schedule => schedule.Hours).WithOne().HasForeignKey(hours => hours.ScheduleId);
+            entity.ToTable(table => table.HasCheckConstraint("CK_InspectionSchedule_Singleton", "\"Id\" = 1"));
+            entity.HasData(new WeeklyScheduleEntity { Id = 1, Version = new Guid("b1050732-661b-48b8-a1bf-11d338a4b001") });
+        });
+        builder.Entity<InspectionWeeklyHours>(entity =>
+        {
+            entity.HasKey(hours => hours.Id);
+            entity.ToTable(table => table.HasCheckConstraint("CK_InspectionWeeklyHours_Valid", "\"DayOfWeek\" BETWEEN 0 AND 6 AND \"Start\" < \"End\""));
+        });
         builder.Entity<RevokedSession>(entity =>
         {
             entity.HasKey(session => session.IdHash);
