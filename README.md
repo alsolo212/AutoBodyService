@@ -53,7 +53,7 @@ dotnet run --project backend/src/AutoBodyService.Api -- --initialize-superadmin
 unset InitialSuperAdmin__Name InitialSuperAdmin__Phone InitialSuperAdmin__Password
 ```
 
-The `read` syntax above is for zsh. Remove the bootstrap secrets from the secret store after successful initialization. This command does not expose an HTTP endpoint and refuses to run once any user exists. Registration, password-change and account-management flows are not implemented yet.
+The `read` syntax above is for zsh. Remove the bootstrap secrets from the secret store after successful initialization. This command does not expose an HTTP endpoint and refuses to run once any user exists. Password-change and account-management flows are not implemented yet.
 
 See [frontend/README.md](frontend/README.md) for frontend commands.
 
@@ -84,7 +84,7 @@ dotnet run --project backend/src/AutoBodyService.Api --launch-profile https
 
 In a second shell, run `cd frontend && npm ci && npm start`. With all three services running, `curl --cacert frontend/.local-https/localhost.pem https://localhost:4200/api/health` checks the HTTPS proxy from the repository root. Set `E2E_LIVE_API=1` when running `npm run test:e2e` from `frontend` to include the real backend request. The health response confirms API availability only; it does not check PostgreSQL.
 
-The API accepts same-origin browser requests; no cross-origin origins are permitted. Before login, call `GET /api/auth/antiforgery`. Angular reads the resulting `XSRF-TOKEN` cookie and sends it in the `RequestVerificationToken` header on unsafe requests. Obtain a fresh token after login or logout because antiforgery tokens are bound to the current identity. `POST /api/auth/login` accepts a normalized `+380` phone and password, and issues a persistent, sliding seven-day cookie; `GET /api/auth/session` returns the current account, and `POST /api/auth/logout` signs out. These endpoints are infrastructure only; there is no login UI or registration yet.
+The API accepts same-origin browser requests; no cross-origin origins are permitted. Before registration or login, call `GET /api/auth/antiforgery`. Angular reads the resulting `XSRF-TOKEN` cookie and sends it in the `RequestVerificationToken` header on unsafe requests. Obtain a fresh token after login or logout because antiforgery tokens are bound to the current identity. `POST /api/auth/register` accepts name, phone and password and creates only the `User` role; it does not sign the user in. Registration and login accept Ukrainian numbers in `+380`, `380` or local `0` form, with optional spaces, parentheses and hyphens. `POST /api/auth/login` issues a persistent, sliding seven-day cookie; `GET /api/auth/session` returns the current account, and `POST /api/auth/logout` signs out. There is no login or registration UI yet. Valid registration requests return the same `202 Accepted` response for a newly created account and an already registered phone; sign in separately. Invalid registrations receive a generic error.
 
 Unsafe `/api/auth` requests are limited to 10 per minute per remote IP on each application instance. Identity also locks an account temporarily after five failed password attempts. Configure any production reverse proxy and its trusted forwarded addresses explicitly before relying on IP-based limits; never trust arbitrary forwarded headers. A distributed deployment needs a shared rate limiter for a fleet-wide limit.
 

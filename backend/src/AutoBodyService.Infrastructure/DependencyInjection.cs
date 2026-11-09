@@ -1,4 +1,5 @@
 using AutoBodyService.Infrastructure.Persistence;
+using AutoBodyService.Application.Authentication;
 using AutoBodyService.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authentication;
 using System.Security.Claims;
@@ -54,6 +55,7 @@ public static class DependencyInjection
         });
         services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.Zero);
         services.AddScoped<SuperAdminInitializer>();
+        services.AddScoped<IRegistrationService, RegistrationService>();
 
         return services;
     }

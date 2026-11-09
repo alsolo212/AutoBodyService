@@ -5,3 +5,34 @@ GET {{baseUrl}}/api/health
 
 ### Check the ProblemDetails response for an unknown route
 GET {{baseUrl}}/api/unknown
+
+### Obtain antiforgery cookies; copy XSRF-TOKEN into the header below.
+GET {{baseUrl}}/api/auth/antiforgery
+
+### Register a customer (supply locally generated test values and antiforgery token)
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{
+  "name": "{{testName}}",
+  "phone": "{{testPhone}}",
+  "password": "{{testPassword}}"
+}
+
+### Login; refresh the antiforgery token after authentication.
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{
+  "phone": "{{testPhone}}",
+  "password": "{{testPassword}}"
+}
+
+### Current account (requires authentication cookie)
+GET {{baseUrl}}/api/auth/session
+
+### Logout (requires authentication cookie and a fresh antiforgery token)
+POST {{baseUrl}}/api/auth/logout
+RequestVerificationToken: {{xsrfToken}}

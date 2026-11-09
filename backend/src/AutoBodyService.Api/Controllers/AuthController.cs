@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-using System.Text.RegularExpressions;
+using AutoBodyService.Application.Authentication;
 using AutoBodyService.Infrastructure.Identity;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
@@ -10,7 +10,7 @@ namespace AutoBodyService.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public sealed class AuthController(SignInManager<ApplicationUser> signIn, UserManager<ApplicationUser> users, IAntiforgery antiforgery) : ControllerBase
+public sealed class AuthController(SignInManager<ApplicationUser> signIn, UserManager<ApplicationUser> users, IAntiforgery antiforgery, IRegistrationService registration) : ControllerBase
 {
     [HttpGet("antiforgery")]
     [AllowAnonymous]
@@ -25,13 +25,27 @@ public sealed class AuthController(SignInManager<ApplicationUser> signIn, UserMa
         return NoContent();
     }
 
+    [HttpPost("register")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Register(RegisterRequest request, CancellationToken cancellationToken)
+    {
+        if (User.Identity?.IsAuthenticated == true) return Forbid();
+        var name = request.Name.Trim();
+        var phone = PhoneNumberNormalizer.Normalize(request.Phone);
+        if (name.Length == 0 || phone is null)
+            return BadRequest(new ProblemDetails { Status = 400, Title = "Registration could not be completed." });
+        if (!await registration.RegisterAsync(name, phone, request.Password, cancellationToken))
+            return BadRequest(new ProblemDetails { Status = 400, Title = "Registration could not be completed." });
+        return Accepted();
+    }
+
     [HttpPost("login")]
     [AllowAnonymous]
     public async Task<IActionResult> Login(LoginRequest request)
     {
-        if (!Regex.IsMatch(request.Phone, @"\A\+380[0-9]{9}\z"))
-            return Unauthorized();
-        var user = await users.FindByNameAsync(request.Phone);
+        var phone = PhoneNumberNormalizer.Normalize(request.Phone);
+        if (phone is null) return Unauthorized();
+        var user = await users.FindByNameAsync(phone);
         if (user is null || user.IsBlocked)
             return Unauthorized();
         var result = await signIn.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
@@ -63,9 +77,17 @@ public sealed class AuthController(SignInManager<ApplicationUser> signIn, UserMa
 /// <summary>Credentials for an existing account.</summary>
 public sealed record LoginRequest
 {
-    [Required, StringLength(13, MinimumLength = 13)] public required string Phone { get; init; }
+    [Required, StringLength(32)] public required string Phone { get; init; }
     [Required, StringLength(256)] public required string Password { get; init; }
 }
 
 /// <summary>Non-secret details of the current account.</summary>
 public sealed record SessionResponse(string Name, string Phone, bool MustChangePassword, IEnumerable<string> Roles);
+
+/// <summary>Details for a new customer account.</summary>
+public sealed record RegisterRequest
+{
+    [Required, StringLength(200)] public required string Name { get; init; }
+    [Required, StringLength(32)] public required string Phone { get; init; }
+    [Required, StringLength(256)] public required string Password { get; init; }
+}
