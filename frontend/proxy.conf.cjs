@@ -5,9 +5,9 @@ const { join } = require('node:path');
 
 module.exports = {
   '/api/**': {
-    target: 'https://localhost:7097',
+    target: process.env['E2E_API_TARGET'] || 'https://localhost:7097',
     changeOrigin: true,
     secure: true,
-    agent: new Agent({ ca: readFileSync(join(__dirname, '.local-https/localhost.pem')) }),
+    agent: new Agent({ ca: readFileSync(process.env['E2E_API_CERT'] || join(__dirname, '.local-https/localhost.pem')) }),
   },
 };

@@ -15,3 +15,9 @@ The public shell is available at `/`, with authentication pages at `/login`, `/r
 The live authentication browser test uses `E2E_LIVE_AUTH=1` and creates an account; run it only against an isolated test database.
 
 The live profile test uses `E2E_LIVE_PROFILE=1` and `PROFILE_VERIFY_CONTAINER`; it modifies a test account and must only run with the disposable test database container.
+
+## Real authentication E2E
+
+From the repository root, run `bash scripts/test-auth-e2e.sh`. This starts a disposable PostgreSQL 18 container, applies the application's migrations, creates a synthetic SuperAdmin, and launches the real API and Angular over HTTPS with a temporary certificate. The script runs `e2e/auth-real.spec.ts` without intercepting API calls, then removes its own test container and temporary files. It does not use the development database. Docker, OpenSSL, curl, Python 3, the project-local .NET SDK and `dotnet-ef`, installed frontend dependencies, and Playwright Chromium are required.
+
+The real-auth tests are skipped in the ordinary Playwright run unless `E2E_REAL_AUTH=1` is set; use the script to ensure they run against the isolated environment.

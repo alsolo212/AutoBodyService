@@ -20,7 +20,8 @@ test('connects to the real API through the HTTPS development proxy', async ({ pa
   const response = page.waitForResponse(response => response.url().endsWith('/api/health'));
   await page.goto('/account/appointments');
   const health = await response;
-  expect(health.url()).toBe('https://localhost:4173/api/health');
+  expect(new URL(health.url()).origin).toBe(new URL(page.url()).origin);
+  expect(new URL(health.url()).pathname).toBe('/api/health');
   expect(health.status()).toBe(200);
   expect(await health.json()).toEqual({ status: 'Healthy' });
   await expect(page.getByText('З’єднання із сервісом встановлено.')).toBeVisible();
