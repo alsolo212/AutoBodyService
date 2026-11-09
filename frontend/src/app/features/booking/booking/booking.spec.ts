@@ -1,6 +1,8 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { FormControl } from '@angular/forms';
+import { problemDescriptionValidator } from './problem-description-validator';
 import { Router, provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 import { Booking } from './booking';
@@ -71,6 +73,37 @@ describe('Booking', () => {
     const request = http.expectOne('/api/appointments'); expect(request.request.body.inspectionStartUtc).toBe('2027-10-31T01:00:00Z');
     request.flush({ id: 'id', inspectionStartUtc: '2027-10-31T01:00:00Z', status: 'AwaitingInspection' });
     vi.useRealTimers();
+  });
+
+  it.each([
+    '', '   ', 'https://example.invalid/video.mp4', 'https://example.invalid/video.mp4?items=a,b;size=large',
+    '(https://example.invalid/a.jpg), [https://example.invalid/b.mp4] !!!',
+    'Дивіться відео за посиланням: https://example.invalid/watch?v=1',
+    'Смотрите видео и https://example.invalid/video.mp4',
+    'Смотрите это видео: https://example.invalid/video.mp4',
+    'See the photo: www.example.invalid/picture.jpg',
+    'example.invalid/photo.jpg; example.invalid/video.mp4',
+    'https://example.invalid/video.mp4 ... 123',
+  ])('rejects a missing or link-only description: %s', value => {
+    expect(problemDescriptionValidator(new FormControl(value))).not.toBeNull();
+  });
+  it.each([
+    'Вм’ятина', 'Подряпина', 'Бампер!',
+    'Вм’ятина на дверях https://example.invalid/video.mp4',
+    'https://example.invalid/photo.jpg,подряпина',
+    'https://example.invalid/photo.jpg—подряпина',
+    'Смотрите видео: помято крыло https://example.invalid/video.mp4',
+    'Подряпина: https://example.invalid/a.jpg; https://example.invalid/b.mp4',
+  ])('accepts a written problem with or without links: %s', value => {
+    expect(problemDescriptionValidator(new FormControl(value))).toBeNull();
+  });
+  it('keeps the description step open and explains why a media link is insufficient', () => {
+    const { fixture, component } = setup(); component.form.controls.slot.setValue(slot); component.next();
+    component.form.patchValue({ vin: '1HGCM82633A004352', make: 'Test', model: 'Model' }); component.next();
+    component.form.controls.problem.setValue('Дивіться відео: https://example.invalid/video.mp4'); component.next(); fixture.detectChanges();
+    expect(component.step()).toBe(3); expect(fixture.nativeElement.textContent).toContain('Опишіть проблему текстом, а не лише посиланням');
+    http.expectNone('/api/appointments');
+    component.form.controls.problem.setValue('Вм’ятина https://example.invalid/video.mp4'); component.next(); expect(component.step()).toBe(4);
   });
 
 });

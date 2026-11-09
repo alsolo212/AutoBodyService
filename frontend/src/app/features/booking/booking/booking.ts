@@ -3,6 +3,7 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { problemDescriptionValidator } from './problem-description-validator';
 import { kyivTime } from '../../../shared/time/kyiv-time';
 import { Subject, catchError, finalize, map, merge, of, startWith, switchMap, tap } from 'rxjs';
 
@@ -27,7 +28,7 @@ export class Booking {
     vin: ['', [nonBlank, Validators.pattern(/^[A-HJ-NPR-Z0-9]{17}$/)]],
     make: ['', [nonBlank, Validators.maxLength(200)]],
     model: ['', [nonBlank, Validators.maxLength(200)]],
-    problem: ['', [nonBlank, Validators.maxLength(5000)]],
+    problem: ['', [problemDescriptionValidator, Validators.maxLength(5000)]],
   });
   readonly step = signal(1);
   readonly slots = signal<Slot[]>([]);

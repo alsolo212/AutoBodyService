@@ -28,7 +28,8 @@ public sealed class Appointment
         ArgumentException.ThrowIfNullOrWhiteSpace(vin);
         ArgumentException.ThrowIfNullOrWhiteSpace(make);
         ArgumentException.ThrowIfNullOrWhiteSpace(model);
-        ArgumentException.ThrowIfNullOrWhiteSpace(problemDescription);
+        if (!ProblemDescriptionValidator.IsValid(problemDescription))
+            throw new ArgumentException("A text description of the problem is required.", nameof(problemDescription));
 
         vin = vin.Trim();
         if (vin.Length != 17 || vin.Any(c => !(c is >= '0' and <= '9' or >= 'A' and <= 'H' or >= 'J' and <= 'N' or 'P' or >= 'R' and <= 'Z')))
