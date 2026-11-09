@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 
 test('booking uses the real API, preserves details on conflict and confirms another slot', async ({ page }) => {
@@ -50,4 +51,50 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('link', { name: 'Мої записи' }).last().click();
   await expect(page).toHaveURL(/\/account\/appointments$/);
+  await expect(page.getByText('*************4352').first()).toBeVisible();
+  await expect(page.getByText('Очікує огляду').first()).toBeVisible();
+  const adminOrder = await page.getByRole('link', { name: /Деталі запису/ }).first().getAttribute('href');
+  await page.getByRole('link', { name: /Деталі запису/ }).first().click();
+  await expect(page.getByText('1HGCM82633A004352')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Історія статусів' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Вийти' }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.goto('/register');
+  const phone = '000' + String(randomInt(10_000_000)).padStart(7, '0');
+  await page.getByLabel('Ім’я').fill('Тестовий клієнт'); await page.getByLabel('Номер телефону').fill(phone);
+  await page.getByLabel('Пароль', { exact: true }).fill('Example-password-123!');
+  await page.getByLabel('Повторіть пароль').fill('Example-password-123!');
+  await page.getByRole('button', { name: 'Зареєструватися' }).click();
+  await expect(page.getByRole('status')).toContainText('Запит прийнято');
+  await page.getByRole('link', { name: /Перейти до входу/ }).click();
+  await page.getByLabel('Номер телефону').fill(phone); await page.getByLabel('Пароль', { exact: true }).fill('Example-password-123!');
+  await page.getByRole('button', { name: 'Увійти' }).click();
+  await expect(page).toHaveURL(/\/account\/appointments$/);
+  await expect(page.getByText('Записів не знайдено')).toBeVisible();
+  await page.goto(adminOrder!);
+  await expect(page.getByRole('heading', { name: 'Запис не знайдено' })).toBeVisible();
+  await page.getByRole('link', { name: 'Мої записи' }).first().click();
+  await page.getByRole('link', { name: 'Записатися на огляд' }).first().click();
+  await page.getByLabel('Дата', { exact: true }).fill('2099-01-16');
+  await page.getByLabel('09:00', { exact: true }).check();
+  await page.getByRole('button', { name: 'Далі' }).click();
+  await page.getByLabel('VIN').fill('1HGCM82633A004352');
+  await page.getByLabel('Марка').fill('Клієнт'); await page.getByLabel('Модель').fill('Авто');
+  await page.getByRole('button', { name: 'Далі' }).click();
+  await page.getByLabel('Що потрібно оглянути?').fill('Опис для огляду');
+  await page.getByRole('button', { name: 'Далі' }).click();
+  await page.getByRole('button', { name: 'Підтвердити запис' }).click();
+  await expect(page).toHaveURL(/\/account\/book\/success$/);
+  await page.getByRole('link', { name: 'Мої записи' }).last().click();
+  await expect(page.getByRole('heading', { name: 'Клієнт Авто' })).toBeVisible();
+  await expect(page.getByText('*************4352', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Завершені' }).click();
+  await expect(page.getByText('Записів не знайдено')).toBeVisible();
+  await page.getByRole('button', { name: 'Активні' }).click();
+  await page.getByRole('link', { name: /Деталі запису/ }).click();
+  await expect(page.getByText('Опис для огляду')).toBeVisible();
+  await expect(page.getByText('1HGCM82633A004352')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
 });

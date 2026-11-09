@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('shows an error and retries when the API request fails', async ({ page }) => {
   await page.route('**/api/auth/session', route => route.fulfill({ json: { name: 'Test', phone: '+380000000000', roles: ['User'], mustChangePassword: false } }));
+  await page.route('**/api/appointments/my', route => route.fulfill({ json: [] }));
   let attempts = 0;
   await page.route('**/api/health', route => {
     attempts++;

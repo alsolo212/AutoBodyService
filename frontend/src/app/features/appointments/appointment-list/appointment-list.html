@@ -1,0 +1,10 @@
+<app-account-shell>
+  <p class="eyebrow"><span class="eyebrow__line"></span> ОСОБИСТИЙ КАБІНЕТ</p><h1>Мої записи</h1><p class="profile-intro">Ваші записи на огляд та перебіг ремонту. Час указано за Києвом.</p>
+  <div class="list-heading"><h2>Записи</h2><a class="button button--primary" routerLink="/account/book">Записатися на огляд</a></div>
+  <div class="filters" role="group" aria-label="Фільтр записів">@for (filter of filters; track filter.value) { <button type="button" class="filter" [class.filter--selected]="category() === filter.value" [attr.aria-pressed]="category() === filter.value" (click)="select(filter.value)">{{ filter.label }}</button> }</div>
+  @if (loading()) { <p class="profile-panel" role="status">Завантажуємо записи…</p> }
+  @else if (error()) { <div class="profile-panel" role="alert"><p>Не вдалося завантажити записи. Перевірте з’єднання та спробуйте ще раз.</p><button type="button" class="button button--secondary" (click)="select(category())">Спробувати ще раз</button></div> }
+  @else if (!items().length) { <div class="profile-panel" role="status"><h2>Записів не знайдено</h2><p>У цій категорії поки немає записів.</p><a class="text-link" routerLink="/account/book">Записатися на огляд →</a></div> }
+  @else { <div class="cards">@for (item of items(); track item.id) { <article class="profile-panel card"><div class="card-heading"><h2>{{ item.make }} {{ item.model }}</h2><span class="status">{{ statusLabel(item.status) }}</span></div><dl><div><dt>VIN</dt><dd>{{ item.maskedVin }}</dd></div><div><dt>Огляд</dt><dd>{{ kyivTime(item.inspectionStartUtc) }}</dd></div>@if (item.repairPlan; as plan) { <div><dt>Узгоджена вартість</dt><dd>{{ price(plan.agreedPrice, plan.currency) }}</dd></div><div><dt>Планові терміни</dt><dd>{{ kyivTime(plan.plannedStartUtc) }} — {{ kyivTime(plan.estimatedFinishUtc) }}</dd></div> }</dl><a class="text-link detail-link" [routerLink]="['/account/appointments', item.id]">Деталі запису <span class="visually-hidden">{{ item.make }} {{ item.model }} {{ item.maskedVin }}</span> →</a></article> }</div> }
+  <app-api-status />
+</app-account-shell>

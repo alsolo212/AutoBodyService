@@ -1,0 +1,8 @@
+.list-heading, .card-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.list-heading { margin-top: 2rem; }.list-heading h2, .card h2 { margin: 0; font-size: 1.2rem; }
+.filters { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.25rem; }
+.filter { min-height: 2.75rem; border: 1px solid #cbd4cb; border-radius: 2rem; background: white; color: var(--ink); padding: .55rem 1rem; font-weight: 700; font-size: .85rem; }
+.filter--selected { background: #dcebc9; border-color: #7d9c65; }.cards { display: grid; gap: 1rem; margin-top: 1.5rem; }.card { margin: 0; min-width: 0; }
+.status { border-radius: 2rem; background: #e4eddb; color: #45643b; padding: .45rem .7rem; font-size: .78rem; font-weight: 700; }
+dl { display: grid; gap: .9rem; margin: 1.3rem 0; }dt { color: var(--muted); font-size: .8rem; }dd { margin: .3rem 0 0; overflow-wrap: anywhere; }.detail-link { display: inline-block; padding-block: .5rem; }.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@media (max-width: 480px) { .list-heading .button { width: 100%; }.card-heading { align-items: flex-start; flex-direction: column; } }
