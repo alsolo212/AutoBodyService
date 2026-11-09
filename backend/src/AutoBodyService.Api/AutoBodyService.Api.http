@@ -111,3 +111,12 @@ RequestVerificationToken: {{xsrfToken}}
   "model": "{{testModel}}",
   "problemDescription": "{{testProblemDescription}}"
 }
+
+### Current account's appointments; category is optional: active, completed, cancelled.
+GET {{baseUrl}}/api/appointments/my?category=active
+
+### Appointment details: owner or Admin+ (use an existing ID).
+GET {{baseUrl}}/api/appointments/{{appointmentId}}
+
+### Absent or inaccessible appointment.
+GET {{baseUrl}}/api/appointments/00000000-0000-0000-0000-000000000000

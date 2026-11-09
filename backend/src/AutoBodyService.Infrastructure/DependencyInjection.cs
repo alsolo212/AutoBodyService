@@ -93,6 +93,7 @@ public static class DependencyInjection
         services.AddScoped<IInspectionExceptionsService, InspectionExceptionsService>();
         services.AddScoped<IInspectionSlotsService, InspectionSlotsService>();
         services.AddScoped<ICreateAppointmentService, CreateAppointmentService>();
+        services.AddScoped<IAppointmentQueries, AppointmentQueries>();
         services.AddScoped<IAppointmentCreationStore, AppointmentCreationStore>();
         services.AddSingleton(TimeProvider.System);
 

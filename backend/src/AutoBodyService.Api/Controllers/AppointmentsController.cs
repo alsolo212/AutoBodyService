@@ -11,8 +11,50 @@ namespace AutoBodyService.Api.Controllers;
 [ApiController]
 [Authorize(Policy = "User")]
 [Route("api/appointments")]
-public sealed class AppointmentsController(ICreateAppointmentService service, UserManager<ApplicationUser> users) : ControllerBase
+[ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+public sealed class AppointmentsController(ICreateAppointmentService service, IAppointmentQueries queries, UserManager<ApplicationUser> users) : ControllerBase
 {
+    /// <summary>List only the current account's appointments, optionally by category.</summary>
+    [HttpGet("my")]
+    [ProducesResponseType(typeof(IReadOnlyList<AppointmentSummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> Mine([FromQuery] string? category, CancellationToken cancellationToken)
+    {
+        var owner = users.GetUserId(User);
+        if (owner is null) return Unauthorized();
+        AppointmentCategory? selected = category?.ToLowerInvariant() switch
+        {
+            null => null,
+            "active" => AppointmentCategory.Active,
+            "completed" => AppointmentCategory.Completed,
+            "cancelled" => AppointmentCategory.Cancelled,
+            _ => (AppointmentCategory)(-1)
+        };
+        if (selected == (AppointmentCategory)(-1)) return BadRequest(new ProblemDetails { Status = 400, Title = "Некоректний фільтр записів." });
+        return Ok(await queries.GetMineAsync(owner, selected, cancellationToken));
+    }
+
+    /// <summary>Get details available to the owner or to an administrator.</summary>
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Details(Guid id, CancellationToken cancellationToken)
+    {
+        var owner = users.GetUserId(User);
+        if (owner is null) return Unauthorized();
+        if (User.IsInRole(ApplicationRoles.Admin) || User.IsInRole(ApplicationRoles.SuperAdmin))
+        {
+            var details = await queries.GetForAdminAsync(id, cancellationToken);
+            return details is null ? NotFound() : Ok(details);
+        }
+        var own = await queries.GetOwnAsync(id, owner, cancellationToken);
+        return own is null ? NotFound() : Ok(own);
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create(CreateAppointmentRequest request, CancellationToken cancellationToken)
     {
