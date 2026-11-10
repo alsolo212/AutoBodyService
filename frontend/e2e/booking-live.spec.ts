@@ -104,7 +104,10 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await page.getByRole('button', { name: 'Далі' }).click();
   await page.getByLabel('Що потрібно оглянути?').fill('Дивіться відео: https://example.invalid/video.mp4');
   await page.getByRole('button', { name: 'Далі' }).click();
-  await expect(page.getByText('Опишіть проблему текстом, а не лише посиланням на фото чи відео.')).toBeVisible();
+  await expect(page.getByText(/Опишіть проблему автомобіля словами/)).toBeVisible();
+  await page.getByLabel('Що потрібно оглянути?').fill('!!!');
+  await page.getByRole('button', { name: 'Далі' }).click();
+  await expect(page.getByText(/Лише символів або посилання недостатньо/)).toBeVisible();
   await page.getByLabel('Що потрібно оглянути?').fill('Опис для огляду');
   await page.getByRole('button', { name: 'Далі' }).click();
   await page.getByRole('button', { name: 'Підтвердити запис' }).click();

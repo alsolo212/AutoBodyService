@@ -26,7 +26,6 @@ export function problemDescriptionValidator(control: AbstractControl): Validatio
     hasLink = true;
     return token.slice(0, prefix.index) + ' ';
   });
-  if (!hasLink) return null;
-  const meaningful = [...remaining.matchAll(words)].some(match => !linkPrompts.has(match[0].toLowerCase()));
-  return meaningful ? null : { descriptionRequired: true };
+  const text = hasLink ? remaining.replace(words, word => linkPrompts.has(word.toLowerCase()) ? ' ' : word) : remaining;
+  return /\p{L}/u.test(text) ? null : { descriptionRequired: true };
 }

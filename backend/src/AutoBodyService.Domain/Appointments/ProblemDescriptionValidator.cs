@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace AutoBodyService.Domain.Appointments;
@@ -29,8 +30,9 @@ public static partial class ProblemDescriptionValidator
             hasLink = true;
             return token.Value[..prefix.Index] + " ";
         });
-        if (!hasLink) return true;
-        return Words().Matches(remaining).Any(word => !LinkPrompts.Contains(word.Value));
+        if (hasLink)
+            remaining = Words().Replace(remaining, word => LinkPrompts.Contains(word.Value) ? " " : word.Value);
+        return remaining.EnumerateRunes().Any(Rune.IsLetter);
     }
 
     // A URL extends to whitespace. Commas, parentheses and non-ASCII query values can
