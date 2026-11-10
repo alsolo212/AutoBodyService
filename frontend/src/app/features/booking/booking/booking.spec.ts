@@ -77,6 +77,11 @@ describe('Booking', () => {
 
   it.each([
     '', '   ', 'https://example.invalid/video.mp4', 'https://example.invalid/video.mp4?items=a,b;size=large',
+    'https://example.invalid/photo(1).jpg', 'https://example.invalid/a,b/video.mp4',
+    'https://example.invalid/video.mp4?caption=подряпина', 'https://example.invalid/video.mp4?x=1,подряпина',
+    '(example.invalid),',
+    'https://example.invalid/%D1%84%D0%BE%D1%82%D0%BE.jpg?x=a%2Cb',
+    'https://example.invalid/a.jpg\nhttps://example.invalid/b.mp4',
     '(https://example.invalid/a.jpg), [https://example.invalid/b.mp4] !!!',
     'Дивіться відео за посиланням: https://example.invalid/watch?v=1',
     'Смотрите видео и https://example.invalid/video.mp4',
@@ -88,10 +93,11 @@ describe('Booking', () => {
     expect(problemDescriptionValidator(new FormControl(value))).not.toBeNull();
   });
   it.each([
-    'Вм’ятина', 'Подряпина', 'Бампер!',
+    'Вм’ятина', "Вм'ятина на дверях", 'Подряпина', 'Бампер!',
+    'Не зачиняються задні двері', 'Задній бампер тріснув після удару',
     'Вм’ятина на дверях https://example.invalid/video.mp4',
-    'https://example.invalid/photo.jpg,подряпина',
-    'https://example.invalid/photo.jpg—подряпина',
+    'https://example.invalid/video.mp4, подряпина на дверях',
+    "https://example.invalid/video.mp4?caption=подряпина\nВм'ятина",
     'Смотрите видео: помято крыло https://example.invalid/video.mp4',
     'Подряпина: https://example.invalid/a.jpg; https://example.invalid/b.mp4',
   ])('accepts a written problem with or without links: %s', value => {
@@ -102,6 +108,7 @@ describe('Booking', () => {
     component.form.patchValue({ vin: '1HGCM82633A004352', make: 'Test', model: 'Model' }); component.next();
     component.form.controls.problem.setValue('Дивіться відео: https://example.invalid/video.mp4'); component.next(); fixture.detectChanges();
     expect(component.step()).toBe(3); expect(fixture.nativeElement.textContent).toContain('Опишіть проблему текстом, а не лише посиланням');
+    expect(fixture.nativeElement.textContent).toContain('Відокремте текст від посилання пробілом або новим рядком');
     http.expectNone('/api/appointments');
     component.form.controls.problem.setValue('Вм’ятина https://example.invalid/video.mp4'); component.next(); expect(component.step()).toBe(4);
   });

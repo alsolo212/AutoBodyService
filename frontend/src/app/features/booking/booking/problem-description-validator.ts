@@ -1,7 +1,7 @@
 import { AbstractControl, ValidationErrors } from '@angular/forms';
 
 // Keep the accepted description rules aligned with ProblemDescriptionValidator in Domain.
-const links = /(?:https?:\/\/|www\.)[^\s<>"'«»“”(),;!?–—]+(?:\?[^\s<>"'«»“”()!–—]+)?|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}(?:\/[^\s<>"'«»“”(),;!?–—]+(?:\?[^\s<>"'«»“”()!–—]+)?)?/giu;
+const linkPrefix = /(?:https?:\/\/|www\.|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}(?=[^a-z0-9-]|$))/iu;
 const words = /[\p{L}\p{M}]+/gu;
 const linkPrompts = new Set([
   'дивіться', 'дивись', 'дивитися', 'подивіться', 'гляньте', 'перегляньте', 'переглянути', 'відео', 'фото', 'зображення', 'посилання', 'посиланням', 'за', 'на', 'по', 'і', 'й', 'та', 'ось', 'тут', 'це', 'моє', 'мій', 'будь', 'ласка',
@@ -12,10 +12,21 @@ const linkPrompts = new Set([
 export function problemDescriptionValidator(control: AbstractControl): ValidationErrors | null {
   const value = control.value;
   if (typeof value !== 'string' || !value.trim()) return { required: true };
-  links.lastIndex = 0;
-  if (!links.test(value)) return null;
-  links.lastIndex = 0;
-  const remaining = value.replace(links, ' ');
+  let hasLink = false;
+  // A URL extends to whitespace; separate any following description with a space or newline.
+  const remaining = value.replace(/\S+/gu, token => {
+    const prefix = linkPrefix.exec(token);
+    if (!prefix) return token;
+    let candidate = token.slice(prefix.index).replace(/[.,;:!?\)\]}»”]+$/u, '');
+    if (!/^https?:\/\//iu.test(candidate)) candidate = `https://${candidate}`;
+    try {
+      const url = new URL(candidate);
+      if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) return token;
+    } catch { return token; }
+    hasLink = true;
+    return token.slice(0, prefix.index) + ' ';
+  });
+  if (!hasLink) return null;
   const meaningful = [...remaining.matchAll(words)].some(match => !linkPrompts.has(match[0].toLowerCase()));
   return meaningful ? null : { descriptionRequired: true };
 }

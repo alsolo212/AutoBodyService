@@ -34,7 +34,7 @@ public sealed class ProblemDescriptionPostgresTests(PostgresIdentityFixture fixt
             Assert.Equal(ScheduleUpdateResult.Success, await weekly.UpdateAsync(schedule.Version, [new(date.DayOfWeek, new(9, 0), new(10, 0))], default));
             using var client = factory.CreateClient(new() { BaseAddress = new Uri("https://localhost"), HandleCookies = true, AllowAutoRedirect = false });
             await Token(client); Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync("/api/auth/login", new { phone, password = Password })).StatusCode); await Token(client);
-            foreach (var description in new[] { "https://example.invalid/video.mp4", "Дивіться відео: https://example.invalid/video.mp4", "(https://example.invalid/a.jpg); https://example.invalid/b.mp4" })
+            foreach (var description in new[] { "", "   ", "https://example.invalid/video.mp4", "https://example.invalid/photo(1).jpg", "https://example.invalid/a,b/video.mp4", "https://example.invalid/video.mp4?caption=подряпина", "https://example.invalid/video.mp4?x=1,подряпина", "https://example.invalid/%D1%84.jpg?x=a%2Cb", "Дивіться відео: https://example.invalid/video.mp4", "(https://example.invalid/a.jpg); https://example.invalid/b.mp4" })
             {
                 using var rejected = await client.PostAsJsonAsync("/api/appointments", Payload(start, description));
                 Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);

@@ -15,14 +15,31 @@ public static partial class ProblemDescriptionValidator
     public static bool IsValid(string? description)
     {
         if (string.IsNullOrWhiteSpace(description)) return false;
-        if (!Links().IsMatch(description)) return true;
-        var remaining = Links().Replace(description, " ");
+        var hasLink = false;
+        var remaining = Tokens().Replace(description, token =>
+        {
+            var prefix = LinkPrefix().Match(token.Value);
+            if (!prefix.Success) return token.Value;
+            var candidate = token.Value[prefix.Index..].TrimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}', '»', '”');
+            if (!candidate.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !candidate.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) candidate = "https://" + candidate;
+            if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) || string.IsNullOrEmpty(uri.Host))
+                return token.Value;
+            hasLink = true;
+            return token.Value[..prefix.Index] + " ";
+        });
+        if (!hasLink) return true;
         return Words().Matches(remaining).Any(word => !LinkPrompts.Contains(word.Value));
     }
 
-    // A link may use a scheme, www, or a bare domain. Separators stay outside the match.
-    [GeneratedRegex("(?:https?://|www\\.)[^\\s<>\\\"'«»“”(),;!?–—]+(?:\\?[^\\s<>\\\"'«»“”()!–—]+)?|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z]{2,63}(?:/[^\\s<>\\\"'«»“”(),;!?–—]+(?:\\?[^\\s<>\\\"'«»“”()!–—]+)?)?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
-    private static partial Regex Links();
+    // A URL extends to whitespace. Commas, parentheses and non-ASCII query values can
+    // all belong to it; separate any following description with whitespace.
+    [GeneratedRegex(@"\S+", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex Tokens();
+
+    [GeneratedRegex(@"(?:https?://|www\.|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}(?=[^a-z0-9-]|$))", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex LinkPrefix();
 
     [GeneratedRegex("[\\p{L}\\p{M}]+", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex Words();
