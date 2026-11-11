@@ -12,6 +12,7 @@ test('validates registration and shows a non-enumerating response', async ({ pag
   let body: unknown;
   await page.route('**/api/auth/antiforgery', route => route.fulfill({ status: 204 }));
   await page.route('**/api/auth/register', async route => { body = route.request().postDataJSON(); await route.fulfill({ status: 202 }); });
+  await page.route('**/api/auth/login', route => route.fulfill({ status: 401 }));
   await page.goto('/register');
   await page.getByRole('button', { name: 'Зареєструватися' }).click();
   await expect(page.getByText('Вкажіть ім’я.')).toBeVisible();
@@ -25,6 +26,27 @@ test('validates registration and shows a non-enumerating response', async ({ pag
   await page.getByRole('button', { name: 'Зареєструватися' }).click();
   await expect(page.getByRole('status')).toContainText('Запит прийнято');
   expect(body).toEqual({ name: 'Test', phone, password });
+});
+
+test('password visibility is independently controlled on registration and login', async ({ page }) => {
+  await page.goto('/register');
+  const passwordInput = page.getByLabel('Пароль', { exact: true });
+  const confirmInput = page.getByLabel('Повторіть пароль');
+  await passwordInput.fill(password); await confirmInput.fill(password);
+  await expect(passwordInput).toHaveAttribute('type', 'password');
+  await page.getByRole('button', { name: 'Показати пароль', exact: true }).click();
+  await expect(passwordInput).toHaveAttribute('type', 'text');
+  await expect(confirmInput).toHaveAttribute('type', 'password');
+  await page.getByRole('button', { name: 'Показати повторений пароль' }).click();
+  await expect(confirmInput).toHaveAttribute('type', 'text');
+  await page.getByRole('button', { name: 'Приховати пароль', exact: true }).click();
+  await expect(passwordInput).toHaveAttribute('type', 'password');
+  await page.goto('/login');
+  const loginPassword = page.getByLabel('Пароль', { exact: true });
+  await loginPassword.fill(password);
+  await page.getByRole('button', { name: 'Показати пароль' }).click();
+  await expect(loginPassword).toHaveAttribute('type', 'text');
+  await expect(loginPassword).toHaveValue(password);
 });
 
 for (const [role, url] of [['User', '/account/appointments'], ['Admin', '/admin'], ['SuperAdmin', '/admin']] as const) {

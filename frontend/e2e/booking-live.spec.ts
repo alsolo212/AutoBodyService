@@ -86,10 +86,6 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await page.getByLabel('Пароль', { exact: true }).fill('Example-password-123!');
   await page.getByLabel('Повторіть пароль').fill('Example-password-123!');
   await page.getByRole('button', { name: 'Зареєструватися' }).click();
-  await expect(page.getByRole('status')).toContainText('Запит прийнято');
-  await page.getByRole('link', { name: /Перейти до входу/ }).click();
-  await page.getByLabel('Номер телефону').fill(phone); await page.getByLabel('Пароль', { exact: true }).fill('Example-password-123!');
-  await page.getByRole('button', { name: 'Увійти' }).click();
   await expect(page).toHaveURL(/\/account\/appointments$/);
   await expect(page.getByText('Записів не знайдено')).toBeVisible();
   await page.goto(adminOrder!);
@@ -114,6 +110,14 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await expect(page).toHaveURL(/\/account\/book\/success$/);
   await page.getByRole('link', { name: 'Мої записи' }).last().click();
   await expect(page.getByRole('heading', { name: 'Клієнт Авто' })).toBeVisible();
+  const menu = page.getByLabel('Дії із записом');
+  const beforeMenu = await menu.boundingBox();
+  const beforeCard = await page.locator('.card').boundingBox();
+  await menu.click();
+  await expect(page.getByRole('button', { name: 'Скасувати запис' })).toBeVisible();
+  expect(await menu.boundingBox()).toEqual(beforeMenu);
+  expect(await page.locator('.card').boundingBox()).toEqual(beforeCard);
+  await menu.click();
   await expect(page.getByText('*************4352', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Завершені' }).click();
   await expect(page.getByText('Записів не знайдено')).toBeVisible();
@@ -121,6 +125,10 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await page.getByRole('link', { name: /Деталі запису/ }).click();
   await expect(page.getByText('Опис для огляду')).toBeVisible();
   await expect(page.getByText('1HGCM82633A004352')).toBeVisible();
+  const heading = await page.getByRole('heading', { name: 'Клієнт Авто' }).boundingBox();
+  const detailMenu = await page.getByLabel('Дії із записом').boundingBox();
+  expect(detailMenu!.x).toBeGreaterThan(heading!.x + heading!.width);
+  expect(Math.abs(detailMenu!.y + detailMenu!.height / 2 - (heading!.y + heading!.height / 2))).toBeLessThan(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 
   await page.getByLabel('Дії із записом').click();

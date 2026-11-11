@@ -17,6 +17,14 @@ describe('InspectionCalendar', () => {
     http.expectOne(r => r.url === '/api/inspection-slots' && r.params.get('date') === date).flush({ date, slots: [{ startUtc: '2026-11-09T07:30:00Z', endUtc: '2026-11-09T08:00:00Z' }] });
     http.expectOne(r => r.url === '/api/admin/inspection-calendar' && r.params.get('date') === date).flush([appointment]);
   }
+  it('starts new weekly, date and slot entries at 08:00', () => {
+    const fixture = TestBed.createComponent(InspectionCalendar); load();
+    const component = fixture.componentInstance;
+    component.addWeekly('Tuesday'); component.addInterval(); component.addSlot();
+    expect(component.weeklyIntervals.at(1).getRawValue()).toEqual({ dayOfWeek: 'Tuesday', start: '08:00', end: '08:30' });
+    expect(component.dateIntervals.at(0).getRawValue()).toEqual({ start: '08:00', end: '08:30' });
+    expect(component.slotRules.at(0).getRawValue()).toEqual({ start: '08:00', mode: 'Closed' });
+  });
   it('shows real bookings with customer and order links alongside free slots', () => {
     const fixture = TestBed.createComponent(InspectionCalendar); load(); fixture.detectChanges();
     const text = fixture.nativeElement.textContent as string;

@@ -13,13 +13,7 @@ async function register(page: Page, phone: string) {
   const response = page.waitForResponse(r => r.url().endsWith('/api/auth/register') && r.request().method() === 'POST');
   await page.getByRole('button', { name: 'Зареєструватися' }).click();
   expect((await response).status()).toBe(202);
-  await expect(page.getByRole('status')).toContainText('Запит прийнято');
-}
-
-async function openLoginFromRegistration(page: Page) {
-  await page.getByRole('link', { name: /Перейти до входу/ }).click();
-  await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByLabel('Номер телефону')).toHaveClass(/ng-untouched/);
+  await expect(page).toHaveURL(/\/account\/appointments$/);
 }
 
 test.describe('real authentication', () => {
@@ -40,18 +34,17 @@ test.describe('real authentication', () => {
     const phone = phoneNumber();
     await page.goto('/');
     await expect(page.getByRole('heading', { name: /Турбота про авто/ })).toBeVisible();
+    const homeBrand = await page.locator('.site-header .brand').boundingBox();
     await page.getByRole('link', { name: /Особистий кабінет/ }).click();
     await expect(page).toHaveURL(/\/login$/);
     await page.getByRole('link', { name: 'Зареєструватися' }).click();
     await expect(page).toHaveURL(/\/register$/);
     await register(page, phone);
-    await openLoginFromRegistration(page);
-    await page.getByLabel('Номер телефону').fill(phone);
-    await page.getByLabel('Пароль', { exact: true }).fill(password);
-    const login = page.waitForResponse(r => r.url().endsWith('/api/auth/login') && r.request().method() === 'POST');
-    await page.getByRole('button', { name: 'Увійти' }).click();
-    expect((await login).status()).toBe(204);
     await expect(page).toHaveURL(/\/account\/appointments$/);
+    const accountBrand = await page.locator('.profile-header .brand').boundingBox();
+    expect(accountBrand!.x).toBeCloseTo(homeBrand!.x, 0);
+    const navLinks = await page.locator('.profile-header nav a').allTextContents();
+    expect(navLinks).toEqual(['Мої записи', 'Запис на огляд', 'Мій профіль']);
     for (const path of ['/login', '/register']) {
       await page.goto(path);
       await expect(page).toHaveURL(/\/account\/appointments$/);
@@ -66,6 +59,8 @@ test.describe('real authentication', () => {
     expect(authCookie!.expires).toBeGreaterThan(Date.now() / 1000 + 6 * 24 * 60 * 60);
     await page.getByRole('link', { name: 'Мій профіль' }).click();
     await expect(page).toHaveURL(/\/account\/profile$/);
+    expect(await page.locator('.profile-header nav a').allTextContents()).toEqual(navLinks);
+    expect((await page.locator('.profile-header .brand').boundingBox())!.x).toBeCloseTo(accountBrand!.x, 0);
     await expect(page.getByLabel('Ім’я')).toHaveValue('Тестовий користувач');
     await expect(page.getByText('+38' + phone)).toBeVisible();
     const session = page.waitForResponse(r => r.url().endsWith('/api/auth/session') && r.request().method() === 'GET');
@@ -95,7 +90,8 @@ test.describe('real authentication', () => {
     const phone = phoneNumber();
     await page.goto('/register');
     await register(page, phone);
-    await openLoginFromRegistration(page);
+    await page.getByRole('button', { name: 'Вийти', exact: true }).click();
+    await expect(page).toHaveURL(/\/login$/);
     await page.getByLabel('Номер телефону').fill(phone);
     await page.getByLabel('Пароль', { exact: true }).fill('Incorrect-password-123!');
     const denied = page.waitForResponse(r => r.url().endsWith('/api/auth/login') && r.request().method() === 'POST');

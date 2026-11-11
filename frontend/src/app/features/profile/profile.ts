@@ -6,10 +6,11 @@ import { finalize } from 'rxjs';
 import { AuthService } from '../../core/auth';
 import { OwnProfile, ProfileService } from '../../core/profile';
 import { nameValidator } from '../auth/auth-validation';
+import { AccountHeader } from '../appointments/account-shell/account-header';
 import { PasswordForm } from './password-form';
 
-@Component({ selector: 'app-profile', imports: [ReactiveFormsModule, RouterLink, PasswordForm], template: `
-<div class="profile-page"><header class="profile-header"><a class="brand" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a><nav aria-label="Навігація профілю"><a [routerLink]="isAdminArea ? '/admin' : '/account/appointments'">{{ isAdminArea ? 'Панель керування' : 'Мої записи' }}</a>@if (isStaff()) { <a [routerLink]="isAdminArea ? '/account/appointments' : '/admin'">{{ isAdminArea ? 'Особистий кабінет' : 'Панель керування' }}</a> }</nav><button class="button button--secondary" type="button" [disabled]="loggingOut()" (click)="logout()">{{ loggingOut() ? 'Виходимо…' : 'Вийти' }}</button></header>
+@Component({ selector: 'app-profile', imports: [ReactiveFormsModule, RouterLink, PasswordForm, AccountHeader], template: `
+<div class="profile-page">@if (isAdminArea) { <header class="profile-header"><a class="brand" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a><nav aria-label="Навігація профілю"><a [routerLink]="isAdminArea ? '/admin' : '/account/appointments'">{{ isAdminArea ? 'Панель керування' : 'Мої записи' }}</a>@if (isStaff()) { <a [routerLink]="isAdminArea ? '/account/appointments' : '/admin'">{{ isAdminArea ? 'Особистий кабінет' : 'Панель керування' }}</a> }</nav><button class="button button--secondary" type="button" [disabled]="loggingOut()" (click)="logout()">{{ loggingOut() ? 'Виходимо…' : 'Вийти' }}</button></header> } @else { <app-account-header /> }
 <main class="profile-main"><p class="eyebrow"><span class="eyebrow__line"></span> {{ isAdminArea ? 'ПАНЕЛЬ КЕРУВАННЯ' : 'ОСОБИСТИЙ КАБІНЕТ' }}</p><h1>Мій профіль</h1><p class="profile-intro">Керуйте особистими даними та паролем.</p>
 @if (logoutError()) { <div class="auth-alert" role="alert">{{ logoutError() }}</div> }
 @if (loading()) { <p role="status">Завантажуємо профіль…</p> }

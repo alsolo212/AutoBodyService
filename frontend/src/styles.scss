@@ -129,3 +129,12 @@ h1, h2, h3, p { overflow-wrap: break-word; }
 .profile-phone { margin: 0; line-height: 1.5; }
 .profile-success { margin: 1rem 0; padding: .8rem 1rem; border: 1px solid #d9e5d3; background: #f1f5ec; border-radius: var(--radius); color: #355c3d; font-size: .87rem; }
 @media (max-width: 600px) { .profile-header { gap: 1rem; }.profile-header nav { order: 3; width: 100%; margin: 0; }.profile-header > button { margin-left: auto; }.profile-form .button { width: 100%; }.workspace-switch { order: 5; width: 100%; }.workspace-topbar { flex-wrap: wrap; padding-block: .75rem; } }
+
+.profile-header__inner { width: min(100% - 3rem, 1232px); margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 2rem; }
+.profile-header:has(.profile-header__inner) { padding-inline: 0; }
+.profile-header__inner nav { display: flex; flex-wrap: wrap; gap: .8rem 1.5rem; margin-left: auto; }
+@media (max-width: 600px) { .profile-header__inner { width: min(100% - 2rem, 1232px); gap: 1rem; } .profile-header__inner nav { order: 3; width: 100%; margin: 0; } .profile-header__inner > button { margin-left: auto; } }
+.password-input { position: relative; }
+.password-input .field__input { padding-right: 3.25rem; }
+.password-toggle { position: absolute; right: .3rem; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border: 0; background: transparent; color: #45643b; cursor: pointer; }
+.password-toggle svg { width: 1.25rem; height: 1.25rem; }

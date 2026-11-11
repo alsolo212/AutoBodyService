@@ -12,16 +12,6 @@ test('registers, signs in and signs out through the real API', async ({ page }) 
   const registration = page.waitForResponse(response => response.url().endsWith('/api/auth/register'));
   await page.getByRole('button', { name: 'Зареєструватися' }).click();
   expect((await registration).status()).toBe(202);
-  await expect(page.getByRole('status')).toContainText('Запит прийнято');
-  await page.getByRole('link', { name: /Перейти до входу/ }).click();
-  await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByRole('heading', { name: 'Вітаємо знову.' })).toBeVisible();
-  await expect(page.getByLabel('Номер телефону')).toHaveClass(/ng-untouched/);
-  await page.getByLabel('Номер телефону').fill(phone);
-  await page.getByLabel('Пароль', { exact: true }).fill(password);
-  await expect(page.getByLabel('Номер телефону')).toHaveValue(phone);
-  await expect(page.getByLabel('Пароль', { exact: true })).toHaveValue(password);
-  await page.getByRole('button', { name: 'Увійти' }).click();
   await expect(page).toHaveURL(/\/account\/appointments$/);
   await expect(page.getByRole('heading', { name: 'Мої записи' })).toBeVisible();
   await page.getByRole('button', { name: 'Вийти', exact: true }).click();

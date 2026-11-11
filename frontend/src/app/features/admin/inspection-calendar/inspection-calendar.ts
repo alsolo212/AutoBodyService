@@ -50,10 +50,10 @@ export class InspectionCalendar {
   weeklyRow(dayOfWeek: Day = 'Monday', start = '', end = '') { return this.fb.group({ dayOfWeek: this.fb.control<Day>(dayOfWeek), start: [shortTime(start), Validators.required], end: [shortTime(end), Validators.required] }); }
   intervalRow(start = '', end = '') { return this.fb.group({ start: [shortTime(start), Validators.required], end: [shortTime(end), Validators.required] }); }
   slotRow(start = '', mode: SlotMode = 'Closed') { return this.fb.group({ start: [shortTime(start), Validators.required], mode: this.fb.control<SlotMode>(mode) }); }
-  addWeekly(day: Day) { this.weeklyIntervals.push(this.weeklyRow(day)); this.weeklyForm.markAsDirty(); }
+  addWeekly(day: Day) { this.weeklyIntervals.push(this.weeklyRow(day, '08:00', '08:30')); this.weeklyForm.markAsDirty(); }
   removeWeekly(index: number) { this.weeklyIntervals.removeAt(index); this.weeklyForm.markAsDirty(); }
-  addInterval() { this.dateIntervals.push(this.intervalRow()); this.exceptionForm.markAsDirty(); }
-  addSlot() { this.slotRules.push(this.slotRow()); this.exceptionForm.markAsDirty(); }
+  addInterval() { this.dateIntervals.push(this.intervalRow('08:00', '08:30')); this.exceptionForm.markAsDirty(); }
+  addSlot() { this.slotRules.push(this.slotRow('08:00')); this.exceptionForm.markAsDirty(); }
   removeInterval(index: number) { this.dateIntervals.removeAt(index); this.exceptionForm.markAsDirty(); }
   removeSlot(index: number) { this.slotRules.removeAt(index); this.exceptionForm.markAsDirty(); }
   setTab(tab: 'appointments' | 'settings') { this.tab.set(tab); }

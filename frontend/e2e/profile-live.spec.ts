@@ -15,13 +15,6 @@ test('profile and mandatory password changes work with the real API', async ({ p
   await page.getByLabel('Пароль', { exact: true }).fill(oldPassword);
   await page.getByLabel('Повторіть пароль').fill(oldPassword);
   await page.getByRole('button', { name: 'Зареєструватися' }).click();
-  await expect(page.getByRole('status')).toContainText('Запит прийнято');
-  await page.getByRole('link', { name: /Перейти до входу/ }).click();
-  await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByLabel('Номер телефону')).toHaveClass(/ng-untouched/);
-  await page.getByLabel('Номер телефону').fill(phone);
-  await page.getByLabel('Пароль', { exact: true }).fill(oldPassword);
-  await page.getByRole('button', { name: 'Увійти' }).click();
   await expect(page).toHaveURL(/\/account\/appointments$/);
   await page.goto('/account/profile');
   await expect(page.getByLabel('Ім’я')).toHaveValue('Тест');

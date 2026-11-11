@@ -2,7 +2,8 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
+import { AccountHeader } from '../../appointments/account-shell/account-header';
 import { problemDescriptionValidator } from './problem-description-validator';
 import { kyivTime } from '../../../shared/time/kyiv-time';
 import { Subject, catchError, finalize, map, merge, of, startWith, switchMap, tap } from 'rxjs';
@@ -15,7 +16,7 @@ const nonBlank = (control: AbstractControl): ValidationErrors | null =>
 const kyivDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 export const formatInspection = kyivTime;
 
-@Component({ selector: 'app-booking', imports: [ReactiveFormsModule, RouterLink], templateUrl: './booking.html', styleUrl: './booking.scss' })
+@Component({ selector: 'app-booking', imports: [ReactiveFormsModule, AccountHeader], templateUrl: './booking.html', styleUrl: './booking.scss' })
 export class Booking {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
