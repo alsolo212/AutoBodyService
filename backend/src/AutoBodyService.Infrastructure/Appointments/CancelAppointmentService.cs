@@ -18,7 +18,7 @@ public sealed class CancelAppointmentService(ApplicationDbContext db, TimeProvid
         if (appointment is null) return CancelAppointmentResult.NotFound;
 
         var now = clock.GetUtcNow();
-        var statusEvent = appointment.CancelByOwner(ownerId, now);
+        var statusEvent = appointment.CancelByOwner(now);
         if (statusEvent is null) return CancelAppointmentResult.Conflict;
         db.AppointmentStatusEvents.Add(statusEvent);
 

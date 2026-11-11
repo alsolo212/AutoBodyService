@@ -13,16 +13,16 @@ public sealed class RepairPlan
         DateTimeOffset updatedAtUtc)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(appointmentId, Guid.Empty);
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(agreedPrice, 0m);
+        ArgumentOutOfRangeException.ThrowIfNegative(agreedPrice);
 
         EnsureUtc(plannedStartUtc, nameof(plannedStartUtc));
         EnsureUtc(estimatedFinishUtc, nameof(estimatedFinishUtc));
         EnsureUtc(updatedAtUtc, nameof(updatedAtUtc));
 
-        if (estimatedFinishUtc <= plannedStartUtc)
+        if (estimatedFinishUtc < plannedStartUtc)
         {
             throw new ArgumentException(
-                "Estimated finish time must be later than the planned start time.",
+                "Estimated finish time cannot be earlier than the planned start time.",
                 nameof(estimatedFinishUtc));
         }
 

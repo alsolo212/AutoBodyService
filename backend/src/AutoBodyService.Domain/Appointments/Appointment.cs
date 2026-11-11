@@ -81,21 +81,20 @@ public sealed class Appointment
 
     public IReadOnlyCollection<AppointmentStatusEvent> StatusEvents => _statusEvents.AsReadOnly();
 
-    /// <summary>Cancels a future inspection only for its owner and records the transition.</summary>
-    public AppointmentStatusEvent? CancelByOwner(string actorId, DateTimeOffset nowUtc)
+    /// <summary>Cancels a future inspection after the caller has verified ownership.</summary>
+    public AppointmentStatusEvent? CancelByOwner(DateTimeOffset nowUtc)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
         if (nowUtc.Offset != TimeSpan.Zero) throw new ArgumentException("Time must use the UTC offset.", nameof(nowUtc));
-        if (UserId != actorId || Status != AppointmentStatus.AwaitingInspection || InspectionStartUtc <= nowUtc)
+        if (Status != AppointmentStatus.AwaitingInspection || InspectionStartUtc <= nowUtc)
             return null;
 
-        var statusEvent = new AppointmentStatusEvent(Guid.NewGuid(), Id, Status, AppointmentStatus.Cancelled, actorId, nowUtc, null);
+        var statusEvent = new AppointmentStatusEvent(Guid.NewGuid(), Id, Status, AppointmentStatus.Cancelled, UserId, nowUtc, null);
         Status = AppointmentStatus.Cancelled;
         _statusEvents.Add(statusEvent);
         return statusEvent;
     }
 
-    public void Schedule(RepairPlan repairPlan)
+    public void Schedule(RepairPlan repairPlan, bool inspectionPerformed)
     {
         ArgumentNullException.ThrowIfNull(repairPlan);
 
@@ -112,7 +111,43 @@ public sealed class Appointment
                 nameof(repairPlan));
         }
 
+        if (!inspectionPerformed)
+            throw new InvalidOperationException("The inspection must be performed before scheduling.");
+
         RepairPlan = repairPlan;
         Status = AppointmentStatus.Scheduled;
+    }
+
+    public void StartRepair() => MoveFrom(AppointmentStatus.Scheduled, AppointmentStatus.InProgress);
+
+    public void FinishRepair() => MoveFrom(AppointmentStatus.InProgress, AppointmentStatus.AwaitingPayment);
+
+    public void Complete(bool paymentReceived, bool vehicleHandedOver)
+    {
+        if (Status != AppointmentStatus.AwaitingPayment)
+            throw new InvalidOperationException("Only an appointment awaiting payment can be completed.");
+        if (!paymentReceived || !vehicleHandedOver)
+            throw new InvalidOperationException("Payment and vehicle handover must both be confirmed.");
+
+        Status = AppointmentStatus.Completed;
+    }
+
+    /// <summary>Cancels a repair after the caller has verified operator authorization.</summary>
+    public void CancelByAdmin(bool confirmed, string reason)
+    {
+        if (Status is not (AppointmentStatus.AwaitingInspection or AppointmentStatus.Scheduled or AppointmentStatus.InProgress))
+            throw new InvalidOperationException("This appointment cannot be cancelled.");
+        if (!confirmed)
+            throw new InvalidOperationException("Cancellation must be confirmed.");
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+
+        Status = AppointmentStatus.Cancelled;
+    }
+
+    private void MoveFrom(AppointmentStatus expected, AppointmentStatus next)
+    {
+        if (Status != expected)
+            throw new InvalidOperationException("This status transition is not allowed.");
+        Status = next;
     }
 }

@@ -77,6 +77,29 @@ public sealed class AppointmentPostgresTests(PostgresIdentityFixture fixture)
         Assert.Equal(AppointmentStatus.Scheduled, (await db.Appointments.SingleAsync(a => a.Id == appointment.Id)).Status);
     }
 
+    [PostgresFact]
+    public async Task ConcurrentDomainCommandsCannotOverwriteTheFirstTransition()
+    {
+        await using var firstScope = fixture.Factory.Services.CreateAsyncScope();
+        var first = firstScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var owner = await CreateOwner(firstScope.ServiceProvider);
+        var appointment = Appointment(owner, Slot.AddDays(2));
+        first.Appointments.Add(appointment);
+        await first.SaveChangesAsync();
+
+        await using var secondScope = fixture.Factory.Services.CreateAsyncScope();
+        var second = secondScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var stale = await second.Appointments.SingleAsync(a => a.Id == appointment.Id);
+        appointment.Schedule(new RepairPlan(appointment.Id, 1m, Slot, Slot.AddDays(1), Slot), true);
+        Assert.NotNull(stale.CancelByOwner(Created));
+
+        await first.SaveChangesAsync();
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync());
+        first.ChangeTracker.Clear();
+        Assert.Equal(AppointmentStatus.Scheduled, (await first.Appointments.SingleAsync(a => a.Id == appointment.Id)).Status);
+        Assert.Single(await first.AppointmentStatusEvents.Where(e => e.AppointmentId == appointment.Id).ToListAsync());
+    }
+
     private static async Task<string> CreateOwner(IServiceProvider services)
     {
         var users = services.GetRequiredService<UserManager<ApplicationUser>>();
