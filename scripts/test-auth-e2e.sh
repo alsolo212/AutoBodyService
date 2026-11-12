@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+# Each spec owns a fresh database as well as a fresh API process. Otherwise
+# bookings and calendar changes in one spec affect unrelated later specs.
+if [[ -z "${E2E_SPEC:-}" ]]; then
+  for spec in frontend/e2e/*.spec.ts; do
+    E2E_SPEC="$spec" bash scripts/test-auth-e2e.sh
+  done
+  exit 0
+fi
+
 source scripts/activate-dotnet.sh
 
 container="autobody-ui-verify-$(openssl rand -hex 8)"

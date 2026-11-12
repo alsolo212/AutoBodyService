@@ -127,6 +127,20 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
         Assert.Equal(4, audit.Count(e => e.Action == "AppointmentStatusChanged"));
         Assert.Single(audit, e => e.Action == "RepairPlanChanged");
         Assert.All(audit, e => Assert.Equal(admin.Id, e.ActorId));
+        foreach (var statusEvent in events.Where(e => e.FromStatus != null))
+        {
+            var matching = audit.Where(e => e.Action == "AppointmentStatusChanged").Where(e =>
+            {
+                using var payload = JsonDocument.Parse(e.Details);
+                return payload.RootElement.GetProperty("from").GetString() == statusEvent.FromStatus!.Value.ToString()
+                    && payload.RootElement.GetProperty("to").GetString() == statusEvent.ToStatus.ToString();
+            });
+            var auditEvent = Assert.Single(matching);
+            Assert.Equal(statusEvent.ActorId, auditEvent.ActorId);
+            Assert.Equal("Appointment", auditEvent.ObjectType);
+            using var detailsPayload = JsonDocument.Parse(auditEvent.Details);
+            Assert.Equal(2, detailsPayload.RootElement.EnumerateObject().Count());
+        }
     }
 
     [PostgresFact]
@@ -186,9 +200,16 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
     [PostgresFact]
     public async Task ConcurrentOperatorsWithSameVersionProduceOnlyOneCommittedChange()
     {
-        var owner = await User("User"); var admin = await User("Admin"); var super = await User("SuperAdmin");
-        var id = await Add(owner.Id, AppointmentStatus.Scheduled);
-        using var first = await Login(admin.Phone); using var second = await Login(super.Phone);
+        var owner = await User("User"); var admin = await User("Admin"); var otherAdmin = await User("Admin");
+        var id = await Add(owner.Id);
+        using var first = await Login(admin.Phone); using var second = await Login(otherAdmin.Phone);
+        Assert.Equal(HttpStatusCode.NoContent, (await first.PutAsJsonAsync(Url(id) + "/repair-plan", Plan(await Version(first, id)))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Transition(first, id, await Version(first, id), "Scheduled", inspection: true)).StatusCode);
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var beforeHistory = await db.AppointmentStatusEvents.AsNoTracking().Where(e => e.AppointmentId == id).Select(e => e.Id).ToListAsync();
+        Assert.Equal(2, beforeHistory.Count);
+        var beforeAudit = await db.AdminAuditEvents.AsNoTracking().Where(e => e.ObjectId == id.ToString()).Select(e => e.Id).ToListAsync();
+        Assert.Equal(2, beforeAudit.Count);
         var version = await Version(first, id);
         var board = await first.GetFromJsonAsync<System.Text.Json.JsonElement>($"/api/admin/appointments?status=Scheduled&search={Uri.EscapeDataString(owner.Phone)}");
         var card = Assert.Single(board.GetProperty("items").EnumerateArray());
@@ -196,12 +217,21 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
         Assert.Equal(version, card.GetProperty("version").GetUInt32());
         var results = await Task.WhenAll(Transition(first, id, version, "InProgress"), Cancel(second, id, version));
         Assert.Equal(new[] { HttpStatusCode.NoContent, HttpStatusCode.Conflict }.Order(), results.Select(r => r.StatusCode).Order());
-        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var appointment = await db.Appointments.SingleAsync(a => a.Id == id);
-        Assert.Contains(appointment.Status, new[] { AppointmentStatus.InProgress, AppointmentStatus.Cancelled });
-        var history = Assert.Single(await db.AppointmentStatusEvents.Where(e => e.AppointmentId == id && e.FromStatus != null).ToListAsync());
-        Assert.Equal(appointment.Status, history.ToStatus);
-        Assert.Single(await db.AdminAuditEvents.Where(e => e.ObjectId == id.ToString()).ToListAsync());
+        var winningState = results[0].StatusCode == HttpStatusCode.NoContent ? AppointmentStatus.InProgress : AppointmentStatus.Cancelled;
+        var winningActor = results[0].StatusCode == HttpStatusCode.NoContent ? admin.Id : otherAdmin.Id;
+        Assert.Equal(winningState, appointment.Status);
+        var history = await db.AppointmentStatusEvents.AsNoTracking().Where(e => e.AppointmentId == id).ToListAsync();
+        Assert.Equal(3, history.Count);
+        Assert.All(beforeHistory, eventId => Assert.Contains(history, e => e.Id == eventId));
+        var winningEvent = Assert.Single(history, e => e.FromStatus == AppointmentStatus.Scheduled);
+        Assert.Equal(winningState, winningEvent.ToStatus);
+        Assert.Equal(winningActor, winningEvent.ActorId);
+        var audit = await db.AdminAuditEvents.AsNoTracking().Where(e => e.ObjectId == id.ToString()).ToListAsync();
+        Assert.Equal(3, audit.Count);
+        Assert.All(beforeAudit, eventId => Assert.Contains(audit, e => e.Id == eventId));
+        Assert.Equal(winningActor, Assert.Single(audit, e => !beforeAudit.Contains(e.Id)).ActorId);
+        foreach (var result in results) result.Dispose();
     }
 
     [PostgresFact]

@@ -148,3 +148,64 @@ test('board uses real guarded transitions, server pages and confirmation forms',
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('board-mobile.png') });
 });
+
+test('a customer cannot enter the board and an administrator sees the foreign customer details', async ({ page, browser }) => {
+  test.skip(process.env['E2E_LIVE_API'] !== '1', 'Requires an isolated API and PostgreSQL.');
+  test.setTimeout(60_000);
+  const adminContext = await browser.newContext({ ignoreHTTPSErrors: true });
+  try {
+    const admin = await adminContext.newPage();
+    await admin.goto('/login');
+    await admin.getByLabel('Номер телефону').fill(process.env['E2E_ADMIN_PHONE']!);
+    await admin.getByLabel('Пароль', { exact: true }).fill(process.env['E2E_ADMIN_PASSWORD']!);
+    await admin.getByRole('button', { name: 'Увійти' }).click();
+    await expect(admin).toHaveURL(/\/admin$/);
+    const fixture = await admin.evaluate(async () => {
+      await fetch('/api/auth/antiforgery');
+      const headers = () => ({ 'Content-Type': 'application/json', RequestVerificationToken: decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]) });
+      const schedule = await (await fetch('/api/admin/inspection-schedule')).json();
+      const intervals = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(dayOfWeek => ({ dayOfWeek, start: '09:00', end: '10:00' }));
+      const preview = await fetch('/api/admin/inspection-schedule/preview', { method: 'POST', headers: headers(), body: JSON.stringify({ version: schedule.version, intervals }) });
+      if (!preview.ok) throw new Error(`Preview: ${preview.status}`);
+      const updated = await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers: headers(), body: JSON.stringify({ version: schedule.version, intervals, confirmationToken: (await preview.json()).confirmationToken }) });
+      if (updated.status !== 204) throw new Error(`Schedule: ${updated.status}`);
+      const slots = (await (await fetch('/api/inspection-slots?date=2099-10-18')).json()).slots;
+      if (slots.length < 2) throw new Error('Two free inspection slots are required.');
+      const foreign = await fetch('/api/appointments', { method: 'POST', headers: headers(), body: JSON.stringify({ inspectionStartUtc: slots[0].startUtc, vin: '1HGCM82633A123456', make: 'Тестова', model: 'ForeignOwner', problemDescription: 'Інший власник' }) });
+      if (foreign.status !== 201) throw new Error(`Foreign booking: ${foreign.status}`);
+      return { foreignId: (await foreign.json()).id as string, customerSlot: slots[1].startUtc as string };
+    });
+    await page.goto('/register');
+    await page.getByLabel('Ім’я').fill('Клієнт Перевірка');
+    await page.getByLabel('Номер телефону').fill('0000000097');
+    await page.getByLabel('Пароль', { exact: true }).fill('Example-password-123!');
+    await page.getByLabel('Повторіть пароль').fill('Example-password-123!');
+    await page.getByRole('button', { name: 'Зареєструватися' }).click();
+    await expect(page).toHaveURL(/\/account\/appointments$/);
+    const customerId = await page.evaluate(async slot => {
+      await fetch('/api/auth/antiforgery');
+      const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
+      const response = await fetch('/api/appointments', { method: 'POST', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token }, body: JSON.stringify({ inspectionStartUtc: slot, vin: '1HGCM82633A123456', make: 'Тестова', model: 'CustomerBoard', problemDescription: 'Пошкоджені двері' }) });
+      if (response.status !== 201) throw new Error(`Customer booking: ${response.status}`);
+      return (await response.json()).id as string;
+    }, fixture.customerSlot);
+    const denied = await page.evaluate(async foreignId => ({
+      board: (await fetch('/api/admin/appointments')).status,
+      details: (await fetch(`/api/appointments/${foreignId}`)).status,
+    }), fixture.foreignId);
+    expect(denied).toEqual({ board: 403, details: 404 });
+    await page.goto('/admin/appointments'); await expect(page).toHaveURL(/\/account\/appointments$/);
+    await page.goto(`/account/appointments/${customerId}`);
+    await expect(page.getByText('Пошкоджені двері')).toBeVisible();
+    await expect(page.getByText('+380000000097')).toHaveCount(0);
+    await admin.goto('/admin/appointments');
+    await admin.getByLabel('Пошук клієнта або авто').fill('CustomerBoard');
+    await admin.getByRole('button', { name: 'Застосувати' }).click();
+    const card = admin.locator(`[data-card-id="${customerId}"]`);
+    await expect(card).toContainText('Клієнт Перевірка');
+    await expect(card).toContainText('Тестова CustomerBoard');
+    await card.getByRole('link', { name: 'Тестова CustomerBoard' }).click();
+    await expect(admin).toHaveURL(new RegExp(`/admin/appointments/${customerId}$`));
+    for (const text of ['Клієнт Перевірка', '+380000000097', '1HGCM82633A123456', 'Пошкоджені двері']) await expect(admin.getByText(text, { exact: true }).first()).toBeVisible();
+  } finally { await adminContext.close(); }
+});
