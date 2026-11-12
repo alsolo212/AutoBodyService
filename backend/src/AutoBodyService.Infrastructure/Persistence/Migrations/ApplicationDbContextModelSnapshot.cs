@@ -66,9 +66,13 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreatedAtUtc");
+
                     b.HasIndex("InspectionStartUtc")
                         .IsUnique()
                         .HasFilter("\"Status\" <> 5");
+
+                    b.HasIndex("Status", "InspectionStartUtc");
 
                     b.HasIndex("UserId", "InspectionStartUtc");
 
@@ -117,9 +121,42 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AppointmentId", "ChangedAtUtc");
 
+                    b.HasIndex("ToStatus", "ChangedAtUtc");
+
                     b.ToTable("AppointmentStatusEvents", t =>
                         {
                             t.HasCheckConstraint("CK_AppointmentStatusEvent_Status", "(\"FromStatus\" BETWEEN 0 AND 5 OR \"FromStatus\" IS NULL) AND \"ToStatus\" BETWEEN 0 AND 5 AND (\"FromStatus\" IS NOT NULL OR \"ToStatus\" = 0)");
+                        });
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.Appointments.ManualContactEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("AppointmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Reason")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("AppointmentId", "Reason", "RecordedAtUtc");
+
+                    b.ToTable("ManualContactEvents", t =>
+                        {
+                            t.HasCheckConstraint("CK_ManualContactEvent_Reason", "\"Reason\" BETWEEN 0 AND 3");
                         });
                 });
 
@@ -744,6 +781,21 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
 
                     b.HasOne("AutoBodyService.Domain.Appointments.Appointment", null)
                         .WithMany("StatusEvents")
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.Appointments.ManualContactEvent", b =>
+                {
+                    b.HasOne("AutoBodyService.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AutoBodyService.Domain.Appointments.Appointment", null)
+                        .WithMany()
                         .HasForeignKey("AppointmentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();

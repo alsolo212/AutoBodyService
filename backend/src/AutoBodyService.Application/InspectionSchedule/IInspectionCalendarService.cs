@@ -11,6 +11,7 @@ public sealed record ScheduleChangeResult(ScheduleUpdateResult Status, ScheduleP
 public interface IInspectionCalendarService
 {
     Task<IReadOnlyList<CalendarAppointment>> GetDayAsync(DateOnly date, CancellationToken cancellationToken);
+    Task<IReadOnlyList<CalendarAppointment>> GetCurrentConflictsAsync(CancellationToken cancellationToken);
     Task<ScheduleChangeResult> ChangeWeeklyAsync(string actorId, Guid version, IReadOnlyList<WeeklyInterval> intervals, bool preview, string? confirmationToken, CancellationToken cancellationToken);
     Task<ScheduleChangeResult> ChangeDateAsync(string actorId, Guid version, DateOnly date, InspectionException? exception, bool preview, string? confirmationToken, CancellationToken cancellationToken);
 }

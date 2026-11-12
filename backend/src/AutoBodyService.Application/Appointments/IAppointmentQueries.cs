@@ -16,6 +16,12 @@ public sealed record AppointmentParticipant(string Name, string Specialization);
 public sealed record CustomerStatusHistory(AppointmentStatus? FromStatus, AppointmentStatus ToStatus, DateTimeOffset ChangedAtUtc);
 /// <summary>Administrative status transition including its actor and reason.</summary>
 public sealed record AdminStatusHistory(AppointmentStatus? FromStatus, AppointmentStatus ToStatus, DateTimeOffset ChangedAtUtc, string ActorName, string? Reason);
+/// <summary>A recorded manual interaction, not a delivery receipt.</summary>
+public sealed record AdminManualContact(ManualContactReason Reason, string ActorName, DateTimeOffset RecordedAtUtc);
+/// <summary>Server-recorded confirmation of payment and handover.</summary>
+public sealed record AdminPaymentConfirmation(string ActorName, DateTimeOffset PaidAtUtc, DateTimeOffset HandedOverAtUtc);
+/// <summary>Reserved shape for future assignment history.</summary>
+public sealed record AdminAssignmentDetails(string Name, string Specialization, DateTimeOffset AssignedAtUtc, DateTimeOffset? ReleasedAtUtc);
 /// <summary>Owner-visible details. Null participants or repair plan mean that their persistence is not yet available.</summary>
 public sealed record CustomerAppointmentDetails(Guid Id, string Vin, string Make, string Model, string ProblemDescription,
     DateTimeOffset InspectionStartUtc, AppointmentStatus Status, IReadOnlyList<CustomerStatusHistory> History,
@@ -23,7 +29,8 @@ public sealed record CustomerAppointmentDetails(Guid Id, string Vin, string Make
 /// <summary>Administrative details of an appointment and its customer.</summary>
 public sealed record AdminAppointmentDetails(Guid Id, string Vin, string Make, string Model, string ProblemDescription,
     DateTimeOffset InspectionStartUtc, AppointmentStatus Status, string CustomerName, string CustomerPhone,
-    IReadOnlyList<AdminStatusHistory> History, AgreedRepairDetails? RepairPlan, IReadOnlyList<AppointmentParticipant>? Participants, uint Version);
+    IReadOnlyList<AdminStatusHistory> History, AgreedRepairDetails? RepairPlan, IReadOnlyList<AppointmentParticipant>? Participants, uint Version,
+    AdminPaymentConfirmation? PaymentConfirmation, IReadOnlyList<AdminManualContact> ManualContacts, IReadOnlyList<AdminAssignmentDetails>? Assignments);
 
 public interface IAppointmentQueries
 {

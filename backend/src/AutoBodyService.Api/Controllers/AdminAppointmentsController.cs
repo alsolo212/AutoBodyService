@@ -12,8 +12,38 @@ namespace AutoBodyService.Api.Controllers;
 [Authorize(Policy = "Admin")]
 [Route("api/admin/appointments")]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public sealed class AdminAppointmentsController(IAdminAppointmentCommands commands) : ControllerBase
+public sealed class AdminAppointmentsController(IAdminAppointmentCommands commands, IAdminOverviewQueries overview, IManualContactService contacts) : ControllerBase
 {
+    [HttpGet]
+    public async Task<IActionResult> List([FromQuery] AppointmentStatus? status, [FromQuery] string? search,
+        [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] string? sort,
+        [FromQuery] string? direction, [FromQuery] int page = 1, [FromQuery] int pageSize = 25, CancellationToken cancellationToken = default)
+    {
+        sort = (sort ?? "inspection").ToLowerInvariant();
+        direction = (direction ?? "asc").ToLowerInvariant();
+        if ((status.HasValue && !Enum.IsDefined(status.Value)) || search?.Length > 100 ||
+            sort is not ("inspection" or "created" or "customer") || direction is not ("asc" or "desc") ||
+            page is < 1 or > 1000000 || pageSize is < 1 or > 100 ||
+            (from.HasValue && from.Value.Year is < 2 or > 9998) || (to.HasValue && to.Value.Year is < 2 or > 9998) ||
+            (from.HasValue && to.HasValue && from.Value > to.Value))
+            return BadRequest(new ProblemDetails { Status = 400, Title = "Некоректні параметри пошуку." });
+        return Ok(await overview.GetAppointmentsAsync(new(status, search, from, to, sort, direction == "desc", page, pageSize), cancellationToken));
+    }
+
+    [HttpPost("{id:guid}/manual-contact")]
+    public async Task<IActionResult> RecordManualContact(Guid id, ManualContactRequest request, CancellationToken cancellationToken)
+    {
+        var actor = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (actor is null) return Unauthorized();
+        var result = await contacts.RecordAsync(id, request.Reason!.Value, actor, cancellationToken);
+        return result switch
+        {
+            ManualContactResult.Recorded => NoContent(),
+            ManualContactResult.NotFound => NotFound(new ProblemDetails { Status = 404, Title = "Замовлення не знайдено." }),
+            _ => BadRequest(new ProblemDetails { Status = 400, Title = "Некоректний привід зв'язку." })
+        };
+    }
+
     [HttpPut("{id:guid}/repair-plan")]
     public async Task<IActionResult> PutPlan(Guid id, RepairPlanRequest request, CancellationToken cancellationToken)
     {
@@ -47,6 +77,13 @@ public sealed class AdminAppointmentsController(IAdminAppointmentCommands comman
         AdminAppointmentResult.Invalid => BadRequest(new ProblemDetails { Status = 400, Title = "Перевірте дані замовлення." }),
         _ => Conflict(new ProblemDetails { Status = 409, Title = "Замовлення змінилося або дія недоступна." })
     };
+}
+
+/// <summary>Records a manual interaction without claiming message delivery.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ManualContactRequest
+{
+    [Required] public required ManualContactReason? Reason { get; init; }
 }
 
 /// <summary>Agreed repair terms and the version returned by the existing administrative details endpoint.</summary>

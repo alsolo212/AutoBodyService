@@ -22,6 +22,12 @@ public sealed class InspectionCalendarService(ApplicationDbContext db, IInspecti
         return await Appointments(from, to, false).ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<CalendarAppointment>> GetCurrentConflictsAsync(CancellationToken cancellationToken)
+    {
+        var rows = await Appointments(clock.GetUtcNow(), null, true).ToListAsync(cancellationToken);
+        return await FindConflictsAsync(rows, null, cancellationToken);
+    }
+
     public Task<ScheduleChangeResult> ChangeWeeklyAsync(string actorId, Guid version, IReadOnlyList<WeeklyInterval> intervals, bool preview, string? confirmationToken, CancellationToken cancellationToken) =>
         ChangeAsync(version, null, new { kind = "weekly", intervals }, preview, confirmationToken,
             async () => (await weekly.GetAsync(cancellationToken)).Intervals,
@@ -45,14 +51,7 @@ public sealed class InspectionCalendarService(ApplicationDbContext db, IInspecti
         if (result != ScheduleUpdateResult.Success) return new(result);
         var now = clock.GetUtcNow();
         var rows = await Appointments(now, null, true).ToListAsync(cancellationToken);
-        var conflicts = new List<CalendarAppointment>();
-        foreach (var group in rows.GroupBy(a => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(a.InspectionStartUtc, Zone).DateTime)))
-        {
-            if (date.HasValue && date != group.Key) continue;
-            var template = await exceptions.GetAsync(group.Key, cancellationToken);
-            var starts = template.TemplateSlots.Select(slot => slot.StartUtc).ToHashSet();
-            conflicts.AddRange(group.Where(appointment => !starts.Contains(appointment.InspectionStartUtc)));
-        }
+        var conflicts = await FindConflictsAsync(rows, date, cancellationToken);
         // Bind the preview to the proposal, original version, and the exact affected records.
         var data = JsonSerializer.Serialize(new { version, proposal, conflicts });
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(data)));
@@ -64,6 +63,19 @@ public sealed class InspectionCalendarService(ApplicationDbContext db, IInspecti
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(ScheduleUpdateResult.Success, response);
+    }
+
+    private async Task<List<CalendarAppointment>> FindConflictsAsync(IReadOnlyList<CalendarAppointment> rows, DateOnly? date, CancellationToken cancellationToken)
+    {
+        var conflicts = new List<CalendarAppointment>();
+        foreach (var group in rows.GroupBy(a => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(a.InspectionStartUtc, Zone).DateTime)))
+        {
+            if (date.HasValue && date != group.Key) continue;
+            var template = await exceptions.GetAsync(group.Key, cancellationToken);
+            var starts = template.TemplateSlots.Select(slot => slot.StartUtc).ToHashSet();
+            conflicts.AddRange(group.Where(appointment => !starts.Contains(appointment.InspectionStartUtc)));
+        }
+        return conflicts;
     }
 
     private IQueryable<CalendarAppointment> Appointments(DateTimeOffset from, DateTimeOffset? to, bool onlyActive)

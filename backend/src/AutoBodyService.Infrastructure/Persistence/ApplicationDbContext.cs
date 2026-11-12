@@ -21,6 +21,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<AppointmentStatusEvent> AppointmentStatusEvents => Set<AppointmentStatusEvent>();
     public DbSet<PaymentHandoverConfirmation> PaymentHandoverConfirmations => Set<PaymentHandoverConfirmation>();
+    public DbSet<ManualContactEvent> ManualContactEvents => Set<ManualContactEvent>();
     public DbSet<AdminAuditEvent> AdminAuditEvents => Set<AdminAuditEvent>();
     public DbSet<InspectionDateOverride> InspectionDateOverrides => Set<InspectionDateOverride>();
 
@@ -121,6 +122,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => x.InspectionStartUtc).IsUnique().HasFilter("\"Status\" <> 5");
             entity.HasIndex(x => new { x.UserId, x.InspectionStartUtc });
+            entity.HasIndex(x => new { x.Status, x.InspectionStartUtc });
+            entity.HasIndex(x => x.CreatedAtUtc);
             entity.Property<uint>("Version").IsRowVersion();
             entity.HasMany(x => x.StatusEvents).WithOne().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
             entity.Navigation(x => x.StatusEvents).UsePropertyAccessMode(PropertyAccessMode.Field);
@@ -165,6 +168,15 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => x.HandedOverAtUtc);
         });
+        builder.Entity<ManualContactEvent>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ActorId).IsRequired();
+            entity.HasOne<Appointment>().WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.AppointmentId, x.Reason, x.RecordedAtUtc });
+            entity.ToTable(t => t.HasCheckConstraint("CK_ManualContactEvent_Reason", "\"Reason\" BETWEEN 0 AND 3"));
+        });
         builder.Entity<Notification>(entity =>
         {
             entity.HasKey(x => x.Id);
@@ -193,6 +205,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(x => x.ActorId).IsRequired();
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.AppointmentId, x.ChangedAtUtc });
+            entity.HasIndex(x => new { x.ToStatus, x.ChangedAtUtc });
             entity.HasIndex(x => x.AppointmentId).IsUnique().HasFilter("\"FromStatus\" IS NULL");
             entity.ToTable(table => table.HasCheckConstraint("CK_AppointmentStatusEvent_Status", "(\"FromStatus\" BETWEEN 0 AND 5 OR \"FromStatus\" IS NULL) AND \"ToStatus\" BETWEEN 0 AND 5 AND (\"FromStatus\" IS NOT NULL OR \"ToStatus\" = 0)"));
         });

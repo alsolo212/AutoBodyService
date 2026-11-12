@@ -52,7 +52,16 @@ public sealed class AppointmentQueries(ApplicationDbContext db) : IAppointmentQu
                              orderby e.ChangedAtUtc, e.Id
                              select new AdminStatusHistory(e.FromStatus, e.ToStatus, e.ChangedAtUtc, actor.Name, e.Reason))
             .ToListAsync(cancellationToken);
+        var payment = await (from p in db.PaymentHandoverConfirmations.AsNoTracking()
+                             join actor in db.Users.AsNoTracking() on p.ActorId equals actor.Id
+                             where p.AppointmentId == id
+                             select new AdminPaymentConfirmation(actor.Name, p.PaidAtUtc, p.HandedOverAtUtc)).SingleOrDefaultAsync(cancellationToken);
+        var contacts = await (from e in db.ManualContactEvents.AsNoTracking()
+                              join actor in db.Users.AsNoTracking() on e.ActorId equals actor.Id
+                              where e.AppointmentId == id
+                              orderby e.RecordedAtUtc descending, e.Id
+                              select new AdminManualContact(e.Reason, actor.Name, e.RecordedAtUtc)).ToListAsync(cancellationToken);
         return new AdminAppointmentDetails(row.Id, row.Vin, row.Make, row.Model, row.ProblemDescription, row.InspectionStartUtc,
-            row.Status, row.CustomerName, row.CustomerPhone, history, row.Plan, null, row.Version);
+            row.Status, row.CustomerName, row.CustomerPhone, history, row.Plan, null, row.Version, payment, contacts, null);
     }
 }

@@ -173,6 +173,7 @@ public sealed class AdminAuditAndRepairPlanPostgresTests(PostgresIdentityFixture
         public void RecordDateExceptionChange(string actorId, DateOnly date, InspectionException? before, InspectionException? after) => throw new InvalidOperationException("Audit unavailable");
         public void RecordAppointmentStatusChange(string actorId, Guid appointmentId, AppointmentStatus from, AppointmentStatus to) => throw new InvalidOperationException("Audit unavailable");
         public void RecordRepairPlanChange(string actorId, Guid appointmentId, bool priceChanged, bool datesChanged) => throw new InvalidOperationException("Audit unavailable");
+        public void RecordManualContact(string actorId, Guid appointmentId, ManualContactReason reason) => throw new InvalidOperationException("Audit unavailable");
     }
 
     private sealed class WeeklyScheduleComparer : IEqualityComparer<WeeklySchedule>

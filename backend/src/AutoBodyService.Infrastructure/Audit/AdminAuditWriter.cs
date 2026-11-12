@@ -29,6 +29,13 @@ public sealed class AdminAuditWriter(ApplicationDbContext db, TimeProvider clock
         Add(actorId, "RepairPlanChanged", "Appointment", appointmentId.ToString("D"), new { priceChanged, datesChanged });
     }
 
+    public void RecordManualContact(string actorId, Guid appointmentId, ManualContactReason reason)
+    {
+        ArgumentOutOfRangeException.ThrowIfEqual(appointmentId, Guid.Empty);
+        if (!Enum.IsDefined(reason)) throw new ArgumentOutOfRangeException(nameof(reason));
+        Add(actorId, "ManualContactRecorded", "Appointment", appointmentId.ToString("D"), new { reason = reason.ToString() });
+    }
+
     // Reasons are free text and may contain private data; never copy them into audit details.
     private static object? SafeException(InspectionException? value) => value is null ? null : new
     {
