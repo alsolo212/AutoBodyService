@@ -71,7 +71,8 @@ test('common dashboard reflects real orders and manual contacts for Admin and Su
     const beforePlaceholder = dashboardRequests;
     await page.locator('.quick-links').getByRole('link', { name: new RegExp(label) }).click();
     await expect(page).toHaveURL(new RegExp(`/admin/${path}$`));
-    await expect(page.getByText('Розділ у підготовці')).toBeVisible();
+    if (path === 'employees') await expect(page.getByRole('heading', { name: 'Список працівників' })).toBeVisible();
+    else await expect(page.getByText('Розділ у підготовці')).toBeVisible();
     await expect(page.getByText('Перейти до вмісту')).toHaveAttribute('href', `/admin/${path}#workspace-main`);
     expect(dashboardRequests).toBe(beforePlaceholder);
   }

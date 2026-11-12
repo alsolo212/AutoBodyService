@@ -5,10 +5,11 @@ import { ApiStatus } from '../../core/api-status/api-status';
 import { AuthService } from '../../core/auth';
 import { finalize } from 'rxjs';
 import { Dashboard } from '../../features/admin/dashboard/dashboard';
+import { Employees } from '../../features/admin/employees/employees';
 
 @Component({
   selector: 'app-workspace-shell',
-  imports: [RouterLink, UiState, ApiStatus, Dashboard],
+  imports: [RouterLink, UiState, ApiStatus, Dashboard, Employees],
   template: `
     <a class="skip-link" [attr.href]="isAdmin ? '/' + routePath + '#workspace-main' : '/account/appointments#workspace-main'">Перейти до вмісту</a>
     <div class="workspace">
@@ -40,6 +41,8 @@ import { Dashboard } from '../../features/admin/dashboard/dashboard';
             <div class="breadcrumbs"><a routerLink="/">Головна</a><span>/</span><span>{{ isAdmin ? 'Панель керування' : 'Особистий кабінет' }}</span></div>
             @if (isAdmin && !section) {
               <app-admin-dashboard />
+            } @else if (isAdmin && section === 'Працівники') {
+              <app-employees />
             } @else {
               <div class="workspace-heading"><div><p class="eyebrow"><span class="eyebrow__line"></span> {{ isAdmin ? 'ПАНЕЛЬ КЕРУВАННЯ' : 'ОСОБИСТИЙ КАБІНЕТ' }}</p><h1>{{ isAdmin ? section : 'Мої записи' }}</h1><p>{{ isAdmin ? 'Цей розділ з’явиться на одному з наступних етапів.' : 'Тут ви зможете переглядати свої записи та перебіг ремонту.' }}</p></div><span class="status-pill">У ПІДГОТОВЦІ</span></div>
               <section class="workspace-panel" aria-labelledby="workspace-panel-title"><div class="panel-heading"><div><p class="panel-eyebrow">AUTO / BODY</p><h2 id="workspace-panel-title">{{ isAdmin ? section : 'Записи на огляд' }}</h2></div></div>

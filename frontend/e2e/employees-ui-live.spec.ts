@@ -1,0 +1,60 @@
+import { expect, test } from '@playwright/test';
+
+test('employees page manages a worker through the real API and survives reopening', async ({ page, browser }) => {
+  test.skip(process.env['E2E_LIVE_API'] !== '1', 'Requires an isolated API and PostgreSQL.');
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto('/login');
+  await page.getByLabel('Номер телефону').fill(process.env['E2E_ADMIN_PHONE']!);
+  await page.getByLabel('Пароль', { exact: true }).fill(process.env['E2E_ADMIN_PASSWORD']!);
+  await page.getByRole('button', { name: 'Увійти' }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+  await page.getByRole('link', { name: /Працівники/ }).first().click();
+  await expect(page).toHaveURL(/\/admin\/employees$/);
+  await expect(page.getByText('Працівників ще не додано.')).toBeVisible();
+  await page.getByLabel('Ім’я працівника').fill('Тестовий працівник');
+  await page.getByLabel('Спеціалізація').fill('Рихтування');
+  const create = page.waitForResponse(r => r.url().endsWith('/api/admin/employees') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Додати працівника' }).focus(); await page.keyboard.press('Enter');
+  expect((await create).status()).toBe(201);
+  const card = page.locator('.employee-card').filter({ hasText: 'Тестовий працівник' });
+  await expect(card).toContainText('Активний');
+  await expect(card).toContainText('Дані про призначення ще недоступні.');
+  await card.getByRole('button', { name: /Редагувати/ }).click();
+  await expect(page.getByLabel('Ім’я працівника')).toBeFocused();
+  await page.getByLabel('Спеціалізація').fill('Фарбування');
+  const edit = page.waitForResponse(r => r.url().includes('/api/admin/employees/') && r.request().method() === 'PATCH');
+  await page.getByRole('button', { name: 'Зберегти зміни' }).click(); expect((await edit).status()).toBe(200);
+  await expect(card).toContainText('Фарбування');
+  await card.getByRole('button', { name: /Деактивувати/ }).focus(); await page.keyboard.press('Enter');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Скасувати' }).click();
+  await expect(card).toContainText('Активний');
+  await card.getByRole('button', { name: /Деактивувати/ }).click();
+  const deactivate = page.waitForResponse(r => r.url().includes('/api/admin/employees/') && r.request().method() === 'PATCH');
+  await dialog.getByRole('button', { name: 'Деактивувати' }).focus(); await page.keyboard.press('Enter');
+  expect((await deactivate).status()).toBe(200);
+  await expect(card).toContainText('Неактивний');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('link', { name: /Розподіл робіт/ }).last().click();
+  await expect(page).toHaveURL(/\/admin\/assignments$/);
+  await page.goto('/admin/employees');
+  const restored = page.locator('.employee-card').filter({ hasText: 'Тестовий працівник' });
+  await expect(restored).toContainText('Фарбування');
+  await expect(restored).toContainText('Неактивний');
+  await expect(restored).toContainText('Дані про призначення ще недоступні.');
+  await page.reload(); await expect(restored).toContainText('Неактивний');
+
+  const userContext = await browser.newContext({ ignoreHTTPSErrors: true });
+  try {
+    const user = await userContext.newPage(); await user.goto('/register');
+    await user.getByLabel('Ім’я').fill('Тестовий користувач');
+    await user.getByLabel('Номер телефону').fill('0000000097');
+    await user.getByLabel('Пароль', { exact: true }).fill('Example-password-123!');
+    await user.getByLabel('Повторіть пароль').fill('Example-password-123!');
+    await user.getByRole('button', { name: 'Зареєструватися' }).click();
+    await expect(user).toHaveURL(/\/account\/appointments$/);
+    expect(await user.evaluate(async () => (await fetch('/api/admin/employees')).status)).toBe(403);
+    await user.goto('/admin/employees'); await expect(user).toHaveURL(/\/account\/appointments$/);
+  } finally { await userContext.close(); }
+});

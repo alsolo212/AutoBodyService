@@ -1,0 +1,37 @@
+<div class="workspace-heading">
+  <div><p class="eyebrow"><span class="eyebrow__line"></span> ПАНЕЛЬ КЕРУВАННЯ</p><h1>Працівники</h1><p>Керуйте даними та доступністю працівників сервісу.</p></div>
+  <a class="button button--secondary" routerLink="/admin/assignments">Розподіл робіт →</a>
+</div>
+@if (actionError()) { <div class="auth-alert" role="alert">{{ actionError() }} <button type="button" class="text-button" [disabled]="saving()" (click)="load()">Оновити список</button></div> }
+@if (notice()) { <p class="profile-success" role="status">{{ notice() }}</p> }
+<section class="workspace-panel" aria-labelledby="employee-form-heading">
+  <div class="panel-heading"><div><p class="panel-eyebrow">ДОВІДНИК</p><h2 id="employee-form-heading">{{ editing() ? 'Редагувати працівника' : 'Додати працівника' }}</h2></div></div>
+  <form class="employee-form" [formGroup]="form" (ngSubmit)="save()" novalidate>
+    <div class="field"><label class="field__label" for="employee-name">Ім’я працівника</label><input #nameInput id="employee-name" class="field__input" formControlName="fullName" [readOnly]="saving()" maxlength="200" autocomplete="off" [attr.aria-invalid]="form.controls.fullName.touched && form.controls.fullName.invalid" [attr.aria-describedby]="form.controls.fullName.touched && form.controls.fullName.invalid ? 'employee-name-error' : null" />
+      @if (form.controls.fullName.touched && form.controls.fullName.invalid) { <p class="field__error" id="employee-name-error">Вкажіть ім’я до 200 символів без керівних символів.</p> }</div>
+    <div class="field"><label class="field__label" for="employee-specialization">Спеціалізація</label><input id="employee-specialization" class="field__input" formControlName="specialization" [readOnly]="saving()" maxlength="200" [attr.aria-invalid]="form.controls.specialization.touched && form.controls.specialization.invalid" [attr.aria-describedby]="form.controls.specialization.touched && form.controls.specialization.invalid ? 'employee-specialization-error' : null" />
+      @if (form.controls.specialization.touched && form.controls.specialization.invalid) { <p class="field__error" id="employee-specialization-error">Вкажіть спеціалізацію до 200 символів без керівних символів.</p> }</div>
+    <div class="form-actions"><button class="button button--primary" type="submit" [disabled]="saving() || loading() || !!loadError()">{{ saving() ? 'Зберігаємо…' : editing() ? 'Зберегти зміни' : 'Додати працівника' }}</button>
+      @if (editing()) { <button class="button button--secondary" type="button" [disabled]="saving()" (click)="cancelEdit()">Скасувати редагування</button> }</div>
+  </form>
+</section>
+<section class="workspace-panel" aria-labelledby="employee-list-heading" [attr.aria-busy]="loading()">
+  <div class="panel-heading"><div><p class="panel-eyebrow">КОМАНДА</p><h2 id="employee-list-heading">Список працівників</h2></div></div>
+  @if (loading()) { <p role="status">Завантажуємо працівників…</p> }
+  @else if (loadError()) { <div class="auth-alert" role="alert">{{ loadError() }} <button type="button" class="text-button" (click)="load()">Спробувати ще раз</button></div> }
+  @else if (!employees().length) { <p class="empty">Працівників ще не додано.</p> }
+  @else {
+    <ul class="employee-list">
+      @for (employee of employees(); track employee.id) {
+        <li class="employee-card">
+          <div class="employee-info"><h3>{{ employee.fullName }}</h3><p>{{ employee.specialization }}</p><span class="employee-status" [class.employee-status--inactive]="!employee.isActive">{{ employee.isActive ? 'Активний' : 'Неактивний' }}</span></div>
+          <div class="assignments"><strong>Поточні призначення</strong><p>Дані про призначення ще недоступні.</p></div>
+          <div class="employee-actions"><button class="button button--secondary" type="button" [disabled]="saving()" [attr.aria-label]="'Редагувати: ' + employee.fullName" (click)="edit(employee)">Редагувати</button>
+            @if (employee.isActive) { <button class="button button--secondary" type="button" [disabled]="saving()" [attr.aria-label]="'Деактивувати: ' + employee.fullName" (click)="confirmDeactivation(employee)">Деактивувати</button> }
+            @else { <button class="button button--secondary" type="button" [disabled]="saving()" [attr.aria-label]="'Активувати: ' + employee.fullName" (click)="setActive(employee, true)">Активувати</button> }</div>
+        </li>
+      }
+    </ul>
+  }
+</section>
+<app-confirm-dialog dialogId="deactivate-employee" title="Деактивувати працівника?" [description]="'Працівник ' + (deactivating()?.fullName ?? '') + ' залишиться в історії та не буде доступний для нових призначень.'" confirmLabel="Деактивувати" (confirmed)="deactivate()" />
