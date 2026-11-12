@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using AutoBodyService.Domain.Appointments;
@@ -222,6 +223,104 @@ public sealed class AdminOverviewPostgresTests(PostgresIdentityFixture fixture) 
             Assert.Single(await db.AdminAuditEvents.Where(e => e.ObjectId == id.ToString() && e.Action == "ManualContactRecorded").ToListAsync());
         }
         finally { await db.Database.ExecuteSqlRawAsync("DROP TRIGGER reject_manual_contact_audit_test ON \"AdminAuditEvents\"; DROP FUNCTION reject_manual_contact_audit_test();"); }
+    }
+
+    [PostgresFact]
+    public async Task TerminalOrdersRejectContactWithoutChangingHistoryAndStayVisibleInCalendar()
+    {
+        var owner = await User("User", "Owner"); var admin = await User("Admin", "Operator");
+        var firstSlot = Now.AddDays(300).AddSeconds(37);
+        var completed = await Add(owner.Id, AppointmentStatus.Completed, firstSlot, Now.AddDays(-1), admin.Id);
+        var cancelled = await Add(owner.Id, AppointmentStatus.Cancelled, firstSlot.AddSeconds(1), Now.AddDays(-1), admin.Id);
+        using var actor = await Login(admin.Phone);
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        foreach (var id in new[] { completed, cancelled })
+            db.ManualContactEvents.Add(new ManualContactEvent(id, ManualContactReason.Agreement, admin.Id, Now.AddHours(-1)));
+        await db.SaveChangesAsync(); db.ChangeTracker.Clear();
+        var before = new Dictionary<Guid, JsonElement>();
+        foreach (var id in new[] { completed, cancelled }) before[id] = await Read(await actor.GetAsync($"/api/appointments/{id}"));
+        var conflictRows = await scope.ServiceProvider.GetRequiredService<IInspectionCalendarService>().GetCurrentConflictsAsync(default);
+        Assert.Contains(conflictRows, item => item.Id == completed);
+        var dashboard = await Read(await actor.GetAsync("/api/admin/dashboard"));
+        Assert.DoesNotContain(dashboard.GetProperty("contactTasks").EnumerateArray(), task => task.GetProperty("appointmentId").GetGuid() == completed || task.GetProperty("appointmentId").GetGuid() == cancelled);
+        var date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(firstSlot, TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv")).DateTime);
+        var day = await Read(await actor.GetAsync($"/api/admin/inspection-calendar?date={date:yyyy-MM-dd}"));
+        Assert.Contains(day.EnumerateArray(), item => item.GetProperty("id").GetGuid() == completed);
+        Assert.Contains(day.EnumerateArray(), item => item.GetProperty("id").GetGuid() == cancelled);
+        foreach (var id in new[] { completed, cancelled })
+        {
+            using var response = await actor.PostAsJsonAsync($"/api/admin/appointments/{id}/manual-contact", new { reason = "ScheduleConflictOrReschedule" });
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            Assert.Equal(409, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("status").GetInt32());
+            var after = await Read(await actor.GetAsync($"/api/appointments/{id}"));
+            Assert.Equal(before[id].GetProperty("status").GetString(), after.GetProperty("status").GetString());
+            Assert.Equal(before[id].GetProperty("version").GetUInt32(), after.GetProperty("version").GetUInt32());
+            Assert.Equal(before[id].GetProperty("history").GetArrayLength(), after.GetProperty("history").GetArrayLength());
+            var contact = Assert.Single(after.GetProperty("manualContacts").EnumerateArray());
+            Assert.Equal("Agreement", contact.GetProperty("reason").GetString());
+            Assert.Equal("Operator", contact.GetProperty("actorName").GetString());
+            Assert.Single(await db.ManualContactEvents.AsNoTracking().Where(e => e.AppointmentId == id).ToListAsync());
+            Assert.Empty(await db.AdminAuditEvents.AsNoTracking().Where(e => e.ObjectId == id.ToString() && e.Action == "ManualContactRecorded").ToListAsync());
+        }
+    }
+
+    [PostgresFact]
+    public async Task ContactAndTerminalCommandsSerializeInBothOrders()
+    {
+        var owner = await User("User", "Owner"); var admin = await User("Admin", "Operator");
+        using var actor = await Login(admin.Phone); using var other = await Login(admin.Phone);
+        var cases = new[] { (AppointmentStatus.AwaitingPayment, "Completed"), (AppointmentStatus.Scheduled, "Cancelled") };
+        var index = 0;
+        foreach (var (initial, terminal) in cases)
+        foreach (var contactFirst in new[] { false, true })
+        {
+            var id = await Add(owner.Id, initial, Now.AddDays(320 + index++).AddSeconds(37), Now.AddDays(-1), admin.Id);
+            var version = (await Read(await actor.GetAsync($"/api/appointments/{id}"))).GetProperty("version").GetUInt32();
+            await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            await using var gate = await db.Database.BeginTransactionAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Appointments\" WHERE \"Id\" = {id} FOR UPDATE");
+            Task<HttpResponseMessage> Contact() => other.PostAsJsonAsync($"/api/admin/appointments/{id}/manual-contact", new { reason = "Agreement" });
+            Task<HttpResponseMessage> Finish() => terminal == "Completed"
+                ? actor.PostAsJsonAsync($"/api/admin/appointments/{id}/transition", new { version, target = terminal, paymentReceived = true, vehicleHandedOver = true })
+                : actor.PostAsJsonAsync($"/api/admin/appointments/{id}/cancel", new { version, confirmed = true, reason = "test" });
+            var first = contactFirst ? Contact() : Finish();
+            await WaitForAppointmentLockWaiters(db, first, 1);
+            var second = contactFirst ? Finish() : Contact();
+            await WaitForAppointmentLockWaiters(db, second, 2);
+            await gate.CommitAsync();
+            using var firstResult = await first; using var secondResult = await second;
+            Assert.Equal(HttpStatusCode.NoContent, firstResult.StatusCode);
+            Assert.Equal(contactFirst ? HttpStatusCode.NoContent : HttpStatusCode.Conflict, secondResult.StatusCode);
+            db.ChangeTracker.Clear();
+            var terminalStatus = Enum.Parse<AppointmentStatus>(terminal);
+            Assert.Equal(terminalStatus, (await db.Appointments.AsNoTracking().SingleAsync(a => a.Id == id)).Status);
+            Assert.Equal(contactFirst ? 1 : 0, await db.ManualContactEvents.CountAsync(e => e.AppointmentId == id));
+            Assert.Equal(contactFirst ? 1 : 0, await db.AdminAuditEvents.CountAsync(e => e.ObjectId == id.ToString() && e.Action == "ManualContactRecorded"));
+            Assert.Single(await db.AppointmentStatusEvents.Where(e => e.AppointmentId == id && e.ToStatus == terminalStatus).ToListAsync());
+        }
+    }
+
+    private static async Task WaitForAppointmentLockWaiters(ApplicationDbContext db, Task request, int expected)
+    {
+        var watch = Stopwatch.StartNew();
+        while (watch.Elapsed < TimeSpan.FromSeconds(10))
+        {
+            Assert.False(request.IsCompleted, "The request completed before the appointment lock was released.");
+            // PostgreSQL caches statistics within a transaction; refresh while the gate lock is held.
+            await db.Database.ExecuteSqlRawAsync("SELECT pg_stat_clear_snapshot()");
+            var waiting = await db.Database.SqlQueryRaw<int>("""
+                SELECT count(*)::int AS "Value" FROM pg_stat_activity
+                WHERE datname = current_database() AND wait_event_type = 'Lock'
+                  AND query ILIKE '%FROM "Appointments"%FOR UPDATE%'
+                """).SingleAsync();
+            if (waiting >= expected) return;
+            await Task.Delay(25);
+        }
+        var states = await db.Database.SqlQueryRaw<string>("""
+            SELECT concat(coalesce(state, '-'), '/', coalesce(wait_event_type, '-'), '/', coalesce(wait_event, '-'), '/', left(query, 50)) AS "Value"
+            FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()
+            """).ToListAsync();
+        throw new TimeoutException($"Expected {expected} appointment lock waiters: {string.Join("; ", states)}");
     }
 
     [PostgresFact]

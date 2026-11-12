@@ -60,6 +60,18 @@ public sealed class AppointmentLifecycleDomainTests
     }
 
     [Theory]
+    [InlineData(AppointmentStatus.AwaitingInspection, true)]
+    [InlineData(AppointmentStatus.Scheduled, true)]
+    [InlineData(AppointmentStatus.InProgress, true)]
+    [InlineData(AppointmentStatus.AwaitingPayment, true)]
+    [InlineData(AppointmentStatus.Completed, false)]
+    [InlineData(AppointmentStatus.Cancelled, false)]
+    public void ManualContactIsAvailableOnlyBeforeTerminalState(AppointmentStatus status, bool expected)
+    {
+        Assert.Equal(expected, At(status).CanRecordManualContact());
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(false, true)]

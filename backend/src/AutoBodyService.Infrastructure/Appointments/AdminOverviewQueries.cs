@@ -88,7 +88,9 @@ public sealed class AdminOverviewQueries(ApplicationDbContext db, IInspectionCal
             var pending = await candidates.Where(t => t.Reason == reason).Take(20).ToListAsync(cancellationToken);
             tasks.AddRange(pending.Select(t => new AdminContactTask(t.Id, t.Customer, t.Make, t.Model, t.Reason, t.Trigger)));
         }
-        var conflicts = await calendar.GetCurrentConflictsAsync(cancellationToken);
+        // Keep historical calendar/conflict reads intact; terminal orders cannot have new contact tasks.
+        var conflicts = (await calendar.GetCurrentConflictsAsync(cancellationToken))
+            .Where(c => c.Status is not (AppointmentStatus.Completed or AppointmentStatus.Cancelled)).ToList();
         if (conflicts.Count > 0)
         {
             var ids = conflicts.Select(c => c.Id).ToArray();

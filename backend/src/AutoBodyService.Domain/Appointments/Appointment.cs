@@ -75,6 +75,8 @@ public sealed class Appointment
 
     public AppointmentStatus Status { get; private set; }
 
+    public bool CanRecordManualContact() => Status is not (AppointmentStatus.Completed or AppointmentStatus.Cancelled);
+
     public RepairPlan? RepairPlan { get; private set; }
 
     public DateTimeOffset CreatedAtUtc { get; }

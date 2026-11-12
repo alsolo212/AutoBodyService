@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { expect, test } from '@playwright/test';
+import { expect, Locator, test } from '@playwright/test';
 
 test('booking uses the real API, preserves details on conflict and confirms another slot', async ({ page }) => {
   test.skip(process.env['E2E_REAL_AUTH'] !== '1', 'Requires the isolated API and database.');
@@ -111,12 +111,20 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await page.getByRole('link', { name: 'Мої записи' }).last().click();
   await expect(page.getByRole('heading', { name: 'Клієнт Авто' })).toBeVisible();
   const menu = page.getByLabel('Дії із записом');
-  const beforeMenu = await menu.boundingBox();
-  const beforeCard = await page.locator('.card').boundingBox();
+  await expect(menu).toBeVisible();
+  await menu.scrollIntoViewIfNeeded();
+  // Viewport coordinates move when a mobile browser scrolls the opened menu into view.
+  // Document coordinates still detect a real layout shift of either element.
+  const documentBox = (locator: Locator) => locator.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return { x: rect.x + window.scrollX, y: rect.y + window.scrollY, width: rect.width, height: rect.height };
+  });
+  const beforeMenu = await documentBox(menu);
+  const beforeCard = await documentBox(page.locator('.card'));
   await menu.click();
   await expect(page.getByRole('button', { name: 'Скасувати запис' })).toBeVisible();
-  expect(await menu.boundingBox()).toEqual(beforeMenu);
-  expect(await page.locator('.card').boundingBox()).toEqual(beforeCard);
+  expect(await documentBox(menu)).toEqual(beforeMenu);
+  expect(await documentBox(page.locator('.card'))).toEqual(beforeCard);
   await menu.click();
   await expect(page.getByText('*************4352', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Завершені' }).click();

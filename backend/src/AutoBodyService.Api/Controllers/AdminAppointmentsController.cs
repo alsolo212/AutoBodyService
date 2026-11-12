@@ -40,6 +40,7 @@ public sealed class AdminAppointmentsController(IAdminAppointmentCommands comman
         {
             ManualContactResult.Recorded => NoContent(),
             ManualContactResult.NotFound => NotFound(new ProblemDetails { Status = 404, Title = "Замовлення не знайдено." }),
+            ManualContactResult.Conflict => Conflict(new ProblemDetails { Status = 409, Title = "Замовлення завершено або скасовано." }),
             _ => BadRequest(new ProblemDetails { Status = 400, Title = "Некоректний привід зв'язку." })
         };
     }

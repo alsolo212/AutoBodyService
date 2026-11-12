@@ -51,26 +51,32 @@ test('board uses real guarded transitions, server pages and confirmation forms',
   await expect(page.locator(`[data-card-id="${ids[2]}"]`)).toBeVisible();
   await page.getByLabel('Статус', { exact: true }).selectOption('Scheduled');
   await page.getByRole('button', { name: 'Застосувати' }).click();
+  await expect(page.locator('[data-status="AwaitingInspection"]')).toContainText('Статус відфільтровано.');
   await expect(page.locator(`[data-card-id="${ids[2]}"]`)).toHaveCount(0);
   await expect(page.locator(`[data-card-id="${ids[0]}"]`)).toBeVisible();
   await page.getByLabel('Статус', { exact: true }).selectOption('');
   await page.getByRole('button', { name: 'Застосувати' }).click();
+  await expect(page.locator('[data-status="AwaitingInspection"]').locator(`[data-card-id="${ids[2]}"]`)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Застосувати' })).toBeEnabled();
   await expect(page.locator(`[data-card-id="${ids[0]}"]`)).toBeVisible();
 
   let requests = 0;
   page.on('request', request => { if (request.url().endsWith('/transition')) requests++; });
   const scheduled = page.locator('[data-status="Scheduled"]');
-  const drag = async (targetStatus: string) => {
-    const source = page.locator(`[data-card-id="${ids[0]}"] .drag-handle`);
+  const drag = async (id: string, targetStatus: string) => {
+    const source = page.locator(`[data-card-id="${id}"] .drag-handle`);
     const target = page.locator(`[data-status="${targetStatus}"]`);
-    const from = (await source.boundingBox())!; const to = (await target.boundingBox())!;
+    await expect(source).toBeVisible(); await expect(target).toBeVisible();
+    const from = await source.boundingBox(); const to = await target.boundingBox();
+    expect(from).not.toBeNull(); expect(to).not.toBeNull();
+    if (!from || !to) throw new Error('The loaded card or drop target has no visible bounds.');
     await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
     await page.mouse.down();
     await page.mouse.move(from.x + from.width / 2 + 10, from.y + from.height / 2, { steps: 3 });
     await page.mouse.move(to.x + to.width / 2, to.y + Math.min(60, to.height / 2), { steps: 12 });
     await page.mouse.up();
   };
-  await drag('AwaitingInspection');
+  await drag(ids[0], 'AwaitingInspection');
   await expect(scheduled.locator(`[data-card-id="${ids[0]}"]`)).toBeVisible();
   expect(requests).toBe(0);
   const invalid = await page.evaluate(async id => {
@@ -85,7 +91,7 @@ test('board uses real guarded transitions, server pages and confirmation forms',
   await page.route(transitionUrl, async route => { await gate; await route.continue(); });
   const pending = page.waitForRequest(r => r.url().endsWith(`/${ids[0]}/transition`));
   const moved = page.waitForResponse(r => r.url().endsWith(`/${ids[0]}/transition`));
-  await drag('InProgress');
+  await drag(ids[0], 'InProgress');
   await pending;
   await expect(scheduled.locator(`[data-card-id="${ids[0]}"]`)).toBeVisible();
   await expect(page.locator('[data-status="InProgress"]').locator(`[data-card-id="${ids[0]}"]`)).toHaveCount(0);
@@ -104,10 +110,11 @@ test('board uses real guarded transitions, server pages and confirmation forms',
     }, ids[1]);
     expect(changed).toBe(204);
     const conflict = page.waitForResponse(r => r.url().endsWith(`/${ids[1]}/transition`));
-    await scheduled.locator(`[data-card-id="${ids[1]}"]`).getByRole('button', { name: 'Перевести: У роботі' }).click();
+    await drag(ids[1], 'InProgress');
     expect((await conflict).status()).toBe(409);
     await expect(page.getByRole('alert').filter({ hasText: 'Замовлення змінилося' })).toBeVisible();
     await expect(scheduled.locator(`[data-card-id="${ids[1]}"]`)).toContainText('1 700');
+    await expect(page.locator('[data-status="InProgress"]').locator(`[data-card-id="${ids[1]}"]`)).toHaveCount(0);
     expect((await other.evaluate(async id => (await (await fetch(`/api/appointments/${id}`)).json()).status, ids[1]))).toBe('Scheduled');
   } finally { await otherContext.close(); }
 
@@ -142,6 +149,41 @@ test('board uses real guarded transitions, server pages and confirmation forms',
   const cancel = page.waitForResponse(r => r.url().endsWith(`/${ids[2]}/cancel`));
   await page.getByRole('dialog').getByRole('button', { name: 'Підтвердити' }).click();
   expect((await cancel).status()).toBe(204);
+  const terminalCheck = await page.evaluate(async orderIds => {
+    const headers = () => ({ 'Content-Type': 'application/json', RequestVerificationToken: decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]) });
+    const schedule = await (await fetch('/api/admin/inspection-schedule')).json();
+    const intervals = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(dayOfWeek => ({ dayOfWeek, start: '14:00', end: '15:00' }));
+    const preview = await fetch('/api/admin/inspection-schedule/preview', { method: 'POST', headers: headers(), body: JSON.stringify({ version: schedule.version, intervals }) });
+    if (!preview.ok) throw new Error(`Schedule preview: ${preview.status}`);
+    const result = await preview.json();
+    const changed = await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers: headers(), body: JSON.stringify({ version: schedule.version, intervals, confirmationToken: result.confirmationToken }) });
+    if (changed.status !== 204) throw new Error(`Schedule update: ${changed.status}`);
+    const dashboard = await (await fetch('/api/admin/dashboard')).json();
+    const calendar = await (await fetch('/api/admin/inspection-calendar?date=2099-09-10')).json();
+    const outcomes = [];
+    for (const id of orderIds) {
+      const before = await (await fetch(`/api/appointments/${id}`)).json();
+      const response = await fetch(`/api/admin/appointments/${id}/manual-contact`, { method: 'POST', headers: headers(), body: JSON.stringify({ reason: 'ScheduleConflictOrReschedule' }) });
+      const after = await (await fetch(`/api/appointments/${id}`)).json();
+      outcomes.push({ status: response.status, before: before.status, after: after.status, beforeContacts: before.manualContacts.length, afterContacts: after.manualContacts.length, beforeVersion: before.version, afterVersion: after.version });
+    }
+    return { completedConflict: result.conflicts.some((item: { id: string }) => item.id === orderIds[0]),
+      tasks: dashboard.contactTasks.map((task: { appointmentId: string }) => task.appointmentId),
+      calendar: calendar.map((item: { id: string }) => item.id), outcomes };
+  }, [ids[0], ids[2]]);
+  expect(terminalCheck.completedConflict).toBe(true);
+  expect(terminalCheck.tasks).not.toContain(ids[0]); expect(terminalCheck.tasks).not.toContain(ids[2]);
+  expect(terminalCheck.calendar).toContain(ids[0]); expect(terminalCheck.calendar).toContain(ids[2]);
+  expect(terminalCheck.outcomes.map(item => item.status)).toEqual([409, 409]);
+  expect(terminalCheck.outcomes.map(item => item.before)).toEqual(['Completed', 'Cancelled']);
+  for (const item of terminalCheck.outcomes) {
+    expect(item.after).toBe(item.before); expect(item.afterContacts).toBe(item.beforeContacts); expect(item.afterVersion).toBe(item.beforeVersion);
+  }
+  await page.goto('/admin');
+  await expect(page.getByRole('heading', { name: 'Ручний зв’язок' })).toBeVisible();
+  await expect(page.locator('.contact-entry').filter({ hasText: 'Board0' })).toHaveCount(0);
+  await expect(page.locator('.contact-entry').filter({ hasText: 'Board2' })).toHaveCount(0);
+  await expect(page.locator('.contact-entry').filter({ hasText: 'Board3' }).first()).toBeVisible();
   await page.setViewportSize({ width: 320, height: 800 });
   await page.goto('/admin/appointments');
   await expect(page.getByRole('heading', { name: 'Замовлення', exact: true })).toBeVisible();

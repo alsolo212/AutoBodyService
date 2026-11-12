@@ -44,9 +44,16 @@ export class Dashboard {
     this.saving.set(true); this.notice.set(''); this.contactError.set('');
     this.api.contact(task.appointmentId, task.reason).pipe(finalize(() => this.saving.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => { this.notice.set('Ручний контакт відмічено.'); this.reload(); },
-      error: (error: unknown) => this.contactError.set(error instanceof HttpErrorResponse && error.status === 401 ? 'Сесію завершено. Увійдіть знову.' :
-        error instanceof HttpErrorResponse && error.status === 403 ? 'Доступ до дії заборонено.' :
-        error instanceof HttpErrorResponse && error.status === 404 ? 'Замовлення не знайдено. Оновіть огляд.' : 'Не вдалося зберегти відмітку. Спробуйте ще раз.'),
+      error: (error: unknown) => {
+        if (error instanceof HttpErrorResponse && error.status === 409) {
+          this.contactError.set('Замовлення змінилося. Перевірте актуальний стан перед наступною дією.');
+          this.reload();
+          return;
+        }
+        this.contactError.set(error instanceof HttpErrorResponse && error.status === 401 ? 'Сесію завершено. Увійдіть знову.' :
+          error instanceof HttpErrorResponse && error.status === 403 ? 'Доступ до дії заборонено.' :
+          error instanceof HttpErrorResponse && error.status === 404 ? 'Замовлення не знайдено. Оновіть огляд.' : 'Не вдалося зберегти відмітку. Спробуйте ще раз.');
+      },
     });
   }
 }

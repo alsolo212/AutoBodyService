@@ -68,6 +68,14 @@ describe('administrative appointment details', () => {
     expect(fixture.nativeElement.querySelector('form')).toBeNull();
   });
 
+  it.each(['Completed', 'Cancelled'] as const)('keeps contact history read-only for %s', status => {
+    const fixture = create({ ...base, status, manualContacts: [{ reason: 'Agreement', actorName: 'Оператор', recordedAtUtc: '2026-01-01T10:00:00Z' }] });
+    expect(fixture.nativeElement.textContent).toContain('Оператор');
+    expect(fixture.nativeElement.querySelector('#contact-reason')).toBeNull();
+    fixture.componentInstance.markContact();
+    http.expectNone('/api/auth/antiforgery');
+  });
+
   it('validates Kyiv times and inspection before saving a plan with the version', () => {
     const fixture = create(); const component = fixture.componentInstance; component.editPlan(); fixture.detectChanges();
     component.planForm.setValue({ price: 0, start: '2026-03-29T03:30', startOffset: '+02:00', finish: '2026-03-29T05:00', finishOffset: '+03:00', inspectionPerformed: true });

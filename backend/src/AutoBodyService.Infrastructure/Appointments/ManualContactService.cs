@@ -12,7 +12,11 @@ public sealed class ManualContactService(ApplicationDbContext db, IAdminAuditWri
     {
         if (appointmentId == Guid.Empty || !Enum.IsDefined(reason) || string.IsNullOrWhiteSpace(actorId)) return ManualContactResult.Invalid;
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        if (!await db.Appointments.AnyAsync(a => a.Id == appointmentId, cancellationToken)) return ManualContactResult.NotFound;
+        // Use the same row lock as status transitions and customer cancellation.
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Appointments\" WHERE \"Id\" = {appointmentId} FOR UPDATE", cancellationToken);
+        var appointment = await db.Appointments.AsNoTracking().SingleOrDefaultAsync(a => a.Id == appointmentId, cancellationToken);
+        if (appointment is null) return ManualContactResult.NotFound;
+        if (!appointment.CanRecordManualContact()) return ManualContactResult.Conflict;
         db.ManualContactEvents.Add(new ManualContactEvent(appointmentId, reason, actorId, clock.GetUtcNow()));
         audit.RecordManualContact(actorId, appointmentId, reason);
         await db.SaveChangesAsync(cancellationToken);

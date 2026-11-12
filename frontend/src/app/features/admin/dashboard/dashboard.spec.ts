@@ -56,4 +56,16 @@ describe('Dashboard', () => {
     expect(component.error()).toContain('Не вдалося завантажити');
     component.reload(); http.expectOne('/api/admin/dashboard').flush(dashboard); expect(component.error()).toBe('');
   });
+  it('reloads tasks after a terminal-state conflict without reporting or retrying contact', () => {
+    const fixture = create(); const component = fixture.componentInstance;
+    component.markContact(task); http.expectOne('/api/auth/antiforgery').flush(null);
+    http.expectOne('/api/admin/appointments/one/manual-contact').flush(null, { status: 409, statusText: 'Conflict' });
+    expect(component.contactError()).toContain('Замовлення змінилося');
+    expect(component.notice()).toBe('');
+    expect(component.loading()).toBe(true);
+    http.expectOne('/api/admin/dashboard').flush({ ...dashboard, contactTasks: [] }); fixture.detectChanges();
+    expect(component.data()?.contactTasks).toEqual([]);
+    expect(fixture.nativeElement.querySelector('.contact-entry')).toBeNull();
+    http.expectNone('/api/admin/appointments/one/manual-contact');
+  });
 });

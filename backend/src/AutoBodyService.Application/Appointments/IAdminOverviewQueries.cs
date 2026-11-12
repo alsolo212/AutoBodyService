@@ -19,7 +19,7 @@ public interface IAdminOverviewQueries
     Task<AdminAppointmentPage> GetAppointmentsAsync(AdminAppointmentFilter filter, CancellationToken cancellationToken);
     Task<AdminDashboard> GetDashboardAsync(CancellationToken cancellationToken);
 }
-public enum ManualContactResult { Recorded, NotFound, Invalid }
+public enum ManualContactResult { Recorded, NotFound, Invalid, Conflict }
 public interface IManualContactService
 {
     Task<ManualContactResult> RecordAsync(Guid appointmentId, ManualContactReason reason, string actorId, CancellationToken cancellationToken);
