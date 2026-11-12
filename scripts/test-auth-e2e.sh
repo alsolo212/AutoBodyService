@@ -60,7 +60,16 @@ unset ConnectionStrings__AutoBodyService Kestrel__Certificates__Default__Path Ke
 export PROFILE_VERIFY_CONTAINER="$container"
 export E2E_REAL_AUTH=1 E2E_LIVE_AUTH=1 E2E_LIVE_PROFILE=1 E2E_LIVE_API=1
 
-for spec in frontend/e2e/*.spec.ts; do
+specs=(frontend/e2e/*.spec.ts)
+if [[ -n "${E2E_SPEC:-}" ]]; then
+  if [[ ! "$E2E_SPEC" =~ ^frontend/e2e/[a-zA-Z0-9._-]+\.spec\.ts$ ]] || [[ ! -f "$E2E_SPEC" ]]; then
+    echo 'E2E_SPEC must name an existing spec under frontend/e2e.' >&2
+    exit 1
+  fi
+  specs=("$E2E_SPEC")
+fi
+
+for spec in "${specs[@]}"; do
   : >"$test_dir/api.log"
   (cd backend/src/AutoBodyService.Api && \
     ConnectionStrings__AutoBodyService="$api_connection" \
