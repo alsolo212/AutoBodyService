@@ -80,6 +80,35 @@ test('board copies an order to two workers, releases one and preserves customer 
     const released = page.waitForResponse(r => r.url().includes('/release') && r.request().method() === 'PATCH');
     await workerOne.getByRole('button', { name: /Зняти призначення/ }).click(); expect((await released).status()).toBe(204);
     await expect(workerOne.locator('.assigned-card')).toHaveCount(0); await expect(workerTwo.locator('.assigned-card')).toHaveCount(1); await expect(order).toBeVisible();
+    // A separate API action assigns the same worker while the board remains stale.
+    const concurrent = await page.evaluate(async ({ appointmentId, employeeId }) => {
+      await fetch('/api/auth/antiforgery');
+      const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
+      const response = await fetch('/api/admin/assignments', { method: 'POST', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token }, body: JSON.stringify({ appointmentId, employeeId }) });
+      return response.status;
+    }, { appointmentId: orders[0], employeeId: setup.employees[0].id });
+    expect(concurrent).toBe(201);
+    await expect(workerOne.locator('.assigned-card')).toHaveCount(0);
+    await workerOne.locator('select').selectOption(orders[0]);
+    const conflict = page.waitForResponse(r => r.url().endsWith('/api/admin/assignments') && r.request().method() === 'POST');
+    await workerOne.getByRole('button', { name: /Призначити/ }).click();
+    expect((await conflict).status()).toBe(409);
+    await expect(page.getByRole('alert').filter({ hasText: 'Дані змінилися' })).toBeVisible();
+    await expect(workerOne.locator('.assigned-card')).toHaveCount(1);
+    await expect(workerTwo.locator('.assigned-card')).toHaveCount(1);
+    await expect(order).toBeVisible();
+    await page.goto('/admin/employees');
+    const employeeOne = page.locator('.employee-card').filter({ hasText: 'Майстер А' });
+    const employeeTwo = page.locator('.employee-card').filter({ hasText: 'Майстер Б' });
+    await expect(employeeOne.getByRole('link', { name: new RegExp(orders[0]) })).toBeVisible();
+    await expect(employeeTwo.getByRole('link', { name: new RegExp(orders[0]) })).toBeVisible();
+    await page.goto('/admin/assignments');
+    const secondRelease = page.waitForResponse(r => r.url().includes('/release') && r.request().method() === 'PATCH');
+    await workerOne.getByRole('button', { name: /Зняти призначення/ }).click();
+    expect((await secondRelease).status()).toBe(204);
+    await expect(workerOne.locator('.assigned-card')).toHaveCount(0);
+    await expect(workerTwo.locator('.assigned-card')).toHaveCount(1);
+    await expect(order).toBeVisible();
     await page.evaluate(async employee => {
       await fetch('/api/auth/antiforgery'); const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
       const response = await fetch(`/api/admin/employees/${employee.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token }, body: JSON.stringify({ version: employee.version, fullName: 'Змінене ім’я', specialization: 'Інша спеціалізація', isActive: false }) });
@@ -92,7 +121,10 @@ test('board copies an order to two workers, releases one and preserves customer 
     await expect(history).toContainText('Завершено'); await expect(history).toContainText('Призначив(ла): E2E test');
     await expect(history).toContainText('Завершив(ла): E2E test');
     await page.goto('/admin/assignments'); await expect(page.locator(`[data-employee-id="${setup.employees[0].id}"]`)).toHaveCount(0);
-    await page.setViewportSize({ width: 320, height: 800 }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.setViewportSize({ width: 320, height: 800 });
+    await expect(workerTwo.getByRole('button', { name: /Зняти призначення/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Усі замовлення в роботі' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await customer.goto(`/account/appointments/${orders[0]}`);
     const participants = customer.locator('section').filter({ has: customer.getByRole('heading', { name: 'Працівники' }) });
     await expect(participants).toContainText('Майстер А'); await expect(participants).toContainText('Маляр'); await expect(participants).toContainText('Майстер Б');
@@ -104,6 +136,28 @@ test('board copies an order to two workers, releases one and preserves customer 
     expect(security.foreign).toBe(404); expect(security.assignments).toBe(403);
     expect(security.participants).toHaveLength(2);
     for (const participant of security.participants) expect(Object.keys(participant).sort()).toEqual(['name', 'specialization']);
+    const finish = await page.evaluate(async id => {
+      await fetch('/api/auth/antiforgery');
+      const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
+      const headers = { 'Content-Type': 'application/json', RequestVerificationToken: token };
+      const results = [];
+      for (const target of ['AwaitingPayment', 'Completed']) {
+        const details = await (await fetch(`/api/appointments/${id}`)).json();
+        const response = await fetch(`/api/admin/appointments/${id}/transition`, { method: 'POST', headers, body: JSON.stringify({ version: details.version, target, paymentReceived: true, vehicleHandedOver: true }) });
+        results.push(response.status);
+      }
+      return results;
+    }, orders[0]);
+    expect(finish).toEqual([204, 204]);
+    await customer.reload();
+    await expect(customer.locator('.status')).toContainText('Завершено');
+    await expect(participants).toContainText('Майстер А'); await expect(participants).toContainText('Маляр');
+    await expect(participants).toContainText('Майстер Б'); await expect(participants.locator('time')).toHaveCount(0);
+    await page.goto(`/admin/appointments/${orders[0]}`);
+    const completedHistory = page.locator('section[aria-labelledby="assignments-heading"]');
+    await expect(completedHistory).toContainText('Майстер А'); await expect(completedHistory).toContainText('Майстер Б');
+    await expect(completedHistory).not.toContainText('Активне');
+    await expect(completedHistory).toContainText('Завершив(ла): E2E test');
     await customer.goto('/admin/assignments'); await expect(customer).toHaveURL(/\/account\/appointments$/);
   } finally { await customerContext.close(); }
 });

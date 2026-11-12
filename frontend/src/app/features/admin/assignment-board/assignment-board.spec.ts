@@ -80,6 +80,17 @@ describe('AssignmentBoard', () => {
     flush([car], [first, second], [one]); fixture.detectChanges();
     expect(component.assignments()).toEqual([one]); expect(fixture.nativeElement.textContent).toContain('Дані змінилися');
   });
+  it('refreshes a release conflict and keeps the other worker and source order', () => {
+    const fixture = create([one, two]); const component = fixture.componentInstance;
+    component.release(one); http.expectOne('/api/auth/antiforgery').flush(null);
+    http.expectOne('/api/admin/assignments/assignment-1/release').flush(null, { status: 409, statusText: 'Conflict' });
+    expect(component.assignments()).toEqual([one, two]); expect(component.actionError()).toContain('Дані змінилися');
+    flush([car], [first, second], [two]); fixture.detectChanges();
+    expect(component.assignments()).toEqual([two]); expect(component.orders()).toEqual([car]);
+    expect(fixture.nativeElement.querySelectorAll('#assignment-source .order-card').length).toBe(1);
+    expect(fixture.nativeElement.querySelectorAll('.assigned-card').length).toBe(1);
+    expect(fixture.nativeElement.querySelector(`[data-employee-id="${second.id}"] .assigned-card`)).not.toBeNull();
+  });
   it('keeps failed mutations unchanged and hides stale data when the refresh fails', () => {
     const fixture = create([one]); const component = fixture.componentInstance;
     component.release(one); http.expectOne('/api/auth/antiforgery').flush(null);

@@ -35,6 +35,29 @@ public sealed class EmployeeAssignmentDomainTests
         Assert.Equal(now.AddMinutes(1), assignment.ReleasedAtUtc);
         Assert.Throws<InvalidOperationException>(() => assignment.Release("admin", now.AddMinutes(2)));
     }
+    [Fact]
+    public void AssignmentIsAllowedOnlyDuringInProgressAcrossEveryOrderStatus()
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var status in Enum.GetValues<AppointmentStatus>())
+        {
+            var order = new Appointment(Guid.NewGuid(), "owner", now.AddDays(1), "1HGCM82633A123456", "Test", "Car", "Issue", now);
+            if (status != AppointmentStatus.AwaitingInspection)
+            {
+                order.Schedule(new RepairPlan(order.Id, 10m, now, now.AddDays(1), now), true);
+                if (status is AppointmentStatus.InProgress or AppointmentStatus.AwaitingPayment or AppointmentStatus.Completed or AppointmentStatus.Cancelled) order.StartRepair();
+                if (status is AppointmentStatus.AwaitingPayment or AppointmentStatus.Completed) order.FinishRepair();
+                if (status == AppointmentStatus.Completed) order.Complete(true, true);
+                if (status == AppointmentStatus.Cancelled) order.CancelByAdmin(true, "Test");
+            }
+            var worker = new Employee(Guid.NewGuid(), "Worker", "Repair", true);
+            if (status == AppointmentStatus.InProgress)
+                Assert.Equal(order.Id, EmployeeAssignment.Assign(order, worker, "actor", now).AppointmentId);
+            else
+                Assert.Throws<InvalidOperationException>(() => EmployeeAssignment.Assign(order, worker, "actor", now));
+        }
+    }
+
 }
 
 [Collection("PostgresIdentity")]
@@ -158,6 +181,82 @@ public sealed class EmployeeAssignmentPostgresTests(PostgresIdentityFixture fixt
     }
 
     [PostgresFact]
+    public async Task AssignmentRequestsAreRejectedBeforeAndAfterInProgressWithoutExtraRows()
+    {
+        var owner = await User("User"); var admin = await User("Admin"); using var actor = await Login(admin.Phone);
+        var order = await Appointment(owner.Id, false); var worker = await Employee("Assigned"); var otherWorker = await Employee("Other");
+        Assert.Equal(HttpStatusCode.Conflict, (await Assign(actor, order, worker)).StatusCode);
+        var start = new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        Assert.Equal(HttpStatusCode.NoContent, (await actor.PutAsJsonAsync($"/api/admin/appointments/{order}/repair-plan", new { version = await Version(actor, order), price = 100m, plannedStartUtc = start, estimatedFinishUtc = start.AddDays(1), inspectionPerformed = true })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await actor.PostAsJsonAsync($"/api/admin/appointments/{order}/transition", new { version = await Version(actor, order), target = "Scheduled", inspectionPerformed = true })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Assign(actor, order, worker)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await actor.PostAsJsonAsync($"/api/admin/appointments/{order}/transition", new { version = await Version(actor, order), target = "InProgress" })).StatusCode);
+        using var created = await Assign(actor, order, worker); Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var assignmentId = (await Body(created)).GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.NoContent, (await Exit(actor, order, await Version(actor, order), false)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Assign(actor, order, otherWorker)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await actor.PostAsJsonAsync($"/api/admin/appointments/{order}/transition", new { version = await Version(actor, order), target = "Completed", paymentReceived = true, vehicleHandedOver = true })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Assign(actor, order, otherWorker)).StatusCode);
+        var cancelled = await Appointment(owner.Id);
+        Assert.Equal(HttpStatusCode.NoContent, (await Exit(actor, cancelled, await Version(actor, cancelled), true)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Assign(actor, cancelled, otherWorker)).StatusCode);
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var rows = await db.EmployeeAssignments.AsNoTracking().Where(a => a.AppointmentId == order || a.AppointmentId == cancelled).ToListAsync();
+        var only = Assert.Single(rows); Assert.Equal(assignmentId, only.Id); Assert.NotNull(only.ReleasedAtUtc);
+        Assert.Equal(AppointmentStatus.Completed, (await db.Appointments.AsNoTracking().SingleAsync(a => a.Id == order)).Status);
+        Assert.Equal(AppointmentStatus.Cancelled, (await db.Appointments.AsNoTracking().SingleAsync(a => a.Id == cancelled)).Status);
+    }
+
+    [PostgresFact]
+    public async Task CompletedAndCancelledOrdersKeepAssignmentSnapshotsAndDistinctCustomerAdminDetails()
+    {
+        var owner = await User("User"); var outsider = await User("User"); var admin = await User("Admin"); var super = await User("SuperAdmin");
+        using var operatorClient = await Login(admin.Phone); using var superClient = await Login(super.Phone);
+        using var customer = await Login(owner.Phone); using var stranger = await Login(outsider.Phone);
+        foreach (var cancel in new[] { false, true })
+        {
+            var order = await Appointment(owner.Id); var worker = await Employee("Original"); var second = await Employee("Other");
+            using var created = await Assign(operatorClient, order, worker); Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+            var first = await Body(created); var firstId = first.GetProperty("id").GetGuid();
+            using var secondCreated = await Assign(superClient, order, second); Assert.Equal(HttpStatusCode.Created, secondCreated.StatusCode);
+            var secondId = (await Body(secondCreated)).GetProperty("id").GetGuid();
+            Assert.Equal(HttpStatusCode.NoContent, (await Release(operatorClient, firstId)).StatusCode);
+            var released = await operatorClient.GetFromJsonAsync<JsonElement>($"{Path}/{firstId}");
+            await using (var editScope = factory.Services.CreateAsyncScope())
+            {
+                var editDb = editScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                var entity = await editDb.Employees.SingleAsync(e => e.Id == worker); entity.Update("New name", "Paint", false); await editDb.SaveChangesAsync();
+            }
+            Assert.Equal(HttpStatusCode.NoContent, (await Exit(superClient, order, await Version(superClient, order), cancel)).StatusCode);
+            if (!cancel)
+                Assert.Equal(HttpStatusCode.NoContent, (await superClient.PostAsJsonAsync($"/api/admin/appointments/{order}/transition", new { version = await Version(superClient, order), target = "Completed", paymentReceived = true, vehicleHandedOver = true })).StatusCode);
+            var own = await customer.GetFromJsonAsync<JsonElement>($"/api/appointments/{order}");
+            Assert.Equal(cancel ? "Cancelled" : "Completed", own.GetProperty("status").GetString());
+            var participants = own.GetProperty("participants").EnumerateArray().ToArray(); Assert.Equal(2, participants.Length);
+            var saved = Assert.Single(participants, p => p.GetProperty("name").GetString() == "Original");
+            Assert.Equal("Repair", saved.GetProperty("specialization").GetString());
+            Assert.All(participants, p => Assert.Equal(new[] { "name", "specialization" }, p.EnumerateObject().Select(x => x.Name).Order().ToArray()));
+            Assert.False(own.TryGetProperty("assignments", out _));
+            Assert.Equal(HttpStatusCode.NotFound, (await stranger.GetAsync($"/api/appointments/{order}")).StatusCode);
+            var detail = await superClient.GetFromJsonAsync<JsonElement>($"/api/appointments/{order}");
+            var history = detail.GetProperty("assignments").EnumerateArray().ToArray(); Assert.Equal(2, history.Length);
+            var old = Assert.Single(history, h => h.GetProperty("id").GetGuid() == firstId);
+            var auto = Assert.Single(history, h => h.GetProperty("id").GetGuid() == secondId);
+            Assert.Equal("Original", old.GetProperty("name").GetString()); Assert.Equal("Repair", old.GetProperty("specialization").GetString());
+            Assert.Equal(admin.Id, old.GetProperty("assignedById").GetString()); Assert.Equal(admin.Id, old.GetProperty("releasedById").GetString());
+            Assert.Equal(released.GetProperty("releasedAtUtc").GetDateTimeOffset(), old.GetProperty("releasedAtUtc").GetDateTimeOffset());
+            Assert.Equal(super.Id, auto.GetProperty("assignedById").GetString()); Assert.Equal(super.Id, auto.GetProperty("releasedById").GetString());
+            Assert.NotEqual(JsonValueKind.Null, auto.GetProperty("releasedAtUtc").ValueKind);
+            Assert.Empty((await superClient.GetFromJsonAsync<JsonElement[]>($"{Path}?appointmentId={order}&active=true"))!);
+            await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var rows = await db.EmployeeAssignments.AsNoTracking().Where(a => a.AppointmentId == order).ToListAsync();
+            Assert.Equal(2, rows.Count); Assert.All(rows, row => Assert.NotNull(row.ReleasedAtUtc));
+            Assert.Contains(rows, row => row.Id == firstId && row.NameSnapshot == "Original" && row.SpecializationSnapshot == "Repair");
+            Assert.Single(await db.AppointmentStatusEvents.Where(e => e.AppointmentId == order && e.ToStatus == (cancel ? AppointmentStatus.Cancelled : AppointmentStatus.Completed)).ToListAsync());
+        }
+    }
+
+    [PostgresFact]
     public async Task LegacyReleasedAssignmentRetainsHistoryWhenReleaserIsUnknown()
     {
         var owner = await User("User"); var admin = await User("Admin"); using var actor = await Login(admin.Phone);
@@ -228,6 +327,10 @@ public sealed class EmployeeAssignmentPostgresTests(PostgresIdentityFixture fixt
             var order = await Appointment(owner.Id); var one = await Employee("First"); var two = await Employee("Second");
             Assert.Equal(HttpStatusCode.Created, (await Assign(actor, order, one)).StatusCode);
             Assert.Equal(HttpStatusCode.Created, (await Assign(actor, order, two)).StatusCode);
+            var active = await actor.GetFromJsonAsync<JsonElement[]>($"{Path}?appointmentId={order}&active=true");
+            Assert.Equal(2, active!.Length);
+            Assert.Contains(active, row => row.GetProperty("employeeId").GetGuid() == one && row.GetProperty("releasedAtUtc").ValueKind == JsonValueKind.Null);
+            Assert.Contains(active, row => row.GetProperty("employeeId").GetGuid() == two && row.GetProperty("releasedAtUtc").ValueKind == JsonValueKind.Null);
             var version = await Version(actor, order);
             Assert.Equal(HttpStatusCode.NoContent, (await Exit(actor, order, version, cancel)).StatusCode);
             Assert.Equal(HttpStatusCode.Conflict, (await Exit(actor, order, version, cancel)).StatusCode);
