@@ -1,6 +1,8 @@
 using AutoBodyService.Infrastructure.Persistence;
 using AutoBodyService.Application.Appointments;
 using AutoBodyService.Infrastructure.Appointments;
+using AutoBodyService.Application.Audit;
+using AutoBodyService.Infrastructure.Audit;
 using AutoBodyService.Application.InspectionSchedule;
 using AutoBodyService.Infrastructure.InspectionSchedule;
 using AutoBodyService.Application.Authentication;
@@ -97,6 +99,7 @@ public static class DependencyInjection
         services.AddScoped<IAppointmentQueries, AppointmentQueries>();
         services.AddScoped<ICancelAppointmentService, CancelAppointmentService>();
         services.AddScoped<IAppointmentCreationStore, AppointmentCreationStore>();
+        services.AddScoped<IAdminAuditWriter, AdminAuditWriter>();
         services.AddSingleton(TimeProvider.System);
 
         return services;

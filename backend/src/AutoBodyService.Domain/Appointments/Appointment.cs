@@ -120,6 +120,15 @@ public sealed class Appointment
 
     public void StartRepair() => MoveFrom(AppointmentStatus.Scheduled, AppointmentStatus.InProgress);
 
+    public void ReviseRepairPlan(decimal agreedPrice, DateTimeOffset plannedStartUtc, DateTimeOffset estimatedFinishUtc, DateTimeOffset updatedAtUtc)
+    {
+        if (Status is not (AppointmentStatus.Scheduled or AppointmentStatus.InProgress or AppointmentStatus.AwaitingPayment) || RepairPlan is null)
+            throw new InvalidOperationException("Only a non-terminal appointment with an agreed plan can be revised.");
+        if (updatedAtUtc < RepairPlan.UpdatedAtUtc)
+            throw new ArgumentException("The update cannot precede the previous agreement.", nameof(updatedAtUtc));
+        RepairPlan.Update(agreedPrice, plannedStartUtc, estimatedFinishUtc, updatedAtUtc);
+    }
+
     public void FinishRepair() => MoveFrom(AppointmentStatus.InProgress, AppointmentStatus.AwaitingPayment);
 
     public void Complete(bool paymentReceived, bool vehicleHandedOver)

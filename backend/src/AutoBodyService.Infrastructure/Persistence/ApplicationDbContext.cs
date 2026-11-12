@@ -1,5 +1,6 @@
 using AutoBodyService.Infrastructure.Identity;
 using AutoBodyService.Infrastructure.Notifications;
+using AutoBodyService.Infrastructure.Audit;
 using AutoBodyService.Domain.InspectionSchedule;
 using AutoBodyService.Domain.Appointments;
 using WeeklyScheduleEntity = AutoBodyService.Domain.InspectionSchedule.InspectionSchedule;
@@ -19,12 +20,15 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<ScheduledReminder> ScheduledReminders => Set<ScheduledReminder>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<AppointmentStatusEvent> AppointmentStatusEvents => Set<AppointmentStatusEvent>();
+    public DbSet<AdminAuditEvent> AdminAuditEvents => Set<AdminAuditEvent>();
     public DbSet<InspectionDateOverride> InspectionDateOverrides => Set<InspectionDateOverride>();
 
     public DbSet<RevokedSession> RevokedSessions => Set<RevokedSession>();
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        RejectAuditMutation();
+        ProtectRepairPlanChanges();
         var roleUserIds = ChangedRoleUserIds();
         var users = roleUserIds.Length == 0 ? [] : Users.Where(user => roleUserIds.Contains(user.Id)).ToList();
         var blockedIds = ModifiedUserIds();
@@ -36,6 +40,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        RejectAuditMutation();
+        ProtectRepairPlanChanges();
         var roleUserIds = ChangedRoleUserIds();
         var users = roleUserIds.Length == 0 ? [] : await Users.Where(user => roleUserIds.Contains(user.Id)).ToListAsync(cancellationToken);
         var blockedIds = ModifiedUserIds();
@@ -43,6 +49,24 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             .Where(user => blockedIds.Contains(user.Id)).Select(user => new { user.Id, user.IsBlocked }).ToListAsync(cancellationToken);
         RevokeChangedSessions(users, previousBlocks.ToDictionary(user => user.Id, user => user.IsBlocked));
         return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void RejectAuditMutation()
+    {
+        if (ChangeTracker.Entries<AdminAuditEvent>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            throw new InvalidOperationException("Administrative audit events are append-only.");
+    }
+
+    // A plan correction must also check the appointment's xmin, so a concurrent
+    // status change cannot silently make a previously valid correction stale.
+    private void ProtectRepairPlanChanges()
+    {
+        foreach (var plan in ChangeTracker.Entries<RepairPlan>().Where(e => e.State == EntityState.Modified).ToArray())
+        {
+            var appointment = ChangeTracker.Entries<Appointment>().SingleOrDefault(e => e.Entity.Id == plan.Entity.AppointmentId)
+                ?? throw new InvalidOperationException("A repair plan must be changed through its tracked appointment.");
+            appointment.Property(a => a.Status).IsModified = true;
+        }
     }
 
     private string[] ChangedRoleUserIds() => ChangeTracker.Entries<IdentityUserRole<string>>()
@@ -92,8 +116,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(x => x.Make).IsRequired();
             entity.Property(x => x.Model).IsRequired();
             entity.Property(x => x.ProblemDescription).IsRequired();
-            // Repair plan persistence is introduced with its own workflow.
-            entity.Ignore(x => x.RepairPlan);
+            entity.HasOne(x => x.RepairPlan).WithOne().HasForeignKey<RepairPlan>(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => x.InspectionStartUtc).IsUnique().HasFilter("\"Status\" <> 5");
             entity.HasIndex(x => new { x.UserId, x.InspectionStartUtc });
@@ -106,6 +129,32 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
                 table.HasCheckConstraint("CK_Appointment_Vin", "\"Vin\" ~ '^[A-HJ-NPR-Z0-9]{17}$'");
                 table.HasCheckConstraint("CK_Appointment_RequiredText", "\"Make\" ~ '[^[:space:]]' AND \"Model\" ~ '[^[:space:]]' AND \"ProblemDescription\" ~ '[^[:space:]]'");
             });
+        });
+        builder.Entity<RepairPlan>(entity =>
+        {
+            entity.HasKey(x => x.AppointmentId);
+            entity.Property(x => x.AgreedPrice).HasColumnType("numeric");
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            entity.Property<uint>("Version").IsRowVersion();
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_RepairPlan_Price", "\"AgreedPrice\" >= 0 AND \"AgreedPrice\" <> 'NaN'::numeric AND \"AgreedPrice\" <> 'Infinity'::numeric");
+                table.HasCheckConstraint("CK_RepairPlan_Dates", "\"EstimatedFinishUtc\" >= \"PlannedStartUtc\"");
+                table.HasCheckConstraint("CK_RepairPlan_Currency", "\"Currency\" = 'UAH'");
+            });
+        });
+        builder.Entity<AdminAuditEvent>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ActorId).IsRequired();
+            entity.Property(x => x.Action).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.ObjectType).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.ObjectId).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Details).HasColumnType("jsonb").IsRequired();
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.OccurredAtUtc);
+            entity.HasIndex(x => new { x.Action, x.OccurredAtUtc });
+            entity.HasIndex(x => new { x.ActorId, x.OccurredAtUtc });
         });
         builder.Entity<Notification>(entity =>
         {

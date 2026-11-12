@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using AutoBodyService.Application.InspectionSchedule;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace AutoBodyService.Api.Controllers;
 
@@ -29,7 +30,9 @@ public sealed class InspectionScheduleController(IInspectionScheduleService sche
         if (request.Intervals.Any(i => i is null || i.DayOfWeek is null || i.Start is null || i.End is null))
             return BadRequest(new ProblemDetails { Status = 400, Title = "Некоректний інтервал графіка." });
         var intervals = request.Intervals.Select(i => new WeeklyInterval(i!.DayOfWeek!.Value, i.Start!.Value, i.End!.Value)).ToArray();
-        var result = await calendar.ChangeWeeklyAsync(request.Version, intervals, preview, request.ConfirmationToken, cancellationToken);
+        var actorId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (actorId is null) return Unauthorized();
+        var result = await calendar.ChangeWeeklyAsync(actorId, request.Version, intervals, preview, request.ConfirmationToken, cancellationToken);
         return result.Status switch
         {
             ScheduleUpdateResult.Success when preview => Ok(result.Preview),

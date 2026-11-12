@@ -113,6 +113,38 @@ public sealed class AppointmentLifecycleDomainTests
         Assert.Throws<ArgumentException>(() => new RepairPlan(id, 1m, Inspection, Inspection, nonUtc));
     }
 
+    [Theory]
+    [InlineData(AppointmentStatus.Scheduled)]
+    [InlineData(AppointmentStatus.InProgress)]
+    [InlineData(AppointmentStatus.AwaitingPayment)]
+    public void AgreedPlanCanBeRevisedWithoutChangingStatus(AppointmentStatus status)
+    {
+        var appointment = At(status);
+        var update = Inspection.AddDays(2);
+        appointment.ReviseRepairPlan(0m, update, update, update);
+        Assert.Equal(status, appointment.Status);
+        Assert.Equal(0m, appointment.RepairPlan!.AgreedPrice);
+        Assert.Equal("UAH", appointment.RepairPlan.Currency);
+        Assert.Equal(update, appointment.RepairPlan.PlannedStartUtc);
+        Assert.Equal(update, appointment.RepairPlan.EstimatedFinishUtc);
+        Assert.Equal(update, appointment.RepairPlan.UpdatedAtUtc);
+        Assert.Throws<ArgumentException>(() => appointment.ReviseRepairPlan(1m, update, update, Inspection));
+        Assert.Throws<ArgumentOutOfRangeException>(() => appointment.ReviseRepairPlan(-1m, update, update, update));
+        Assert.Equal(0m, appointment.RepairPlan.AgreedPrice);
+        Assert.Equal(update, appointment.RepairPlan.UpdatedAtUtc);
+    }
+
+    [Theory]
+    [InlineData(AppointmentStatus.AwaitingInspection)]
+    [InlineData(AppointmentStatus.Completed)]
+    [InlineData(AppointmentStatus.Cancelled)]
+    public void PlanCannotBeRevisedBeforeAgreementOrAfterTerminalStatus(AppointmentStatus status)
+    {
+        var appointment = At(status);
+        Assert.Throws<InvalidOperationException>(() => appointment.ReviseRepairPlan(1m, Inspection, Inspection, Inspection));
+        Assert.Equal(status, appointment.Status);
+    }
+
     [Fact]
     public void StatusCannotBeAssignedThroughPublicSetterOrCreationDto()
     {

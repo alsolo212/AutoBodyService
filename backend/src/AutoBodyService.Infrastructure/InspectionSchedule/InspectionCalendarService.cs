@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AutoBodyService.Application.InspectionSchedule;
+using AutoBodyService.Application.Audit;
 using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 namespace AutoBodyService.Infrastructure.InspectionSchedule;
 
 public sealed class InspectionCalendarService(ApplicationDbContext db, IInspectionScheduleService weekly,
-    IInspectionExceptionsService exceptions, TimeProvider clock) : IInspectionCalendarService
+    IInspectionExceptionsService exceptions, IAdminAuditWriter audit, TimeProvider clock) : IInspectionCalendarService
 {
     private static readonly TimeZoneInfo Zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
 
@@ -21,20 +22,25 @@ public sealed class InspectionCalendarService(ApplicationDbContext db, IInspecti
         return await Appointments(from, to, false).ToListAsync(cancellationToken);
     }
 
-    public Task<ScheduleChangeResult> ChangeWeeklyAsync(Guid version, IReadOnlyList<WeeklyInterval> intervals, bool preview, string? confirmationToken, CancellationToken cancellationToken) =>
+    public Task<ScheduleChangeResult> ChangeWeeklyAsync(string actorId, Guid version, IReadOnlyList<WeeklyInterval> intervals, bool preview, string? confirmationToken, CancellationToken cancellationToken) =>
         ChangeAsync(version, null, new { kind = "weekly", intervals }, preview, confirmationToken,
-            () => weekly.UpdateAsync(version, intervals, cancellationToken), cancellationToken);
+            async () => (await weekly.GetAsync(cancellationToken)).Intervals,
+            () => weekly.UpdateAsync(version, intervals, cancellationToken),
+            before => audit.RecordWeeklyScheduleChange(actorId, before, intervals), cancellationToken);
 
-    public Task<ScheduleChangeResult> ChangeDateAsync(Guid version, DateOnly date, InspectionException? exception, bool preview, string? confirmationToken, CancellationToken cancellationToken) =>
+    public Task<ScheduleChangeResult> ChangeDateAsync(string actorId, Guid version, DateOnly date, InspectionException? exception, bool preview, string? confirmationToken, CancellationToken cancellationToken) =>
         ChangeAsync(version, date, new { kind = "date", date, exception }, preview, confirmationToken,
-            () => exceptions.UpdateAsync(version, exception, date, cancellationToken), cancellationToken);
+            async () => (await exceptions.GetAsync(date, cancellationToken)).Exception,
+            () => exceptions.UpdateAsync(version, exception, date, cancellationToken),
+            before => audit.RecordDateExceptionChange(actorId, date, before, exception), cancellationToken);
 
-    private async Task<ScheduleChangeResult> ChangeAsync(Guid version, DateOnly? date, object proposal, bool preview, string? confirmationToken,
-        Func<Task<ScheduleUpdateResult>> update, CancellationToken cancellationToken)
+    private async Task<ScheduleChangeResult> ChangeAsync<T>(Guid version, DateOnly? date, object proposal, bool preview, string? confirmationToken,
+        Func<Task<T>> readBefore, Func<Task<ScheduleUpdateResult>> update, Action<T> recordAudit, CancellationToken cancellationToken)
     {
         await using IDbContextTransaction transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         // Booking creation takes this same lock. Nothing can book against a stale preview while applying.
         await db.Database.ExecuteSqlRawAsync("SELECT 1 FROM \"InspectionSchedules\" WHERE \"Id\" = 1 FOR UPDATE", cancellationToken);
+        var before = await readBefore();
         var result = await update();
         if (result != ScheduleUpdateResult.Success) return new(result);
         var now = clock.GetUtcNow();
@@ -54,6 +60,8 @@ public sealed class InspectionCalendarService(ApplicationDbContext db, IInspecti
         if (preview) { await transaction.RollbackAsync(cancellationToken); return new(ScheduleUpdateResult.Success, response); }
         if ((confirmationToken is not null && confirmationToken != fingerprint) || (conflicts.Count > 0 && confirmationToken != fingerprint))
             return new(ScheduleUpdateResult.Conflict, response);
+        recordAudit(before);
+        await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(ScheduleUpdateResult.Success, response);
     }

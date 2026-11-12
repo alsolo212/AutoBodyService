@@ -3,6 +3,7 @@ using AutoBodyService.Application.InspectionSchedule;
 using AutoBodyService.Domain.InspectionSchedule;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace AutoBodyService.Api.Controllers;
 
@@ -36,7 +37,9 @@ public sealed class InspectionExceptionsController(IInspectionExceptionsService 
         var exception = item is null ? null : new InspectionException(request.Date, item.Mode!.Value, item.Reason,
             item.Intervals!.Select(x => new DateInterval(x!.Start!.Value, x.End!.Value)).ToArray(),
             item.Slots!.Select(x => new SlotOverride(x!.Start!.Value, x.Mode!.Value)).ToArray());
-        var result = await calendar.ChangeDateAsync(request.Version, request.Date, exception, preview, request.ConfirmationToken, cancellationToken);
+        var actorId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (actorId is null) return Unauthorized();
+        var result = await calendar.ChangeDateAsync(actorId, request.Version, request.Date, exception, preview, request.ConfirmationToken, cancellationToken);
         return result.Status switch
         {
             ScheduleUpdateResult.Success when preview => Ok(result.Preview),

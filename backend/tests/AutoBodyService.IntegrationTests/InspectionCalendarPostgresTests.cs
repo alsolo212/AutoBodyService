@@ -63,7 +63,8 @@ public sealed class InspectionCalendarPostgresTests(PostgresIdentityFixture fixt
         Assert.False(shown.TryGetProperty("vin", out _)); Assert.False(shown.TryGetProperty("problemDescription", out _));
         Assert.Equal(HttpStatusCode.OK, (await superClient.GetAsync($"/api/admin/inspection-calendar?date={date:yyyy-MM-dd}")).StatusCode);
         var schedule = await Read(await adminClient.GetAsync($"/api/admin/inspection-exceptions?date={date:yyyy-MM-dd}")); var version = schedule.GetProperty("version").GetGuid();
-        var payload = new { version, date = date, exception = Exception("Closed", []) };
+        const string privateReason = "private reason must stay out of audit";
+        var payload = new { version, date = date, exception = new { mode = "Closed", reason = privateReason, intervals = Array.Empty<object>(), slots = Array.Empty<object>() } };
         Assert.Equal(HttpStatusCode.Forbidden, (await customer.PostAsJsonAsync("/api/admin/inspection-exceptions/preview", payload)).StatusCode);
         var unchanged = await Read(await adminClient.PostAsJsonAsync("/api/admin/inspection-exceptions/preview", new { version, date = date, exception = Exception("Weekly", []) }));
         Assert.Empty(unchanged.GetProperty("conflicts").EnumerateArray());
@@ -75,6 +76,8 @@ public sealed class InspectionCalendarPostgresTests(PostgresIdentityFixture fixt
         var created = await customer.PostAsJsonAsync("/api/appointments", new { inspectionStartUtc = Start(9, 30), vin = "1HGCM82633A123456", make = "Other", model = "Car", problemDescription = "Issue" });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode); var secondId = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         Assert.Equal(HttpStatusCode.Conflict, (await adminClient.PutAsJsonAsync("/api/admin/inspection-exceptions", new { version, date = date, exception = payload.exception, confirmationToken = token })).StatusCode);
+        await using (var beforeScope = factory.Services.CreateAsyncScope())
+            Assert.Empty(await beforeScope.ServiceProvider.GetRequiredService<ApplicationDbContext>().AdminAuditEvents.Where(e => e.ActorId == admin.Id).ToListAsync());
         var second = await Read(await adminClient.PostAsJsonAsync("/api/admin/inspection-exceptions/preview", payload));
         Assert.Equal(new[] { id, secondId }.Order(), second.GetProperty("conflicts").EnumerateArray().Select(x => x.GetProperty("id").GetGuid()).Order());
         Assert.Equal(HttpStatusCode.OK, (await adminClient.PutAsJsonAsync("/api/admin/inspection-exceptions", new { version, date = date, exception = payload.exception, confirmationToken = second.GetProperty("confirmationToken").GetString() })).StatusCode);
@@ -83,6 +86,16 @@ public sealed class InspectionCalendarPostgresTests(PostgresIdentityFixture fixt
         Assert.Equal(AppointmentStatus.AwaitingInspection, (await db.Appointments.SingleAsync(a => a.Id == id)).Status);
         Assert.Single(await db.AppointmentStatusEvents.Where(e => e.AppointmentId == id).ToListAsync());
         Assert.Single(await db.AppointmentStatusEvents.Where(e => e.AppointmentId == secondId).ToListAsync());
+        var audit = Assert.Single(await db.AdminAuditEvents.Where(e => e.ActorId == admin.Id).ToListAsync());
+        Assert.Equal("InspectionExceptionChanged", audit.Action);
+        Assert.Equal("InspectionDate", audit.ObjectType);
+        Assert.Equal(date.ToString("yyyy-MM-dd"), audit.ObjectId);
+        Assert.Equal(TimeSpan.Zero, audit.OccurredAtUtc.Offset);
+        using var details = JsonDocument.Parse(audit.Details);
+        Assert.Equal("Closed", details.RootElement.GetProperty("after").GetProperty("mode").GetString());
+        Assert.DoesNotContain(privateReason, audit.Details);
+        Assert.DoesNotContain(token!, audit.Details);
+        Assert.DoesNotContain("customerName", audit.Details, StringComparison.OrdinalIgnoreCase);
     }
 
     [PostgresFact]
@@ -104,5 +117,14 @@ public sealed class InspectionCalendarPostgresTests(PostgresIdentityFixture fixt
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         Assert.Equal(AppointmentStatus.AwaitingInspection, (await db.Appointments.SingleAsync(a => a.Id == id)).Status);
         Assert.Single(await db.AppointmentStatusEvents.Where(e => e.AppointmentId == id).ToListAsync());
+        var events = await db.AdminAuditEvents.Where(e => e.ActorId == admin.Id).OrderBy(e => e.OccurredAtUtc).ToListAsync();
+        Assert.Equal(2, events.Count);
+        Assert.Equal(new[] { "InspectionExceptionChanged", "InspectionScheduleChanged" }, events.Select(e => e.Action));
+        var weeklyEvent = events[1];
+        Assert.Equal("InspectionSchedule", weeklyEvent.ObjectType);
+        Assert.Equal("1", weeklyEvent.ObjectId);
+        using var details = JsonDocument.Parse(weeklyEvent.Details);
+        Assert.NotEmpty(details.RootElement.GetProperty("before").EnumerateArray());
+        Assert.Empty(details.RootElement.GetProperty("after").EnumerateArray());
     }
 }
