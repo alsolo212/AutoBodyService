@@ -224,6 +224,39 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AutoBodyService.Domain.Employees.Employee", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Specialization")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Employees", t =>
+                        {
+                            t.HasCheckConstraint("CK_Employee_RequiredText", "\"FullName\" ~ '[^[:space:]]' AND \"Specialization\" ~ '[^[:space:]]'");
+                        });
+                });
+
             modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionDateInterval", b =>
                 {
                     b.Property<Guid>("Id")

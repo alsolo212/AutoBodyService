@@ -1,5 +1,7 @@
 using AutoBodyService.Infrastructure.Persistence;
 using AutoBodyService.Application.Appointments;
+using AutoBodyService.Application.Employees;
+using AutoBodyService.Infrastructure.Employees;
 using AutoBodyService.Infrastructure.Appointments;
 using AutoBodyService.Application.Audit;
 using AutoBodyService.Infrastructure.Audit;
@@ -97,6 +99,7 @@ public static class DependencyInjection
         services.AddScoped<IInspectionSlotsService, InspectionSlotsService>();
         services.AddScoped<ICreateAppointmentService, CreateAppointmentService>();
         services.AddScoped<IAppointmentQueries, AppointmentQueries>();
+        services.AddScoped<IEmployeeDirectory, EmployeeDirectory>();
         services.AddScoped<ICancelAppointmentService, CancelAppointmentService>();
         services.AddScoped<IAppointmentCreationStore, AppointmentCreationStore>();
         services.AddScoped<IAdminAuditWriter, AdminAuditWriter>();

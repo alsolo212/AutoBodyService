@@ -150,3 +150,30 @@ RequestVerificationToken: {{xsrfToken}}
   "date": "2026-11-09",
   "exception": { "mode": "Weekly", "reason": "", "intervals": [], "slots": [{ "start": "09:00", "mode": "Closed" }] }
 }
+
+### Employee directory (Admin/SuperAdmin cookie)
+GET {{baseUrl}}/api/admin/employees
+
+### Create a worker; refresh antiforgery after login.
+POST {{baseUrl}}/api/admin/employees
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{
+  "fullName": "Тестовий працівник",
+  "specialization": "Кузовний ремонт",
+  "isActive": true
+}
+
+### Fetch a directory entry by its returned id.
+GET {{baseUrl}}/api/admin/employees/{{employeeId}}
+
+### Deactivate without deleting; use the latest version from a directory response.
+PATCH {{baseUrl}}/api/admin/employees/{{employeeId}}
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{
+  "version": {{employeeVersion}},
+  "isActive": false
+}
