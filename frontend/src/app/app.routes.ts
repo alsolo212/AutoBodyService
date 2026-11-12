@@ -28,5 +28,8 @@ export const routes: Routes = [
   { path: 'admin/appointments/:id', component: AppointmentDetailsAdmin, canActivate: [authGuard], data: { area: 'admin' }, title: 'Замовлення — AutoBodyService' },
   { path: 'admin/appointments', loadComponent: () => import('./features/admin/appointments-board/appointments-board').then(m => m.AppointmentsBoard), canActivate: [authGuard], data: { area: 'admin' }, title: 'Замовлення — AutoBodyService' },
   { path: 'admin/inspection-calendar', component: InspectionCalendar, canActivate: [authGuard], data: { area: 'admin' }, title: 'Календар оглядів — AutoBodyService' },
+  { path: 'admin/assignments', component: WorkspaceShell, canActivate: [authGuard], data: { area: 'admin', section: 'Розподіл робіт' }, title: 'Розподіл робіт — AutoBodyService' },
+  { path: 'admin/employees', component: WorkspaceShell, canActivate: [authGuard], data: { area: 'admin', section: 'Працівники' }, title: 'Працівники — AutoBodyService' },
+  { path: 'admin/prices', component: WorkspaceShell, canActivate: [authGuard], data: { area: 'admin', section: 'Послуги та ціни' }, title: 'Послуги та ціни — AutoBodyService' },
   { path: 'admin', component: WorkspaceShell, canActivate: [authGuard], data: { area: 'admin' }, title: 'Панель керування — AutoBodyService' },
 ];

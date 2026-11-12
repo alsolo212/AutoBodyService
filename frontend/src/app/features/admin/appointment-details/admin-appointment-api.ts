@@ -17,10 +17,14 @@ export interface TransitionChange { version: number; target: AppointmentStatus; 
 export interface AdminBoardCard { id: string; customerName: string; vin: string; make: string; model: string; inspectionStartUtc: string; inspectionStartLocal: string; status: AppointmentStatus; repairPlan: RepairPlan | null; version: number; }
 export interface AdminBoardPage { items: AdminBoardCard[]; page: number; pageSize: number; total: number; }
 export interface AdminBoardFilter { search: string; from: string; to: string; sort: string; direction: string; pageSize: number; }
+export interface DashboardItem { id: string; customerName: string; make: string; model: string; status: AppointmentStatus; inspectionStartUtc: string; inspectionStartLocal: string; occurredAtUtc: string; }
+export interface ContactTask { appointmentId: string; customerName: string; make: string; model: string; reason: ContactReason; triggeredAtUtc: string | null; }
+export interface AdminDashboard { counts: { awaitingInspection: number; scheduled: number; inProgress: number; awaitingPayment: number }; upcomingInspections: DashboardItem[]; newAppointments: DashboardItem[]; cancellations: DashboardItem[]; contactTasks: ContactTask[]; }
 
 @Injectable({ providedIn: 'root' })
 export class AdminAppointmentApi {
   private readonly http = inject(HttpClient);
+  dashboard() { return this.http.get<AdminDashboard>('/api/admin/dashboard'); }
   list(status: AppointmentStatus, page: number, filter: AdminBoardFilter) {
     let params = new HttpParams().set('status', status).set('page', page).set('pageSize', filter.pageSize).set('sort', filter.sort).set('direction', filter.direction);
     if (filter.search.trim()) params = params.set('search', filter.search.trim());

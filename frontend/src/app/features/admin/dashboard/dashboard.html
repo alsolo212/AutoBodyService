@@ -1,0 +1,41 @@
+<div class="workspace-heading"><div><p class="eyebrow"><span class="eyebrow__line"></span> ПАНЕЛЬ КЕРУВАННЯ</p><h1>Робочий простір</h1><p>Замовлення, огляди та ручний зв’язок із клієнтами.</p></div></div>
+<nav class="quick-links" aria-label="Швидкі переходи">
+  <a routerLink="/admin/appointments">Дошка замовлень <span aria-hidden="true">↗</span></a>
+  <a routerLink="/admin/inspection-calendar">Календар оглядів <span aria-hidden="true">↗</span></a>
+  <a routerLink="/admin/assignments">Розподіл робіт <small>У підготовці</small> <span aria-hidden="true">↗</span></a>
+  <a routerLink="/admin/employees">Працівники <small>У підготовці</small> <span aria-hidden="true">↗</span></a>
+  <a routerLink="/admin/prices">Послуги та ціни <small>У підготовці</small> <span aria-hidden="true">↗</span></a>
+</nav>
+@if (loading()) { <p class="dashboard-state" role="status">Завантажуємо огляд…</p> }
+@if (error()) { <div class="auth-alert" role="alert">{{ error() }} <button type="button" class="retry" (click)="reload()">Спробувати ще раз</button></div> }
+@if (notice()) { <p class="auth-success" role="status">{{ notice() }}</p> }
+@if (contactError()) { <p class="auth-alert" role="alert">{{ contactError() }}</p> }
+@if (data(); as dashboard) {
+  @if (!loading()) {
+    <section class="summary" aria-labelledby="summary-title"><h2 id="summary-title">Замовлення в роботі</h2>
+      <div class="summary-grid">
+        <a routerLink="/admin/appointments"><span>Очікує огляду</span><strong>{{ dashboard.counts.awaitingInspection }}</strong></a>
+        <a routerLink="/admin/appointments"><span>Заплановано</span><strong>{{ dashboard.counts.scheduled }}</strong></a>
+        <a routerLink="/admin/appointments"><span>У роботі</span><strong>{{ dashboard.counts.inProgress }}</strong></a>
+        <a routerLink="/admin/appointments"><span>Очікує оплати</span><strong>{{ dashboard.counts.awaitingPayment }}</strong></a>
+      </div>
+    </section>
+    <div class="dashboard-grid">
+      <section class="dashboard-panel" aria-labelledby="contacts-title"><div class="section-heading"><div><p class="panel-eyebrow">ПОТРІБНА УВАГА</p><h2 id="contacts-title">Ручний зв’язок</h2></div><span class="count">{{ dashboard.contactTasks.length }}</span></div>
+        <p class="hint">Зв’яжіться з клієнтом самостійно та відмітьте контакт. Відмітка не надсилає повідомлення.</p>
+        <ul class="entries">@for (task of dashboard.contactTasks; track task.appointmentId + task.reason) {
+          <li class="entry contact-entry"><div><span class="reason">{{ reason(task.reason) }}</span><a [routerLink]="['/admin/appointments', task.appointmentId]">{{ task.make }} {{ task.model }}</a><p>{{ task.customerName }}</p>@if (task.triggeredAtUtc) { <p>Привід: <time [attr.datetime]="task.triggeredAtUtc">{{ format(task.triggeredAtUtc) }}</time></p> }</div><button class="button button--secondary" type="button" [disabled]="saving()" [attr.aria-label]="'Зв’язалися: ' + task.make + ' ' + task.model + ', ' + reason(task.reason)" (click)="markContact(task)">{{ saving() ? 'Зберігаємо…' : 'Зв’язалися' }}</button></li>
+        } @empty { <li class="empty">Наразі немає завдань для зв’язку.</li> }</ul>
+      </section>
+      <section class="dashboard-panel" aria-labelledby="upcoming-title"><div class="section-heading"><div><p class="panel-eyebrow">КАЛЕНДАР</p><h2 id="upcoming-title">Найближчі огляди</h2></div><a routerLink="/admin/inspection-calendar">Календар →</a></div>
+        <ul class="entries">@for (item of dashboard.upcomingInspections; track item.id) { <li class="entry"><a [routerLink]="['/admin/appointments', item.id]">{{ item.make }} {{ item.model }}</a><p>{{ item.customerName }}</p><p><time [attr.datetime]="item.inspectionStartUtc">{{ format(item.inspectionStartUtc) }}</time></p></li> } @empty { <li class="empty">Майбутніх оглядів немає.</li> }</ul>
+      </section>
+      <section class="dashboard-panel" aria-labelledby="new-title"><div class="section-heading"><div><p class="panel-eyebrow">ОСТАННІ ПОДІЇ</p><h2 id="new-title">Нові записи</h2></div></div>
+        <ul class="entries">@for (item of dashboard.newAppointments; track item.id) { <li class="entry"><a [routerLink]="['/admin/appointments', item.id]">{{ item.make }} {{ item.model }}</a><p>{{ item.customerName }} · {{ statusLabel(item.status) }}</p><p>Створено: <time [attr.datetime]="item.occurredAtUtc">{{ format(item.occurredAtUtc) }}</time></p></li> } @empty { <li class="empty">Нових записів немає.</li> }</ul>
+      </section>
+      <section class="dashboard-panel" aria-labelledby="cancel-title"><div class="section-heading"><div><p class="panel-eyebrow">ОСТАННІ ПОДІЇ</p><h2 id="cancel-title">Скасування</h2></div></div>
+        <ul class="entries">@for (item of dashboard.cancellations; track item.id) { <li class="entry"><a [routerLink]="['/admin/appointments', item.id]">{{ item.make }} {{ item.model }}</a><p>{{ item.customerName }}</p><p>Скасовано: <time [attr.datetime]="item.occurredAtUtc">{{ format(item.occurredAtUtc) }}</time></p></li> } @empty { <li class="empty">Скасувань немає.</li> }</ul>
+      </section>
+    </div>
+  }
+}

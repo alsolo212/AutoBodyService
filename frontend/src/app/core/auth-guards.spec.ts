@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { GuardResult, provideRouter, Router, UrlTree } from '@angular/router';
 import { firstValueFrom, Observable, Subject, throwError } from 'rxjs';
 import { AuthService, AuthSession } from './auth';
-import { guestGuard } from './auth-guards';
+import { authGuard, guestGuard } from './auth-guards';
 
 const account = (role: string, mustChangePassword = false): AuthSession => ({ name: 'Test', phone: '+380000000000', roles: [role], mustChangePassword });
 
@@ -38,5 +38,24 @@ describe('guestGuard', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({ providers: [provideRouter([]), { provide: AuthService, useValue: { getSession: () => throwError(() => new Error('offline')) } }] });
     expect(await firstValueFrom(invoke() as Observable<GuardResult>)).toBe(true);
+  });
+});
+
+describe('admin authGuard', () => {
+  let session: Subject<AuthSession | null>;
+  beforeEach(() => {
+    session = new Subject<AuthSession | null>();
+    TestBed.configureTestingModule({ providers: [provideRouter([]), { provide: AuthService, useValue: { getSession: () => session.asObservable() } }] });
+  });
+  for (const role of ['Admin', 'SuperAdmin']) {
+    it(`allows ${role} to the common dashboard`, async () => {
+      const result = firstValueFrom(TestBed.runInInjectionContext(() => authGuard({ data: { area: 'admin' } } as never, {} as never)) as Observable<GuardResult>);
+      session.next(account(role)); expect(await result).toBe(true);
+    });
+  }
+  it('redirects User away from the dashboard', async () => {
+    const result = firstValueFrom(TestBed.runInInjectionContext(() => authGuard({ data: { area: 'admin' } } as never, {} as never)) as Observable<GuardResult>);
+    session.next(account('User'));
+    expect(TestBed.inject(Router).serializeUrl(await result as UrlTree)).toBe('/account/appointments');
   });
 });
