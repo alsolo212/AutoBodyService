@@ -1,0 +1,52 @@
+<div class="profile-page">
+  <header class="profile-header">
+    <a class="brand" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a>
+    <nav aria-label="Навігація адміністратора"><a routerLink="/admin">Панель керування</a><a routerLink="/admin/inspection-calendar">Календар оглядів</a></nav>
+  </header>
+  <main class="board-main">
+    <a class="text-link" routerLink="/admin">← Панель керування</a>
+    <p class="eyebrow"><span class="eyebrow__line"></span> РОБОТА ІЗ ЗАМОВЛЕННЯМИ</p>
+    <h1>Замовлення</h1>
+    <p class="intro">Перетягніть картку на наступний етап або скористайтеся кнопкою на картці.</p>
+    <form class="filters" [formGroup]="filterForm" (ngSubmit)="applyFilters()" aria-label="Фільтри замовлень">
+      <div class="field search"><label class="field__label" for="search">Пошук клієнта або авто</label><input class="field__input" id="search" formControlName="search" maxlength="100" placeholder="Ім’я, телефон, VIN, марка" /></div>
+      <div class="field"><label class="field__label" for="filter-status">Статус</label><select class="field__input" id="filter-status" formControlName="status"><option value="">Усі статуси</option>@for (status of statuses; track status) { <option [value]="status">{{ statusLabel(status) }}</option> }</select></div>
+      <div class="field"><label class="field__label" for="from">Огляд від</label><input class="field__input" id="from" type="date" formControlName="from" /></div>
+      <div class="field"><label class="field__label" for="to">Огляд до</label><input class="field__input" id="to" type="date" formControlName="to" /></div>
+      <div class="field"><label class="field__label" for="sort">Сортувати за</label><select class="field__input" id="sort" formControlName="sort"><option value="inspection">Часом огляду</option><option value="created">Датою запису</option><option value="customer">Клієнтом</option></select></div>
+      <div class="field"><label class="field__label" for="direction">Порядок</label><select class="field__input" id="direction" formControlName="direction"><option value="asc">За зростанням</option><option value="desc">За спаданням</option></select></div>
+      <div class="field"><label class="field__label" for="page-size">На сторінці</label><select class="field__input" id="page-size" formControlName="pageSize"><option [ngValue]="5">5</option><option [ngValue]="10">10</option><option [ngValue]="25">25</option></select></div>
+      <button class="button button--primary" type="submit" [disabled]="loading() || saving()">Застосувати</button>
+    </form>
+    @if (actionMessage()) { <div class="auth-alert" role="alert">{{ actionMessage() }}</div> }
+    @if (success()) { <p class="profile-success" role="status">{{ success() }}</p> }
+    @if (saving()) { <p role="status">Оновлюємо статус…</p> }
+    @if (error()) { <div class="auth-alert" role="alert">{{ error() }} <button class="inline-button" type="button" (click)="reload()">Спробувати ще раз</button></div> }
+    @if (loading()) { <p class="loading" role="status">Завантажуємо замовлення…</p> }
+    <div class="board-scroll" tabindex="0" aria-label="Дошка замовлень, прокручуйте для перегляду колонок">
+      <div class="board" cdkDropListGroup>
+        @for (column of columns(); track column.status) {
+          <section class="column" [attr.aria-labelledby]="'column-' + column.status">
+            <header class="column-header"><h2 [id]="'column-' + column.status">{{ statusLabel(column.status) }}</h2><span [attr.aria-label]="'Кількість: ' + column.total">{{ column.total }}</span></header>
+            <div class="column-items" cdkDropList [cdkDropListData]="column" [cdkDropListEnterPredicate]="canEnter" [cdkDropListSortingDisabled]="true" (cdkDropListDropped)="dropped($event)" [attr.data-status]="column.status">
+              @if (!loading() && !error()) {
+                @for (card of column.items; track card.id) {
+                  <article class="card" cdkDrag [cdkDragData]="card" [cdkDragDisabled]="!next(card.status) || saving()" [attr.data-card-id]="card.id">
+                    <div class="card-top"><span class="client">{{ card.customerName }}</span>@if (next(card.status)) { <span class="drag-handle" cdkDragHandle aria-hidden="true" title="Перетягніть на наступний етап">⠿</span> }</div>
+                    <h3><a [routerLink]="['/admin/appointments', card.id]">{{ card.make }} {{ card.model }}</a></h3>
+                    <p class="vin">VIN {{ card.vin }}</p><p class="meta">Огляд: <time [attr.datetime]="card.inspectionStartUtc">{{ format(card.inspectionStartUtc) }}</time></p>
+                    @if (card.repairPlan; as plan) { <p class="plan">{{ price(plan.agreedPrice, plan.currency) }}<br /><span>{{ format(plan.plannedStartUtc) }} — {{ format(plan.estimatedFinishUtc) }}</span></p> }
+                    @else { <p class="meta">План ще не узгоджено</p> }
+                    @if (next(card.status); as target) { <button class="button button--secondary card-action" type="button" [disabled]="saving() || loading()" (click)="advance(card)">Перевести: {{ statusLabel(target) }}</button> }
+                    @if (canCancel(card.status)) { <details class="card-menu"><summary [attr.aria-label]="'Дії: ' + card.make + ' ' + card.model">⋯</summary><button type="button" [disabled]="saving() || loading()" (click)="cancel(card)">Скасувати</button></details> }
+                  </article>
+                } @empty { @if (column.filtered) { <p class="empty">Статус відфільтровано.</p> } @else { <p class="empty">Замовлень немає.</p> } }
+              }
+            </div>
+            @if (!column.filtered && !loading() && !error()) { <div class="pagination"><button type="button" [disabled]="column.page <= 1 || saving()" [attr.aria-label]="'Попередня сторінка: ' + statusLabel(column.status)" (click)="changePage(column.status, -1)">←</button><span>Стор. {{ column.page }} / {{ maxPage(column) }}</span><button type="button" [disabled]="column.page >= maxPage(column) || saving()" [attr.aria-label]="'Наступна сторінка: ' + statusLabel(column.status)" (click)="changePage(column.status, 1)">→</button></div> }
+          </section>
+        }
+      </div>
+    </div>
+  </main>
+</div>

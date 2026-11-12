@@ -190,6 +190,10 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
         var id = await Add(owner.Id, AppointmentStatus.Scheduled);
         using var first = await Login(admin.Phone); using var second = await Login(super.Phone);
         var version = await Version(first, id);
+        var board = await first.GetFromJsonAsync<System.Text.Json.JsonElement>($"/api/admin/appointments?status=Scheduled&search={Uri.EscapeDataString(owner.Phone)}");
+        var card = Assert.Single(board.GetProperty("items").EnumerateArray());
+        Assert.Equal(id, card.GetProperty("id").GetGuid());
+        Assert.Equal(version, card.GetProperty("version").GetUInt32());
         var results = await Task.WhenAll(Transition(first, id, version, "InProgress"), Cancel(second, id, version));
         Assert.Equal(new[] { HttpStatusCode.NoContent, HttpStatusCode.Conflict }.Order(), results.Select(r => r.StatusCode).Order());
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();

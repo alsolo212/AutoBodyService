@@ -4,7 +4,7 @@
     <nav aria-label="Навігація адміністратора"><a routerLink="/admin/inspection-calendar">Календар оглядів</a><a routerLink="/admin">Панель керування</a></nav>
   </header>
   <main class="profile-main">
-    <a class="text-link" routerLink="/admin/inspection-calendar">← Календар оглядів</a>
+    <a class="text-link" routerLink="/admin/appointments">← Замовлення</a>
     @if (loading()) { <p class="profile-panel" role="status">Завантажуємо замовлення…</p> }
     @else if (error(); as problem) {
       <section class="profile-panel" role="alert">
@@ -55,7 +55,7 @@
         }
       </section>
 
-      @if (nextStatus(); as next) { <section class="profile-panel" aria-labelledby="next-heading"><h2 id="next-heading">Наступний етап</h2><p>Доступний перехід: {{ status(item.status) }} → {{ status(next) }}.</p>
+      @if (nextStatus(); as next) { <section class="profile-panel" aria-labelledby="next-heading"><h2 id="next-heading" tabindex="-1">Наступний етап</h2><p>Доступний перехід: {{ status(item.status) }} → {{ status(next) }}.</p>
         <form class="profile-form" [formGroup]="transitionForm" (ngSubmit)="advance()">
           @if (next === 'Scheduled') { <label class="check"><input type="checkbox" formControlName="inspectionPerformed" /> Підтверджую, що огляд проведено</label>@if (!item.repairPlan) { <p class="field__hint">Спочатку узгодьте вартість і терміни.</p> } }
           @if (next === 'Completed') { <fieldset><legend>Підтвердіть обидва факти</legend><label class="check"><input type="checkbox" formControlName="paymentReceived" /> Оплату отримано</label><label class="check"><input type="checkbox" formControlName="vehicleHandedOver" /> Автомобіль передано клієнту</label></fieldset> }

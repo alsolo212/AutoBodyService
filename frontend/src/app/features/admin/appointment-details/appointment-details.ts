@@ -1,5 +1,6 @@
+import { DOCUMENT } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, Injector, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -19,9 +20,12 @@ export class AppointmentDetailsAdmin {
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private readonly fb = inject(NonNullableFormBuilder);
+  private readonly injector = inject(Injector);
+  private readonly document = inject(DOCUMENT);
   private readonly requests = new Subject<{ id: string; preserveDraft: boolean }>();
   private readonly cancelDialog = viewChild<ElementRef<HTMLDialogElement>>('cancelDialog');
   private id = '';
+  private boardActionHandled = false;
   readonly item = signal<AdminAppointment | null>(null);
   readonly loading = signal(true);
   readonly error = signal<'session' | 'forbidden' | 'missing' | 'failed' | null>(null);
@@ -76,6 +80,7 @@ export class AppointmentDetailsAdmin {
           this.item.set(item);
           if (!request.preserveDraft) this.resetForms(item);
           if (item.status === 'Completed' || item.status === 'Cancelled') this.editingPlan.set(false);
+          this.openBoardAction(item);
         }),
         catchError((error: unknown) => { this.error.set(this.loadError(error)); return of(null); }),
         finalize(() => this.loading.set(false)),
@@ -83,6 +88,7 @@ export class AppointmentDetailsAdmin {
     ).subscribe();
     this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
       this.id = params.get('id') ?? '';
+      this.boardActionHandled = false;
       this.notice.set(''); this.conflict.set(false); this.actionError.set(''); this.editingPlan.set(false); this.saving.set(false);
       this.load();
     });
@@ -158,6 +164,26 @@ export class AppointmentDetailsAdmin {
   }
   private loadError(error: unknown): 'session' | 'forbidden' | 'missing' | 'failed' {
     return error instanceof HttpErrorResponse && error.status === 401 ? 'session' : error instanceof HttpErrorResponse && error.status === 403 ? 'forbidden' : error instanceof HttpErrorResponse && error.status === 404 ? 'missing' : 'failed';
+  }
+  private openBoardAction(item: AdminAppointment) {
+    if (this.boardActionHandled) return;
+    const action = this.route.snapshot?.queryParamMap?.get('action');
+    if (!action) return;
+    this.boardActionHandled = true;
+    const version = this.route.snapshot.queryParamMap.get('version');
+    if (!version || !/^\d+$/.test(version) || Number(version) !== item.version) { this.conflict.set(true); return; }
+    const allowed = (action === 'plan' && item.status === 'AwaitingInspection' && !item.repairPlan)
+      || (action === 'schedule' && item.status === 'AwaitingInspection' && !!item.repairPlan)
+      || (action === 'complete' && item.status === 'AwaitingPayment')
+      || (action === 'cancel' && this.canCancel());
+    if (!allowed) { this.conflict.set(true); return; }
+    if (action === 'plan') this.editingPlan.set(true);
+    const id = this.id;
+    afterNextRender(() => {
+      if (this.id !== id || this.item()?.version !== item.version) return;
+      if (action === 'cancel') this.openCancel();
+      else this.document.getElementById(action === 'plan' ? 'plan-price' : 'next-heading')?.focus();
+    }, { injector: this.injector });
   }
   private resetForms(item: AdminAppointment) {
     this.fillPlan(item); this.transitionForm.reset(); this.cancelForm.reset(); this.planError.set(''); this.cancelError.set('');

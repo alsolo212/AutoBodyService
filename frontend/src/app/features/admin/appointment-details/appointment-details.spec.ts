@@ -32,9 +32,11 @@ describe('Kyiv date conversion', () => {
 describe('administrative appointment details', () => {
   let http: HttpTestingController;
   let params: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
+  let snapshot: { queryParamMap: ReturnType<typeof convertToParamMap> };
   beforeEach(() => {
     params = new BehaviorSubject(convertToParamMap({ id: 'order-1' }));
-    TestBed.configureTestingModule({ imports: [AppointmentDetailsAdmin], providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: ActivatedRoute, useValue: { paramMap: params } }] });
+    snapshot = { queryParamMap: convertToParamMap({}) };
+    TestBed.configureTestingModule({ imports: [AppointmentDetailsAdmin], providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: ActivatedRoute, useValue: { paramMap: params, snapshot } }] });
     http = TestBed.inject(HttpTestingController);
   });
   afterEach(() => { http.verify(); vi.unstubAllGlobals(); });
@@ -44,6 +46,15 @@ describe('administrative appointment details', () => {
     return fixture;
   }
   function token() { http.expectOne('/api/auth/antiforgery').flush(null); }
+
+  it('refuses a stale board action while displaying the current order', () => {
+    snapshot.queryParamMap = convertToParamMap({ action: 'plan', version: '40' });
+    const fixture = create();
+    expect(fixture.componentInstance.conflict()).toBe(true);
+    expect(fixture.componentInstance.editingPlan()).toBe(false);
+    expect(fixture.componentInstance.item()?.version).toBe(41);
+    http.expectNone('/api/auth/antiforgery');
+  });
 
   it('renders the administrative details, complete history and offset without inventing assignments', () => {
     const fixture = create({ ...base, status: 'Completed', repairPlan: plan,

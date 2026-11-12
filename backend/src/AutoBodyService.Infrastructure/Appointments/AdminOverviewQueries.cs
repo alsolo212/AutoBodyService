@@ -39,10 +39,10 @@ public sealed class AdminOverviewQueries(ApplicationDbContext db, IInspectionCal
         };
         var rows = await query.Skip((filter.Page - 1) * filter.PageSize).Take(filter.PageSize)
             .Select(x => new { x.Appointment.Id, x.Customer, x.Appointment.Vin, x.Appointment.Make, x.Appointment.Model, x.Appointment.InspectionStartUtc,
-                x.Appointment.Status, Plan = x.Appointment.RepairPlan == null ? null : new AgreedRepairDetails(x.Appointment.RepairPlan.AgreedPrice,
+                x.Appointment.Status, Version = EF.Property<uint>(x.Appointment, "Version"), Plan = x.Appointment.RepairPlan == null ? null : new AgreedRepairDetails(x.Appointment.RepairPlan.AgreedPrice,
                     x.Appointment.RepairPlan.Currency, x.Appointment.RepairPlan.PlannedStartUtc, x.Appointment.RepairPlan.EstimatedFinishUtc) }).ToListAsync(cancellationToken);
         return new(rows.Select(x => new AdminAppointmentListItem(x.Id, x.Customer, x.Vin, x.Make, x.Model, x.InspectionStartUtc,
-            Local(x.InspectionStartUtc), x.Status, x.Plan)).ToArray(), filter.Page, filter.PageSize, total);
+            Local(x.InspectionStartUtc), x.Status, x.Plan, x.Version)).ToArray(), filter.Page, filter.PageSize, total);
     }
 
     public async Task<AdminDashboard> GetDashboardAsync(CancellationToken cancellationToken)
