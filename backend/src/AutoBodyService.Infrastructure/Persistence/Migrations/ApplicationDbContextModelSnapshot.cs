@@ -224,6 +224,56 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AutoBodyService.Domain.Assignments.EmployeeAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AppointmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("AssignedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AssignedById")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("ReleasedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SpecializationSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedById");
+
+                    b.HasIndex("AppointmentId", "AssignedAtUtc");
+
+                    b.HasIndex("AppointmentId", "EmployeeId")
+                        .IsUnique()
+                        .HasFilter("\"ReleasedAtUtc\" IS NULL");
+
+                    b.HasIndex("EmployeeId", "AssignedAtUtc");
+
+                    b.ToTable("EmployeeAssignments", t =>
+                        {
+                            t.HasCheckConstraint("CK_EmployeeAssignment_ReleasedAt", "\"ReleasedAtUtc\" IS NULL OR \"ReleasedAtUtc\" >= \"AssignedAtUtc\"");
+                        });
+                });
+
             modelBuilder.Entity("AutoBodyService.Domain.Employees.Employee", b =>
                 {
                     b.Property<Guid>("Id")
@@ -854,6 +904,27 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.HasOne("AutoBodyService.Domain.Appointments.Appointment", null)
                         .WithOne("RepairPlan")
                         .HasForeignKey("AutoBodyService.Domain.Appointments.RepairPlan", "AppointmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.Assignments.EmployeeAssignment", b =>
+                {
+                    b.HasOne("AutoBodyService.Domain.Appointments.Appointment", null)
+                        .WithMany()
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AutoBodyService.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("AssignedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AutoBodyService.Domain.Employees.Employee", null)
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

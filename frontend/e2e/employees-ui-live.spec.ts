@@ -18,7 +18,7 @@ test('employees page manages a worker through the real API and survives reopenin
   expect((await create).status()).toBe(201);
   const card = page.locator('.employee-card').filter({ hasText: 'Тестовий працівник' });
   await expect(card).toContainText('Активний');
-  await expect(card).toContainText('Дані про призначення ще недоступні.');
+  await expect(card).toContainText('Активних призначень немає.');
   await card.getByRole('button', { name: /Редагувати/ }).click();
   await expect(page.getByLabel('Ім’я працівника')).toBeFocused();
   await page.getByLabel('Спеціалізація').fill('Фарбування');
@@ -42,7 +42,7 @@ test('employees page manages a worker through the real API and survives reopenin
   const restored = page.locator('.employee-card').filter({ hasText: 'Тестовий працівник' });
   await expect(restored).toContainText('Фарбування');
   await expect(restored).toContainText('Неактивний');
-  await expect(restored).toContainText('Дані про призначення ще недоступні.');
+  await expect(restored).toContainText('Активних призначень немає.');
   await page.reload(); await expect(restored).toContainText('Неактивний');
 
   const userContext = await browser.newContext({ ignoreHTTPSErrors: true });

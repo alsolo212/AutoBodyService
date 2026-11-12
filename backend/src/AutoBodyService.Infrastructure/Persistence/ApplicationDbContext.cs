@@ -4,6 +4,7 @@ using AutoBodyService.Infrastructure.Audit;
 using AutoBodyService.Domain.InspectionSchedule;
 using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Domain.Employees;
+using AutoBodyService.Domain.Assignments;
 using WeeklyScheduleEntity = AutoBodyService.Domain.InspectionSchedule.InspectionSchedule;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -19,6 +20,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<ScheduledReminder> ScheduledReminders => Set<ScheduledReminder>();
+    public DbSet<EmployeeAssignment> EmployeeAssignments => Set<EmployeeAssignment>();
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<AppointmentStatusEvent> AppointmentStatusEvents => Set<AppointmentStatusEvent>();
@@ -118,6 +120,20 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property<uint>("Version").IsRowVersion();
             entity.ToTable(table => table.HasCheckConstraint("CK_Employee_RequiredText",
                 "\"FullName\" ~ '[^[:space:]]' AND \"Specialization\" ~ '[^[:space:]]'"));
+        });
+        builder.Entity<EmployeeAssignment>(entity =>
+        {
+            entity.HasKey(a => a.Id);
+            entity.Property(a => a.AssignedById).IsRequired();
+            entity.Property(a => a.NameSnapshot).HasMaxLength(Employee.MaxTextLength).IsRequired();
+            entity.Property(a => a.SpecializationSnapshot).HasMaxLength(Employee.MaxTextLength).IsRequired();
+            entity.HasOne<Appointment>().WithMany().HasForeignKey(a => a.AppointmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Employee>().WithMany().HasForeignKey(a => a.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(a => a.AssignedById).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(a => new { a.AppointmentId, a.EmployeeId }).IsUnique().HasFilter("\"ReleasedAtUtc\" IS NULL");
+            entity.HasIndex(a => new { a.AppointmentId, a.AssignedAtUtc });
+            entity.HasIndex(a => new { a.EmployeeId, a.AssignedAtUtc });
+            entity.ToTable(t => t.HasCheckConstraint("CK_EmployeeAssignment_ReleasedAt", "\"ReleasedAtUtc\" IS NULL OR \"ReleasedAtUtc\" >= \"AssignedAtUtc\""));
         });
         builder.Entity<Appointment>(entity =>
         {

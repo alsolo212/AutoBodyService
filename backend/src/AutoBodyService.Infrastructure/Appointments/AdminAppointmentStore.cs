@@ -1,4 +1,5 @@
 using AutoBodyService.Application.Appointments;
+using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Application.Audit;
 using AutoBodyService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +23,11 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
             return AdminAppointmentResult.Success;
         if (mutation.StatusEvent is { } statusEvent)
         {
+            if (statusEvent.FromStatus == AppointmentStatus.InProgress && statusEvent.ToStatus != AppointmentStatus.InProgress)
+            {
+                var activeAssignments = await db.EmployeeAssignments.Where(a => a.AppointmentId == id && a.ReleasedAtUtc == null).ToListAsync(cancellationToken);
+                foreach (var assignment in activeAssignments) assignment.Release(statusEvent.ChangedAtUtc);
+            }
             db.AppointmentStatusEvents.Add(statusEvent);
             audit.RecordAppointmentStatusChange(actorId, id, statusEvent.FromStatus!.Value, statusEvent.ToStatus);
         }

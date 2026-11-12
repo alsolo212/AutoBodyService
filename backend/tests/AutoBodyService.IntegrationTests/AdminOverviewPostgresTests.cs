@@ -170,7 +170,7 @@ public sealed class AdminOverviewPostgresTests(PostgresIdentityFixture fixture) 
         Assert.Equal("Private issue", details.GetProperty("problemDescription").GetString());
         var contacts = details.GetProperty("manualContacts").EnumerateArray().ToArray(); Assert.Equal(2, contacts.Length);
         Assert.All(contacts, c => { Assert.Equal("Contact Actor", c.GetProperty("actorName").GetString()); Assert.Equal(Now, c.GetProperty("recordedAtUtc").GetDateTimeOffset()); });
-        Assert.Equal(JsonValueKind.Null, details.GetProperty("assignments").ValueKind);
+        Assert.Empty(details.GetProperty("assignments").EnumerateArray());
         var own = await Read(await user.GetAsync($"/api/appointments/{id}"));
         Assert.False(own.TryGetProperty("manualContacts", out _)); Assert.False(own.TryGetProperty("customerPhone", out _));
         var audit = await db.AdminAuditEvents.AsNoTracking().Where(e => e.ObjectId == id.ToString() && e.Action == "ManualContactRecorded").ToListAsync();

@@ -43,7 +43,6 @@ public sealed class AdminAppointmentCommands(IAdminAppointmentStore store) : IAd
                 default: return new(AdminAppointmentResult.Conflict);
             }
             var history = AppointmentStatusEvent.ForTransition(id, from, appointment.Status, actorId, now);
-            // When assignments are introduced, close them here in the same transaction on exit from InProgress.
             return new(AdminAppointmentResult.Success, history, confirmation);
         }), cancellationToken);
 
@@ -53,7 +52,6 @@ public sealed class AdminAppointmentCommands(IAdminAppointmentStore store) : IAd
             var from = appointment.Status;
             appointment.CancelByAdmin(confirmed, reason);
             var history = AppointmentStatusEvent.ForTransition(id, from, appointment.Status, actorId, now, reason);
-            // Assignment closure will join this same transaction when that model exists.
             return new(AdminAppointmentResult.Success, history);
         }), cancellationToken);
 

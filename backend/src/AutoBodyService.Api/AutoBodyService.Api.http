@@ -177,3 +177,23 @@ RequestVerificationToken: {{xsrfToken}}
   "version": {{employeeVersion}},
   "isActive": false
 }
+
+### Assignment history, optionally filtered by order, employee, and activity.
+GET {{baseUrl}}/api/admin/assignments?appointmentId={{appointmentId}}&active=true
+
+### Assign an active worker to an InProgress repair (Admin/SuperAdmin cookie and antiforgery token).
+POST {{baseUrl}}/api/admin/assignments
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{
+  "appointmentId": "{{appointmentId}}",
+  "employeeId": "{{employeeId}}"
+}
+
+### Read a single assignment returned by POST.
+GET {{baseUrl}}/api/admin/assignments/{{assignmentId}}
+
+### Release one assignment and retain its history.
+PATCH {{baseUrl}}/api/admin/assignments/{{assignmentId}}/release
+RequestVerificationToken: {{xsrfToken}}

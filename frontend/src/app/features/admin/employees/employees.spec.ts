@@ -18,18 +18,28 @@ describe('Employees', () => {
   function create(items: Employee[] = []) {
     const fixture = TestBed.createComponent(Employees); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Завантажуємо працівників');
-    http.expectOne('/api/admin/employees').flush(items); fixture.detectChanges();
+    http.expectOne('/api/admin/employees').flush(items); http.expectOne('/api/admin/assignments?active=true').flush([]); fixture.detectChanges();
     return fixture;
   }
   it('renders empty and inactive states without inventing assignment data', () => {
     const fixture = create();
     expect(fixture.nativeElement.textContent).toContain('Працівників ще не додано');
     fixture.componentInstance.load();
-    http.expectOne('/api/admin/employees').flush([{ ...existing, isActive: false }]); fixture.detectChanges();
+    http.expectOne('/api/admin/employees').flush([{ ...existing, isActive: false }]); http.expectOne('/api/admin/assignments?active=true').flush([]); fixture.detectChanges();
     const card: HTMLElement = fixture.nativeElement.querySelector('.employee-card');
     expect(card.textContent).toContain('Неактивний');
-    expect(card.textContent).toContain('Дані про призначення ще недоступні');
+    expect(card.textContent).toContain('Активних призначень немає');
     expect(fixture.nativeElement.querySelector('a[href="/admin/assignments"]')).not.toBeNull();
+  });
+  it('renders real active assignments and reports an unavailable assignments endpoint', () => {
+    const fixture = TestBed.createComponent(Employees); fixture.detectChanges();
+    http.expectOne('/api/admin/employees').flush([existing]);
+    http.expectOne('/api/admin/assignments?active=true').flush([{ id: 'assignment-1', employeeId: existing.id, appointmentId: 'order-1' }]); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('a[href="/admin/appointments/order-1"]')?.textContent).toContain('order-1');
+    fixture.componentInstance.load(); http.expectOne('/api/admin/employees').flush([existing]);
+    http.expectOne('/api/admin/assignments?active=true').flush(null, { status: 500, statusText: 'Error' }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Не вдалося завантажити призначення');
+    expect(fixture.nativeElement.textContent).not.toContain('Активних призначень немає');
   });
   it('validates fields and creates a worker only after fetching the antiforgery token', () => {
     const fixture = create(); const component = fixture.componentInstance;
@@ -76,9 +86,10 @@ describe('Employees', () => {
   });
   it('reports forbidden loads, retries and reports a server validation error without losing input', () => {
     const fixture = TestBed.createComponent(Employees); fixture.detectChanges();
-    http.expectOne('/api/admin/employees').flush(null, { status: 403, statusText: 'Forbidden' }); fixture.detectChanges();
+    const staff = http.expectOne('/api/admin/employees'); const assignments = http.expectOne('/api/admin/assignments?active=true');
+    staff.flush(null, { status: 403, statusText: 'Forbidden' }); expect(assignments.cancelled).toBe(true); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Доступ до працівників заборонено');
-    fixture.componentInstance.load(); http.expectOne('/api/admin/employees').flush([]); fixture.detectChanges();
+    fixture.componentInstance.load(); http.expectOne('/api/admin/employees').flush([]); http.expectOne('/api/admin/assignments?active=true').flush([]); fixture.detectChanges();
     fixture.componentInstance.form.setValue({ fullName: 'Name', specialization: 'Repair' }); fixture.componentInstance.save();
     http.expectOne('/api/auth/antiforgery').flush(null);
     http.expectOne('/api/admin/employees').flush(null, { status: 400, statusText: 'Bad Request' }); fixture.detectChanges();

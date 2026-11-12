@@ -31,8 +31,10 @@ public sealed class AppointmentQueries(ApplicationDbContext db) : IAppointmentQu
                 History = a.StatusEvents.OrderBy(e => e.ChangedAtUtc).ThenBy(e => e.Id)
                     .Select(e => new CustomerStatusHistory(e.FromStatus, e.ToStatus, e.ChangedAtUtc)).ToList() })
             .SingleOrDefaultAsync(cancellationToken);
-        return row is null ? null : new CustomerAppointmentDetails(row.Id, row.Vin, row.Make, row.Model, row.ProblemDescription,
-            row.InspectionStartUtc, row.Status, row.History, row.Plan, null);
+        if (row is null) return null;
+        var participants = await ParticipantsAsync(id, cancellationToken);
+        return new CustomerAppointmentDetails(row.Id, row.Vin, row.Make, row.Model, row.ProblemDescription,
+            row.InspectionStartUtc, row.Status, row.History, row.Plan, participants);
     }
 
     public async Task<AdminAppointmentDetails?> GetForAdminAsync(Guid id, CancellationToken cancellationToken)
@@ -61,7 +63,22 @@ public sealed class AppointmentQueries(ApplicationDbContext db) : IAppointmentQu
                               where e.AppointmentId == id
                               orderby e.RecordedAtUtc descending, e.Id
                               select new AdminManualContact(e.Reason, actor.Name, e.RecordedAtUtc)).ToListAsync(cancellationToken);
+        var assignments = await (from a in db.EmployeeAssignments.AsNoTracking()
+                                 join actor in db.Users.AsNoTracking() on a.AssignedById equals actor.Id
+                                 where a.AppointmentId == id
+                                 orderby a.AssignedAtUtc, a.Id
+                                 select new AdminAssignmentDetails(a.Id, a.EmployeeId, a.NameSnapshot, a.SpecializationSnapshot,
+                                     a.AssignedById, actor.Name, a.AssignedAtUtc, a.ReleasedAtUtc)).ToListAsync(cancellationToken);
+        var participants = await ParticipantsAsync(id, cancellationToken);
         return new AdminAppointmentDetails(row.Id, row.Vin, row.Make, row.Model, row.ProblemDescription, row.InspectionStartUtc,
-            row.Status, row.CustomerName, row.CustomerPhone, history, row.Plan, null, row.Version, payment, contacts, null);
+            row.Status, row.CustomerName, row.CustomerPhone, history, row.Plan, participants, row.Version, payment, contacts, assignments);
+    }
+    private async Task<IReadOnlyList<AppointmentParticipant>> ParticipantsAsync(Guid id, CancellationToken cancellationToken)
+    {
+        // Use the most recent assignment snapshot once per employee, including inactive workers.
+        var rows = await db.EmployeeAssignments.AsNoTracking().Where(a => a.AppointmentId == id)
+            .OrderByDescending(a => a.AssignedAtUtc).ThenByDescending(a => a.Id)
+            .Select(a => new { a.EmployeeId, a.NameSnapshot, a.SpecializationSnapshot }).ToListAsync(cancellationToken);
+        return rows.DistinctBy(a => a.EmployeeId).Select(a => new AppointmentParticipant(a.NameSnapshot, a.SpecializationSnapshot)).ToArray();
     }
 }

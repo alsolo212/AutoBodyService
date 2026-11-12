@@ -113,7 +113,7 @@ public sealed class AppointmentQueriesPostgresTests(PostgresIdentityFixture fixt
         Assert.Equal("AwaitingInspection", history.GetProperty("toStatus").GetString());
         Assert.False(history.TryGetProperty("actorName", out _)); Assert.False(history.TryGetProperty("reason", out _));
         Assert.False(data.TryGetProperty("customerPhone", out _)); Assert.False(data.TryGetProperty("userId", out _));
-        Assert.Equal(JsonValueKind.Null, data.GetProperty("repairPlan").ValueKind); Assert.Equal(JsonValueKind.Null, data.GetProperty("participants").ValueKind);
+        Assert.Equal(JsonValueKind.Null, data.GetProperty("repairPlan").ValueKind); Assert.Empty(data.GetProperty("participants").EnumerateArray());
         using var foreign = await client.GetAsync("/api/appointments/" + foreignId);
         using var missing = await client.GetAsync("/api/appointments/" + Guid.NewGuid());
         Assert.Equal(HttpStatusCode.NotFound, foreign.StatusCode); Assert.Equal(missing.StatusCode, foreign.StatusCode);
