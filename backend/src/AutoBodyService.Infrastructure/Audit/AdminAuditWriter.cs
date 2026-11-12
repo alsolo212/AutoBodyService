@@ -29,6 +29,12 @@ public sealed class AdminAuditWriter(ApplicationDbContext db, TimeProvider clock
         Add(actorId, "RepairPlanChanged", "Appointment", appointmentId.ToString("D"), new { priceChanged, datesChanged });
     }
 
+    public void RecordPriceItemChange(string actorId, Guid priceItemId, bool created)
+    {
+        ArgumentOutOfRangeException.ThrowIfEqual(priceItemId, Guid.Empty);
+        Add(actorId, created ? "PriceItemCreated" : "PriceItemChanged", "PriceListItem", priceItemId.ToString("D"), new { });
+    }
+
     public void RecordManualContact(string actorId, Guid appointmentId, ManualContactReason reason)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(appointmentId, Guid.Empty);

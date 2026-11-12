@@ -5,6 +5,7 @@ using AutoBodyService.Domain.InspectionSchedule;
 using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Domain.Employees;
 using AutoBodyService.Domain.Assignments;
+using AutoBodyService.Domain.Prices;
 using WeeklyScheduleEntity = AutoBodyService.Domain.InspectionSchedule.InspectionSchedule;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -20,6 +21,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<ScheduledReminder> ScheduledReminders => Set<ScheduledReminder>();
+    public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();
     public DbSet<EmployeeAssignment> EmployeeAssignments => Set<EmployeeAssignment>();
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
@@ -111,6 +113,21 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         {
             entity.HasKey(hours => hours.Id);
             entity.ToTable(table => table.HasCheckConstraint("CK_InspectionWeeklyHours_Valid", "\"DayOfWeek\" BETWEEN 0 AND 6 AND \"Start\" < \"End\""));
+        });
+        builder.Entity<PriceListItem>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(PriceListItem.MaxNameLength).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(PriceListItem.MaxDescriptionLength).IsRequired();
+            entity.Property(x => x.Price).HasColumnType("numeric");
+            entity.Property<uint>("Version").IsRowVersion();
+            entity.HasIndex(x => new { x.SortOrder, x.Id }).HasFilter("\"IsPublished\" AND NOT \"IsArchived\"");
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_PriceListItem_Name", "\"Name\" ~ '[^[:space:]]'");
+                t.HasCheckConstraint("CK_PriceListItem_Price", "\"Price\" >= 0 AND \"Price\" <> 'NaN'::numeric AND \"Price\" <> 'Infinity'::numeric AND \"Price\" <= 79228162514264337593543950335");
+                t.HasCheckConstraint("CK_PriceListItem_Publication", "NOT (\"IsArchived\" AND \"IsPublished\")");
+            });
         });
         builder.Entity<Employee>(entity =>
         {

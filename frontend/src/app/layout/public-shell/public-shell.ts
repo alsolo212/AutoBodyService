@@ -1,20 +1,21 @@
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { PublicContacts } from '../../shared/public-contacts/public-contacts';
+import { PublicPrices } from '../../shared/public-prices/public-prices';
 
 @Component({
   selector: 'app-public-shell',
-  imports: [RouterLink, PublicContacts],
+  imports: [RouterLink, PublicContacts, PublicPrices],
   template: `
     <a class="skip-link" href="#main">Перейти до вмісту</a>
     <header class="site-header">
       <div class="site-header__inner container">
         <a class="brand" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a>
         <nav class="public-nav" aria-label="Основна навігація">
-          <a href="#services">Послуги</a><a href="#process">Як це працює</a><a href="#contacts">Контакти</a>
+          <a href="#services">Послуги</a><a href="#prices">Ціни</a><a href="#process">Як це працює</a><a href="#contacts">Контакти</a>
         </nav>
         <a class="button button--outline header-action" routerLink="/account/appointments">Особистий кабінет <span aria-hidden="true">↗</span></a>
-        <details class="public-mobile-nav"><summary>Меню</summary><nav aria-label="Мобільна навігація"><a href="#services">Послуги</a><a href="#process">Як це працює</a><a href="#contacts">Контакти</a><a routerLink="/account/appointments">Особистий кабінет</a></nav></details>
+        <details class="public-mobile-nav"><summary>Меню</summary><nav aria-label="Мобільна навігація"><a href="#services">Послуги</a><a href="#prices">Ціни</a><a href="#process">Як це працює</a><a href="#contacts">Контакти</a><a routerLink="/account/appointments">Особистий кабінет</a></nav></details>
       </div>
     </header>
     <main id="main">
@@ -38,7 +39,7 @@ import { PublicContacts } from '../../shared/public-contacts/public-contacts';
         <div class="principles"><article><span>01</span><h3>Первинний огляд</h3><p>Знайомимося з автомобілем та описом проблеми.</p></article><article><span>02</span><h3>Узгодження</h3><p>Обговорюємо вартість і терміни після огляду.</p></article><article><span>03</span><h3>Прозорий процес</h3><p>Інформація про етапи ремонту — у вашому кабінеті.</p></article></div>
       </section>
       <section class="process-section" id="process"><div class="container process-grid"><div><p class="eyebrow"><span class="eyebrow__line"></span> ПРОСТО ТА ПОСЛІДОВНО</p><h2>Від огляду<br>до видачі авто.</h2></div><ol class="process-list"><li><span>01</span><div><strong>Запис на огляд</strong><p>Оберіть зручний час і опишіть проблему.</p></div></li><li><span>02</span><div><strong>Огляд та узгодження</strong><p>Особисто погоджуємо деталі ремонту.</p></div></li><li><span>03</span><div><strong>Ремонт</strong><p>Стежте за перебігом у своєму кабінеті.</p></div></li><li><span>04</span><div><strong>Отримання автомобіля</strong><p>Оплата відбувається під час отримання авто.</p></div></li></ol></div></section>
-      <section class="section container" id="prices"><p class="eyebrow"><span class="eyebrow__line"></span> ПОСЛУГИ ТА ЦІНИ</p><h2>Орієнтовні ціни</h2><p>Інформація про послуги та ціни готується. Вартість ремонту узгоджується після огляду.</p></section>
+      <section class="section container" id="prices"><p class="eyebrow"><span class="eyebrow__line"></span> ПОСЛУГИ ТА ЦІНИ</p><h2>Орієнтовні ціни</h2><app-public-prices /></section>
       <section class="section container" id="contacts"><p class="eyebrow"><span class="eyebrow__line"></span> ЗВ’ЯЗОК З НАМИ</p><h2>Контакти</h2><app-public-contacts /></section>
     </main>
     <footer class="site-footer"><div class="container footer-inner"><a class="footer-brand" routerLink="/">AutoBody<span>Service</span></a><p>Кузовний ремонт. Увага до кожної деталі.</p><a href="#main">На початок ↑</a></div></footer>

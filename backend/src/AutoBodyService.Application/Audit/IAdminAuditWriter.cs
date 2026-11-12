@@ -10,5 +10,6 @@ public interface IAdminAuditWriter
     void RecordDateExceptionChange(string actorId, DateOnly date, InspectionException? before, InspectionException? after);
     void RecordAppointmentStatusChange(string actorId, Guid appointmentId, AppointmentStatus from, AppointmentStatus to);
     void RecordRepairPlanChange(string actorId, Guid appointmentId, bool priceChanged, bool datesChanged);
+    void RecordPriceItemChange(string actorId, Guid priceItemId, bool created);
     void RecordManualContact(string actorId, Guid appointmentId, ManualContactReason reason);
 }

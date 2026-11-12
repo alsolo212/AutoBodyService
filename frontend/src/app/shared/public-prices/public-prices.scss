@@ -1,0 +1,7 @@
+.prices-intro { color: var(--muted); line-height: 1.6; }
+.price-list { list-style: none; padding: 0; margin: 1.5rem 0 0; border-top: 1px solid var(--line); }
+.price-list li { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; border-bottom: 1px solid var(--line); padding: 1rem 0; }
+.price-list h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.price-list p { color: var(--muted); margin: .35rem 0 0; line-height: 1.5; overflow-wrap: anywhere; }
+.price-list strong { flex: none; font-size: 1rem; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .price-list li { display: block; } .price-list strong { display: block; margin-top: .6rem; } }

@@ -447,6 +447,58 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AutoBodyService.Domain.Prices.PriceListItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsFrom")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPublished")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SortOrder", "Id")
+                        .HasFilter("\"IsPublished\" AND NOT \"IsArchived\"");
+
+                    b.ToTable("PriceListItems", t =>
+                        {
+                            t.HasCheckConstraint("CK_PriceListItem_Name", "\"Name\" ~ '[^[:space:]]'");
+
+                            t.HasCheckConstraint("CK_PriceListItem_Price", "\"Price\" >= 0 AND \"Price\" <> 'NaN'::numeric AND \"Price\" <> 'Infinity'::numeric AND \"Price\" <= 79228162514264337593543950335");
+
+                            t.HasCheckConstraint("CK_PriceListItem_Publication", "NOT (\"IsArchived\" AND \"IsPublished\")");
+                        });
+                });
+
             modelBuilder.Entity("AutoBodyService.Infrastructure.Audit.AdminAuditEvent", b =>
                 {
                     b.Property<Guid>("Id")

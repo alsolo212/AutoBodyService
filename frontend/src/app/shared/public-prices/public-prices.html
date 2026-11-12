@@ -1,0 +1,5 @@
+<p class="prices-intro">Вартість ремонту узгоджується після огляду.</p>
+@if (loading()) { <p role="status">Завантажуємо ціни…</p> }
+@else if (failed()) { <div role="alert"><p>Не вдалося завантажити ціни.</p><button class="button button--secondary" type="button" (click)="load()">Спробувати ще раз</button></div> }
+@else if (!items().length) { <p>Опублікованих послуг поки немає.</p> }
+@else { <ul class="price-list">@for (item of items(); track item.id) { <li><div><h3>{{ item.name }}</h3>@if (item.description) { <p>{{ item.description }}</p> }</div><strong>{{ amount(item) }}</strong></li> }</ul> }

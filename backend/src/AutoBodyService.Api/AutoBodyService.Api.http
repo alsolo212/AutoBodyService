@@ -197,3 +197,36 @@ GET {{baseUrl}}/api/admin/assignments/{{assignmentId}}
 ### Release one assignment and retain its history.
 PATCH {{baseUrl}}/api/admin/assignments/{{assignmentId}}/release
 RequestVerificationToken: {{xsrfToken}}
+
+### Public indicative prices, without authentication.
+GET {{baseUrl}}/api/prices
+
+### All service prices (Admin/SuperAdmin cookie).
+GET {{baseUrl}}/api/admin/prices
+
+### Create a price (refresh antiforgery after login).
+POST {{baseUrl}}/api/admin/prices
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{
+  "name": "Тестова послуга",
+  "description": "Орієнтовна вартість",
+  "price": 0,
+  "isFrom": true,
+  "sortOrder": 1,
+  "isPublished": true
+}
+
+### Read an administrative record by its returned id.
+GET {{baseUrl}}/api/admin/prices/{{priceId}}
+
+### Archive without deleting; use the most recent version from GET.
+PATCH {{baseUrl}}/api/admin/prices/{{priceId}}
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{
+  "version": {{priceVersion}},
+  "isArchived": true
+}

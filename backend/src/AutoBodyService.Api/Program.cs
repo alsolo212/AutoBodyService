@@ -53,7 +53,7 @@ app.Use(async (context, next) =>
         !context.Request.Path.Equals("/api/auth/logout", StringComparison.OrdinalIgnoreCase) &&
         !context.Request.Path.Equals("/api/auth/antiforgery", StringComparison.OrdinalIgnoreCase) &&
         !context.Request.Path.Equals("/api/auth/change-password", StringComparison.OrdinalIgnoreCase) &&
-        !(HttpMethods.IsGet(context.Request.Method) && (context.Request.Path.Equals("/api/public/contacts", StringComparison.OrdinalIgnoreCase) || context.Request.Path.Equals("/api/public/contacts/", StringComparison.OrdinalIgnoreCase))))
+        !(HttpMethods.IsGet(context.Request.Method) && (context.Request.Path.Equals("/api/public/contacts", StringComparison.OrdinalIgnoreCase) || context.Request.Path.Equals("/api/public/contacts/", StringComparison.OrdinalIgnoreCase) || context.Request.Path.Equals("/api/prices", StringComparison.OrdinalIgnoreCase) || context.Request.Path.Equals("/api/prices/", StringComparison.OrdinalIgnoreCase))))
     {
         var users = context.RequestServices.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ApplicationUser>>();
         var user = await users.GetUserAsync(context.User);
