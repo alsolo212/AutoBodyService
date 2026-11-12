@@ -72,6 +72,19 @@
         @if (item.manualContacts.length) { <ol class="history">@for (event of item.manualContacts; track $index) { <li><strong>{{ contactLabels[event.reason] }}</strong><span>{{ event.actorName }}</span><time [attr.datetime]="event.recordedAtUtc">{{ format(event.recordedAtUtc) }}</time></li> }</ol> } @else { <p>Відміток про зв’язок ще немає.</p> }
       </section>
 
+      <section class="profile-panel" aria-labelledby="assignments-heading"><h2 id="assignments-heading">Призначення працівників</h2>
+        @if (item.assignments; as assignments) {
+          @if (assignments.length) { <ol class="history">@for (assignment of assignments; track assignment.id) {
+            <li><strong>{{ assignment.name }} · {{ assignment.specialization }}</strong>
+              <span>{{ assignment.releasedAtUtc ? 'Завершено' : 'Активне' }}</span>
+              <span>Призначив(ла): {{ assignment.assignedByName }}</span>
+              <span>Початок: <time [attr.datetime]="assignment.assignedAtUtc">{{ format(assignment.assignedAtUtc) }}</time></span>
+              @if (assignment.releasedAtUtc; as released) { <span>Завершив(ла): {{ assignment.releasedByName || 'не зафіксовано' }}</span><span>Завершення: <time [attr.datetime]="released">{{ format(released) }}</time></span> }
+            </li>
+          }</ol> } @else { <p>Призначень ще немає.</p> }
+        } @else { <p>Історія призначень недоступна.</p> }
+      </section>
+
       <section class="profile-panel" aria-labelledby="history-heading"><h2 id="history-heading">Історія статусів</h2>
         @if (item.history.length) { <ol class="history">@for (event of item.history; track $index) { <li><strong>@if (event.fromStatus) { {{ status(event.fromStatus) }} → } {{ status(event.toStatus) }}</strong><span>{{ event.actorName }}</span><time [attr.datetime]="event.changedAtUtc">{{ format(event.changedAtUtc) }}</time>@if (event.reason) { <span class="problem">Причина: {{ event.reason }}</span> }</li> }</ol> } @else { <p>Історія статусів поки відсутня.</p> }
         @if (item.paymentConfirmation; as payment) { <div class="payment"><h3>Оплата та видача</h3><p>Підтвердив(ла): {{ payment.actorName }}</p><p>Оплата: {{ format(payment.paidAtUtc) }}<br />Передача автомобіля: {{ format(payment.handedOverAtUtc) }}</p></div> }

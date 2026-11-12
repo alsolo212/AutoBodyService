@@ -1,0 +1,15 @@
+.hint, .empty { color: var(--muted); font-size: .84rem; line-height: 1.5; }
+.source-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); gap: .7rem; min-height: 5rem; }
+.order-card, .assigned-card { background: #fff; border: 1px solid var(--line); border-radius: .45rem; padding: .8rem; min-width: 0; overflow-wrap: anywhere; }
+.order-top { display: flex; justify-content: space-between; align-items: start; gap: .5rem; color: #53685a; font-size: .75rem; font-weight: 700; }
+.drag-handle { cursor: grab; touch-action: none; font-size: 1.25rem; padding: .25rem; }.drag-handle:active { cursor: grabbing; }
+.order-card h3 { font-size: 1rem; margin: .45rem 0; }.order-card p { color: var(--muted); font-size: .75rem; margin: 0; }
+a { text-decoration: underline; text-underline-offset: .15em; }
+.worker-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: .8rem; align-items: start; }
+.worker { min-width: 0; background: #eaf0e7; border: 1px solid #dfe6dc; border-radius: .5rem; padding: .9rem; }
+.worker h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }.specialization { color: var(--muted); font-size: .8rem; overflow-wrap: anywhere; }
+.worker-drop { display: grid; gap: .6rem; align-content: start; min-height: 6rem; padding-block: .4rem; }
+.assigned-card { display: grid; gap: .4rem; font-size: .85rem; }.assigned-card span { color: var(--muted); font-size: .75rem; }.assigned-card .button { width: 100%; min-height: 2.5rem; }
+.assignment-control { border-top: 1px solid #d5e0d3; display: grid; gap: .5rem; padding-top: .8rem; }.assignment-control label { font-size: .76rem; font-weight: 700; }.assignment-control .button { width: 100%; }
+.retry { border: 0; background: transparent; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
+.cdk-drag-placeholder { opacity: .3; }.cdk-drag-preview { box-sizing: border-box; box-shadow: 0 .8rem 2rem #17221f40; }.cdk-drop-list-receiving { outline: 2px dashed #809b75; outline-offset: 2px; }

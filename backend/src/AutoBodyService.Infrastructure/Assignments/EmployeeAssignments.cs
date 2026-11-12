@@ -19,7 +19,8 @@ public sealed class EmployeeAssignments(ApplicationDbContext db, TimeProvider cl
                       join actor in db.Users.AsNoTracking() on a.AssignedById equals actor.Id
                       orderby a.AssignedAtUtc descending, a.Id
                       select new AssignmentDetails(a.Id, a.AppointmentId, a.EmployeeId, a.NameSnapshot, a.SpecializationSnapshot,
-                          a.AssignedById, actor.Name, a.AssignedAtUtc, a.ReleasedAtUtc)).ToListAsync(cancellationToken);
+                          a.AssignedById, actor.Name, a.AssignedAtUtc, a.ReleasedAtUtc, a.ReleasedById,
+                          db.Users.Where(u => u.Id == a.ReleasedById).Select(u => u.Name).SingleOrDefault())).ToListAsync(cancellationToken);
     }
 
     public Task<AssignmentDetails?> GetAsync(Guid id, CancellationToken cancellationToken) =>
@@ -27,7 +28,8 @@ public sealed class EmployeeAssignments(ApplicationDbContext db, TimeProvider cl
          join actor in db.Users.AsNoTracking() on a.AssignedById equals actor.Id
          where a.Id == id
          select new AssignmentDetails(a.Id, a.AppointmentId, a.EmployeeId, a.NameSnapshot, a.SpecializationSnapshot,
-             a.AssignedById, actor.Name, a.AssignedAtUtc, a.ReleasedAtUtc)).SingleOrDefaultAsync(cancellationToken);
+             a.AssignedById, actor.Name, a.AssignedAtUtc, a.ReleasedAtUtc, a.ReleasedById,
+                          db.Users.Where(u => u.Id == a.ReleasedById).Select(u => u.Name).SingleOrDefault())).SingleOrDefaultAsync(cancellationToken);
 
     public async Task<(AssignmentResult Result, AssignmentDetails? Assignment)> AssignAsync(Guid appointmentId, Guid employeeId, string actorId, CancellationToken cancellationToken)
     {
@@ -55,7 +57,7 @@ public sealed class EmployeeAssignments(ApplicationDbContext db, TimeProvider cl
         { return (AssignmentResult.Conflict, null); }
     }
 
-    public async Task<AssignmentResult> ReleaseAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<AssignmentResult> ReleaseAsync(Guid id, string actorId, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var appointmentId = await db.EmployeeAssignments.AsNoTracking().Where(a => a.Id == id).Select(a => (Guid?)a.AppointmentId).SingleOrDefaultAsync(cancellationToken);
@@ -64,7 +66,7 @@ public sealed class EmployeeAssignments(ApplicationDbContext db, TimeProvider cl
         var assignment = await db.EmployeeAssignments.SingleOrDefaultAsync(a => a.Id == id, cancellationToken);
         if (assignment is null) return AssignmentResult.NotFound;
         if (assignment.ReleasedAtUtc is not null) return AssignmentResult.Conflict;
-        assignment.Release(clock.GetUtcNow());
+        assignment.Release(actorId, clock.GetUtcNow());
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return AssignmentResult.Success;

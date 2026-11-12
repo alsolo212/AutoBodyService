@@ -6,10 +6,11 @@ import { AuthService } from '../../core/auth';
 import { finalize } from 'rxjs';
 import { Dashboard } from '../../features/admin/dashboard/dashboard';
 import { Employees } from '../../features/admin/employees/employees';
+import { AssignmentBoard } from '../../features/admin/assignment-board/assignment-board';
 
 @Component({
   selector: 'app-workspace-shell',
-  imports: [RouterLink, UiState, ApiStatus, Dashboard, Employees],
+  imports: [RouterLink, UiState, ApiStatus, Dashboard, Employees, AssignmentBoard],
   template: `
     <a class="skip-link" [attr.href]="isAdmin ? '/' + routePath + '#workspace-main' : '/account/appointments#workspace-main'">Перейти до вмісту</a>
     <div class="workspace">
@@ -41,6 +42,8 @@ import { Employees } from '../../features/admin/employees/employees';
             <div class="breadcrumbs"><a routerLink="/">Головна</a><span>/</span><span>{{ isAdmin ? 'Панель керування' : 'Особистий кабінет' }}</span></div>
             @if (isAdmin && !section) {
               <app-admin-dashboard />
+            } @else if (isAdmin && section === 'Розподіл робіт') {
+              @defer (on immediate) { <app-assignment-board /> } @placeholder { <p role="status">Завантажуємо розподіл робіт…</p> }
             } @else if (isAdmin && section === 'Працівники') {
               <app-employees />
             } @else {

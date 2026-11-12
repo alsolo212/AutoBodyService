@@ -130,10 +130,15 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne<Appointment>().WithMany().HasForeignKey(a => a.AppointmentId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Employee>().WithMany().HasForeignKey(a => a.EmployeeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(a => a.AssignedById).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(a => a.ReleasedById).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(a => new { a.AppointmentId, a.EmployeeId }).IsUnique().HasFilter("\"ReleasedAtUtc\" IS NULL");
             entity.HasIndex(a => new { a.AppointmentId, a.AssignedAtUtc });
             entity.HasIndex(a => new { a.EmployeeId, a.AssignedAtUtc });
-            entity.ToTable(t => t.HasCheckConstraint("CK_EmployeeAssignment_ReleasedAt", "\"ReleasedAtUtc\" IS NULL OR \"ReleasedAtUtc\" >= \"AssignedAtUtc\""));
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_EmployeeAssignment_ReleasedAt", "\"ReleasedAtUtc\" IS NULL OR \"ReleasedAtUtc\" >= \"AssignedAtUtc\"");
+                t.HasCheckConstraint("CK_EmployeeAssignment_ReleasedBy", "\"ReleasedById\" IS NULL OR \"ReleasedAtUtc\" IS NOT NULL");
+            });
         });
         builder.Entity<Appointment>(entity =>
         {

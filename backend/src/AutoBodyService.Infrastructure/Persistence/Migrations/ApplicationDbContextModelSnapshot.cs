@@ -251,6 +251,9 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ReleasedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ReleasedById")
+                        .HasColumnType("text");
+
                     b.Property<string>("SpecializationSnapshot")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -259,6 +262,8 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AssignedById");
+
+                    b.HasIndex("ReleasedById");
 
                     b.HasIndex("AppointmentId", "AssignedAtUtc");
 
@@ -271,6 +276,8 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.ToTable("EmployeeAssignments", t =>
                         {
                             t.HasCheckConstraint("CK_EmployeeAssignment_ReleasedAt", "\"ReleasedAtUtc\" IS NULL OR \"ReleasedAtUtc\" >= \"AssignedAtUtc\"");
+
+                            t.HasCheckConstraint("CK_EmployeeAssignment_ReleasedBy", "\"ReleasedById\" IS NULL OR \"ReleasedAtUtc\" IS NOT NULL");
                         });
                 });
 
@@ -927,6 +934,11 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         .HasForeignKey("EmployeeId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("AutoBodyService.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ReleasedById")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionDateInterval", b =>

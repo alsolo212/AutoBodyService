@@ -56,6 +56,16 @@ describe('administrative appointment details', () => {
     http.expectNone('/api/auth/antiforgery');
   });
 
+  it('renders active and historical assignments with actor names, timestamps and legacy unknown release actor', () => {
+    const fixture = create({ ...base, assignments: [
+      { id: 'a', employeeId: 'one', name: 'Працівник', specialization: 'Маляр', assignedById: 'admin', assignedByName: 'Адміністратор', assignedAtUtc: '2026-01-01T10:00:00Z', releasedAtUtc: null, releasedById: null, releasedByName: null },
+      { id: 'b', employeeId: 'two', name: 'Історичний', specialization: 'Майстер', assignedById: 'admin', assignedByName: 'Адміністратор', assignedAtUtc: '2026-01-01T10:00:00Z', releasedAtUtc: '2026-01-01T12:00:00Z', releasedById: null, releasedByName: null },
+    ] });
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Призначення працівників'); expect(text).toContain('Активне'); expect(text).toContain('Завершено');
+    expect(text).toContain('Призначив(ла): Адміністратор'); expect(text).toContain('Завершив(ла): не зафіксовано');
+    expect(text).toContain('Історичний'); expect(text).toContain('UTC+02:00');
+  });
   it('renders the administrative details, complete history and offset without inventing assignments', () => {
     const fixture = create({ ...base, status: 'Completed', repairPlan: plan,
       history: [{ fromStatus: 'InProgress', toStatus: 'Cancelled', changedAtUtc: '2026-10-25T01:30:00Z', actorName: 'Адміністратор', reason: 'Причина' }],
@@ -63,7 +73,7 @@ describe('administrative appointment details', () => {
       paymentConfirmation: { actorName: 'Адміністратор', paidAtUtc: '2026-10-25T01:30:00Z', handedOverAtUtc: '2026-10-25T01:30:00Z' } });
     const text = fixture.nativeElement.textContent as string;
     for (const part of ['Клієнт', '+380000000001', '1HGCM82633A123456', 'Пошкоджено двері', 'UTC+03:00', 'UTC+02:00', 'Адміністратор', 'Причина', 'Оператор', '₴', 'Оплата та видача']) expect(text).toContain(part);
-    expect(text).not.toContain('Історія призначень');
+    expect(text).toContain('Історія призначень недоступна');
     expect(fixture.nativeElement.querySelector('summary')).toBeNull();
     expect(fixture.nativeElement.querySelector('form')).toBeNull();
   });

@@ -30,10 +30,10 @@ public sealed class EmployeeAssignmentDomainTests
         employee.Update("Changed", "Paint", false);
         Assert.Equal("Initial", assignment.NameSnapshot); Assert.Equal("Repair", assignment.SpecializationSnapshot);
         Assert.Throws<InvalidOperationException>(() => EmployeeAssignment.Assign(appointment, employee, "admin", now));
-        Assert.Throws<ArgumentException>(() => assignment.Release(now.AddTicks(-1)));
-        assignment.Release(now.AddMinutes(1));
+        Assert.Throws<ArgumentException>(() => assignment.Release("admin", now.AddTicks(-1)));
+        assignment.Release("admin", now.AddMinutes(1));
         Assert.Equal(now.AddMinutes(1), assignment.ReleasedAtUtc);
-        Assert.Throws<InvalidOperationException>(() => assignment.Release(now.AddMinutes(2)));
+        Assert.Throws<InvalidOperationException>(() => assignment.Release("admin", now.AddMinutes(2)));
     }
 }
 
@@ -125,6 +125,8 @@ public sealed class EmployeeAssignmentPostgresTests(PostgresIdentityFixture fixt
         Assert.Equal("Original", old.GetProperty("name").GetString()); Assert.Equal("Repair", old.GetProperty("specialization").GetString());
         Assert.Equal("Renamed", current.GetProperty("name").GetString()); Assert.Equal("Paint", current.GetProperty("specialization").GetString());
         Assert.NotEqual(JsonValueKind.Null, old.GetProperty("releasedAtUtc").ValueKind);
+        Assert.Equal(admin.Id, old.GetProperty("releasedById").GetString());
+        Assert.Equal("Test actor", old.GetProperty("releasedByName").GetString());
         Assert.Single((await actor.GetFromJsonAsync<JsonElement[]>($"{Path}?appointmentId={order}&employeeId={worker}&active=true"))!);
         Assert.Single((await actor.GetFromJsonAsync<JsonElement[]>($"{Path}?appointmentId={order}&employeeId={worker}&active=false"))!);
         Assert.Equal(3, (await actor.GetFromJsonAsync<JsonElement[]>($"{Path}?employeeId={worker}"))!.Length);
@@ -134,6 +136,8 @@ public sealed class EmployeeAssignmentPostgresTests(PostgresIdentityFixture fixt
         Assert.Equal(worker, adminHistory.GetProperty("employeeId").GetGuid());
         Assert.Equal(admin.Id, adminHistory.GetProperty("assignedById").GetString());
         Assert.Equal("Test actor", adminHistory.GetProperty("assignedByName").GetString());
+        Assert.Equal(admin.Id, adminHistory.GetProperty("releasedById").GetString());
+        Assert.Equal("Test actor", adminHistory.GetProperty("releasedByName").GetString());
         Assert.Equal("Original", adminHistory.GetProperty("name").GetString());
         Assert.Equal(old.GetProperty("assignedAtUtc").GetDateTimeOffset(), adminHistory.GetProperty("assignedAtUtc").GetDateTimeOffset());
         Assert.Equal(old.GetProperty("releasedAtUtc").GetDateTimeOffset(), adminHistory.GetProperty("releasedAtUtc").GetDateTimeOffset());
@@ -151,6 +155,29 @@ public sealed class EmployeeAssignmentPostgresTests(PostgresIdentityFixture fixt
         Assert.Equal(HttpStatusCode.NoContent, (await Release(actor, repeatId)).StatusCode);
         var remaining = await actor.GetFromJsonAsync<JsonElement[]>($"{Path}?appointmentId={order}&active=true");
         Assert.Equal(second, Assert.Single(remaining!).GetProperty("employeeId").GetGuid());
+    }
+
+    [PostgresFact]
+    public async Task LegacyReleasedAssignmentRetainsHistoryWhenReleaserIsUnknown()
+    {
+        var owner = await User("User"); var admin = await User("Admin"); using var actor = await Login(admin.Phone);
+        var order = await Appointment(owner.Id); var worker = await Employee("Legacy");
+        using var created = await Assign(actor, order, worker);
+        var id = (await Body(created)).GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.NoContent, (await Release(actor, id)).StatusCode);
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"EmployeeAssignments\" SET \"ReleasedById\" = NULL WHERE \"Id\" = {id}");
+        }
+        var history = await actor.GetFromJsonAsync<JsonElement>($"/api/appointments/{order}");
+        var entry = Assert.Single(history.GetProperty("assignments").EnumerateArray());
+        Assert.Equal("Legacy", entry.GetProperty("name").GetString());
+        Assert.NotEqual(JsonValueKind.Null, entry.GetProperty("releasedAtUtc").ValueKind);
+        Assert.Equal(JsonValueKind.Null, entry.GetProperty("releasedById").ValueKind);
+        Assert.Equal(JsonValueKind.Null, entry.GetProperty("releasedByName").ValueKind);
+        var item = await actor.GetFromJsonAsync<JsonElement>($"{Path}/{id}");
+        Assert.Equal(JsonValueKind.Null, item.GetProperty("releasedByName").ValueKind);
     }
 
     [PostgresFact]
@@ -210,7 +237,7 @@ public sealed class EmployeeAssignmentPostgresTests(PostgresIdentityFixture fixt
             Assert.Equal(expected, appointment.Status);
             var statusEvent = await db.AppointmentStatusEvents.SingleAsync(e => e.AppointmentId == order && e.ToStatus == expected);
             var assignments = await db.EmployeeAssignments.AsNoTracking().Where(a => a.AppointmentId == order).ToListAsync();
-            Assert.Equal(2, assignments.Count); Assert.All(assignments, a => Assert.Equal(statusEvent.ChangedAtUtc, a.ReleasedAtUtc));
+            Assert.Equal(2, assignments.Count); Assert.All(assignments, a => { Assert.Equal(statusEvent.ChangedAtUtc, a.ReleasedAtUtc); Assert.Equal(admin.Id, a.ReleasedById); });
             Assert.Single(await db.AdminAuditEvents.Where(e => e.ObjectId == order.ToString() && e.Action == "AppointmentStatusChanged").ToListAsync());
         }
     }
@@ -235,7 +262,8 @@ public sealed class EmployeeAssignmentPostgresTests(PostgresIdentityFixture fixt
                 Assert.Equal(HttpStatusCode.InternalServerError, (await Exit(actor, id, version, i == 1)).StatusCode);
                 Assert.Equal(version, await Version(actor, id));
                 Assert.Equal(AppointmentStatus.InProgress, (await db.Appointments.AsNoTracking().SingleAsync(a => a.Id == id)).Status);
-                Assert.Null((await db.EmployeeAssignments.AsNoTracking().SingleAsync(a => a.AppointmentId == id)).ReleasedAtUtc);
+                var assignment = await db.EmployeeAssignments.AsNoTracking().SingleAsync(a => a.AppointmentId == id);
+                Assert.Null(assignment.ReleasedAtUtc); Assert.Null(assignment.ReleasedById);
                 Assert.Single(await db.AppointmentStatusEvents.AsNoTracking().Where(e => e.AppointmentId == id).ToListAsync());
                 Assert.Empty(await db.AdminAuditEvents.AsNoTracking().Where(e => e.ObjectId == id.ToString()).ToListAsync());
             }

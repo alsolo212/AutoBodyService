@@ -1,0 +1,39 @@
+<div class="workspace-heading"><div><p class="eyebrow"><span class="eyebrow__line"></span> ПАНЕЛЬ КЕРУВАННЯ</p><h1>Розподіл робіт</h1><p>Перетягніть автомобіль до працівника або скористайтеся кнопкою призначення.</p></div><a class="button button--secondary" routerLink="/admin/employees">Працівники →</a></div>
+@if (actionError()) { <div class="auth-alert" role="alert">{{ actionError() }}</div> }
+@if (notice()) { <p class="profile-success" role="status">{{ notice() }}</p> }
+@if (saving()) { <p role="status">Зберігаємо призначення…</p> }
+@if (loading()) { <section class="workspace-panel" role="status" aria-busy="true">Завантажуємо розподіл робіт…</section> }
+@else if (error()) { <section class="workspace-panel"><div class="auth-alert" role="alert">{{ error() }} <button class="retry" type="button" (click)="load()">Спробувати ще раз</button></div></section> }
+@else {
+  <div cdkDropListGroup>
+    <section class="workspace-panel" aria-labelledby="orders-title"><div class="panel-heading"><div><p class="panel-eyebrow">АВТОМОБІЛІ В РОБОТІ</p><h2 id="orders-title">Усі замовлення в роботі</h2></div></div>
+      <p class="hint">Автомобіль залишається у цьому списку після призначення та може мати кількох працівників.</p>
+      <div class="source-list" id="assignment-source" cdkDropList [cdkDropListData]="orders()" [cdkDropListSortingDisabled]="true">
+        @for (order of orders(); track order.id) {
+          <article class="order-card" cdkDrag [cdkDragData]="order" [cdkDragDisabled]="saving()" [attr.data-order-id]="order.id">
+            <div class="order-top"><span>{{ order.customerName }}</span><span class="drag-handle" cdkDragHandle aria-hidden="true" title="Перетягнути до працівника">⠿</span></div>
+            <h3><a [routerLink]="['/admin/appointments', order.id]">{{ order.make }} {{ order.model }}</a></h3><p>VIN {{ order.vin }}</p>
+          </article>
+        } @empty { <p class="empty">Замовлень у роботі немає.</p> }
+      </div>
+    </section>
+    <section class="workspace-panel" aria-labelledby="workers-title"><div class="panel-heading"><div><p class="panel-eyebrow">КОМАНДА</p><h2 id="workers-title">Активні працівники</h2></div></div>
+      <div class="worker-grid">
+        @for (employee of employees(); track employee.id) {
+          <section class="worker" [attr.aria-labelledby]="'worker-' + employee.id" [attr.data-employee-id]="employee.id">
+            <h3 [id]="'worker-' + employee.id">{{ employee.fullName }}</h3><p class="specialization">{{ employee.specialization }}</p>
+            <div class="worker-drop" cdkDropList [cdkDropListData]="employee" [cdkDropListEnterPredicate]="canDrop" [cdkDropListSortingDisabled]="true" (cdkDropListDropped)="dropped($event)">
+              @for (assignment of assignmentsFor(employee.id); track assignment.id) {
+                @if (order(assignment.appointmentId); as car) {
+                  <article class="assigned-card" [attr.data-assignment-id]="assignment.id"><a [routerLink]="['/admin/appointments', car.id]">{{ car.make }} {{ car.model }}</a><span>{{ car.customerName }}</span><button class="button button--secondary" type="button" [disabled]="saving()" [attr.aria-label]="'Зняти призначення: ' + car.make + ' ' + car.model + ', ' + employee.fullName" (click)="release(assignment)">Зняти</button></article>
+                }
+              } @empty { <p class="empty">Немає активних призначень.</p> }
+            </div>
+            <div class="assignment-control"><label [attr.for]="'order-' + employee.id">Автомобіль для призначення</label><select class="field__input" [id]="'order-' + employee.id" [value]="selections()[employee.id] || ''" (change)="select(employee.id, $any($event.target).value)" [disabled]="saving() || !available(employee.id).length"><option value="">Оберіть автомобіль</option>@for (car of available(employee.id); track car.id) { <option [value]="car.id">{{ car.make }} {{ car.model }} — {{ car.customerName }}</option> }</select>
+              <button class="button button--primary" type="button" [disabled]="saving() || !selections()[employee.id]" [attr.aria-label]="'Призначити: ' + employee.fullName" (click)="assignSelected(employee)">Призначити</button></div>
+          </section>
+        } @empty { <p class="empty">Активних працівників немає.</p> }
+      </div>
+    </section>
+  </div>
+}

@@ -48,13 +48,17 @@ public sealed class AdminAssignmentsController(IEmployeeAssignments assignments)
 
     /// <summary>Close one assignment while keeping its history.</summary>
     [HttpPatch("{id:guid}/release")]
-    public async Task<IActionResult> Release(Guid id, CancellationToken cancellationToken) =>
-        await assignments.ReleaseAsync(id, cancellationToken) switch
+    public async Task<IActionResult> Release(Guid id, CancellationToken cancellationToken)
+    {
+        var actorId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (actorId is null) return Unauthorized();
+        return await assignments.ReleaseAsync(id, actorId, cancellationToken) switch
         {
             AssignmentResult.Success => NoContent(),
             AssignmentResult.NotFound => NotFound(),
             _ => Conflict(new ProblemDetails { Status = 409, Title = "Призначення вже завершено." })
         };
+    }
 }
 
 /// <summary>Order and worker to associate. Actor and time come from the server.</summary>

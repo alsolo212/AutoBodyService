@@ -13,6 +13,7 @@ public sealed class EmployeeAssignment
     public string AssignedById { get; private set; }
     public DateTimeOffset AssignedAtUtc { get; private set; }
     public DateTimeOffset? ReleasedAtUtc { get; private set; }
+    public string? ReleasedById { get; private set; }
     public string NameSnapshot { get; private set; }
     public string SpecializationSnapshot { get; private set; }
 
@@ -28,10 +29,12 @@ public sealed class EmployeeAssignment
             AssignedById = actorId, AssignedAtUtc = atUtc, NameSnapshot = employee.FullName, SpecializationSnapshot = employee.Specialization };
     }
 
-    public void Release(DateTimeOffset atUtc)
+    public void Release(string actorId, DateTimeOffset atUtc)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
         if (atUtc.Offset != TimeSpan.Zero || atUtc < AssignedAtUtc) throw new ArgumentException("Release time must be UTC and not precede assignment.", nameof(atUtc));
         if (ReleasedAtUtc is not null) throw new InvalidOperationException("Assignment is already released.");
         ReleasedAtUtc = atUtc;
+        ReleasedById = actorId;
     }
 }

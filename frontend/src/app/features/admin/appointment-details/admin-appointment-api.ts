@@ -10,7 +10,7 @@ export interface PaymentConfirmation { actorName: string; paidAtUtc: string; han
 export interface AdminAppointment extends Omit<AppointmentDetails, 'history'> {
   customerName: string; customerPhone: string; version: number; history: AdminStatusHistory[];
   paymentConfirmation: PaymentConfirmation | null; manualContacts: ManualContact[];
-  assignments: { name: string; specialization: string; assignedAtUtc: string; releasedAtUtc: string | null }[] | null;
+  assignments: { id: string; employeeId: string; name: string; specialization: string; assignedById: string; assignedByName: string; assignedAtUtc: string; releasedAtUtc: string | null; releasedById: string | null; releasedByName: string | null }[] | null;
 }
 export interface RepairPlanChange { version: number; price: number; plannedStartUtc: string; estimatedFinishUtc: string; inspectionPerformed: boolean; }
 export interface TransitionChange { version: number; target: AppointmentStatus; inspectionPerformed?: boolean; paymentReceived?: boolean; vehicleHandedOver?: boolean; }

@@ -68,7 +68,8 @@ public sealed class AppointmentQueries(ApplicationDbContext db) : IAppointmentQu
                                  where a.AppointmentId == id
                                  orderby a.AssignedAtUtc, a.Id
                                  select new AdminAssignmentDetails(a.Id, a.EmployeeId, a.NameSnapshot, a.SpecializationSnapshot,
-                                     a.AssignedById, actor.Name, a.AssignedAtUtc, a.ReleasedAtUtc)).ToListAsync(cancellationToken);
+                                     a.AssignedById, actor.Name, a.AssignedAtUtc, a.ReleasedAtUtc, a.ReleasedById,
+                                     db.Users.Where(u => u.Id == a.ReleasedById).Select(u => u.Name).SingleOrDefault())).ToListAsync(cancellationToken);
         var participants = await ParticipantsAsync(id, cancellationToken);
         return new AdminAppointmentDetails(row.Id, row.Vin, row.Make, row.Model, row.ProblemDescription, row.InspectionStartUtc,
             row.Status, row.CustomerName, row.CustomerPhone, history, row.Plan, participants, row.Version, payment, contacts, assignments);

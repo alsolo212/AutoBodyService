@@ -26,7 +26,7 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
             if (statusEvent.FromStatus == AppointmentStatus.InProgress && statusEvent.ToStatus != AppointmentStatus.InProgress)
             {
                 var activeAssignments = await db.EmployeeAssignments.Where(a => a.AppointmentId == id && a.ReleasedAtUtc == null).ToListAsync(cancellationToken);
-                foreach (var assignment in activeAssignments) assignment.Release(statusEvent.ChangedAtUtc);
+                foreach (var assignment in activeAssignments) assignment.Release(actorId, statusEvent.ChangedAtUtc);
             }
             db.AppointmentStatusEvents.Add(statusEvent);
             audit.RecordAppointmentStatusChange(actorId, id, statusEvent.FromStatus!.Value, statusEvent.ToStatus);

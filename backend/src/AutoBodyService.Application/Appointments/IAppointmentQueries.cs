@@ -22,7 +22,7 @@ public sealed record AdminManualContact(ManualContactReason Reason, string Actor
 public sealed record AdminPaymentConfirmation(string ActorName, DateTimeOffset PaidAtUtc, DateTimeOffset HandedOverAtUtc);
 /// <summary>Assignment history with the actor and worker snapshot.</summary>
 public sealed record AdminAssignmentDetails(Guid Id, Guid EmployeeId, string Name, string Specialization, string AssignedById,
-    string AssignedByName, DateTimeOffset AssignedAtUtc, DateTimeOffset? ReleasedAtUtc);
+    string AssignedByName, DateTimeOffset AssignedAtUtc, DateTimeOffset? ReleasedAtUtc, string? ReleasedById, string? ReleasedByName);
 /// <summary>Owner-visible details, including the workers who participated.</summary>
 public sealed record CustomerAppointmentDetails(Guid Id, string Vin, string Make, string Model, string ProblemDescription,
     DateTimeOffset InspectionStartUtc, AppointmentStatus Status, IReadOnlyList<CustomerStatusHistory> History,
