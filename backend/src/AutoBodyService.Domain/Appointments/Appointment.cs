@@ -118,6 +118,22 @@ public sealed class Appointment
         Status = AppointmentStatus.Scheduled;
     }
 
+    /// <summary>Stores the agreement after inspection without advancing the status.</summary>
+    public void AgreeRepairPlan(RepairPlan plan, bool inspectionPerformed)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        if (Status != AppointmentStatus.AwaitingInspection)
+            throw new InvalidOperationException("An initial agreement requires an appointment awaiting inspection.");
+        if (plan.AppointmentId != Id) throw new ArgumentException("The plan belongs to another appointment.", nameof(plan));
+        if (!inspectionPerformed) throw new InvalidOperationException("The inspection must be performed before agreement.");
+        if (RepairPlan is null) RepairPlan = plan;
+        else
+        {
+            if (plan.UpdatedAtUtc < RepairPlan.UpdatedAtUtc) throw new ArgumentException("The agreement cannot be backdated.", nameof(plan));
+            RepairPlan.Update(plan.AgreedPrice, plan.PlannedStartUtc, plan.EstimatedFinishUtc, plan.UpdatedAtUtc);
+        }
+    }
+
     public void StartRepair() => MoveFrom(AppointmentStatus.Scheduled, AppointmentStatus.InProgress);
 
     public void ReviseRepairPlan(decimal agreedPrice, DateTimeOffset plannedStartUtc, DateTimeOffset estimatedFinishUtc, DateTimeOffset updatedAtUtc)

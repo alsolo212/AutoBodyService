@@ -24,4 +24,21 @@ public sealed class AppointmentStatusEvent
     public string ActorId { get; private set; }
     public DateTimeOffset ChangedAtUtc { get; private set; }
     public string? Reason { get; private set; }
+
+    public static AppointmentStatusEvent ForTransition(Guid appointmentId, AppointmentStatus from, AppointmentStatus to,
+        string actorId, DateTimeOffset changedAtUtc, string? reason = null)
+    {
+        ArgumentOutOfRangeException.ThrowIfEqual(appointmentId, Guid.Empty);
+        ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
+        if (changedAtUtc.Offset != TimeSpan.Zero) throw new ArgumentException("Time must use UTC.", nameof(changedAtUtc));
+        if ((from, to) is not ((AppointmentStatus.AwaitingInspection, AppointmentStatus.Scheduled)
+            or (AppointmentStatus.Scheduled, AppointmentStatus.InProgress)
+            or (AppointmentStatus.InProgress, AppointmentStatus.AwaitingPayment)
+            or (AppointmentStatus.AwaitingPayment, AppointmentStatus.Completed)
+            or (AppointmentStatus.AwaitingInspection or AppointmentStatus.Scheduled or AppointmentStatus.InProgress, AppointmentStatus.Cancelled)))
+            throw new ArgumentException("Invalid status transition.", nameof(to));
+        if (to == AppointmentStatus.Cancelled) ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        else if (reason is not null) throw new ArgumentException("Only cancellation has a reason.", nameof(reason));
+        return new AppointmentStatusEvent(Guid.NewGuid(), appointmentId, from, to, actorId, changedAtUtc, reason?.Trim());
+    }
 }

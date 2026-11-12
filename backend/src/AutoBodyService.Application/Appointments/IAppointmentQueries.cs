@@ -23,7 +23,7 @@ public sealed record CustomerAppointmentDetails(Guid Id, string Vin, string Make
 /// <summary>Administrative details of an appointment and its customer.</summary>
 public sealed record AdminAppointmentDetails(Guid Id, string Vin, string Make, string Model, string ProblemDescription,
     DateTimeOffset InspectionStartUtc, AppointmentStatus Status, string CustomerName, string CustomerPhone,
-    IReadOnlyList<AdminStatusHistory> History, AgreedRepairDetails? RepairPlan, IReadOnlyList<AppointmentParticipant>? Participants);
+    IReadOnlyList<AdminStatusHistory> History, AgreedRepairDetails? RepairPlan, IReadOnlyList<AppointmentParticipant>? Participants, uint Version);
 
 public interface IAppointmentQueries
 {

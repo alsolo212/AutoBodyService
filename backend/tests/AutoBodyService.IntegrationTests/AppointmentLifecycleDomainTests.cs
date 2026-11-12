@@ -146,6 +146,39 @@ public sealed class AppointmentLifecycleDomainTests
     }
 
     [Fact]
+    public void InitialAgreementRequiresInspectionAndDoesNotAdvanceStatus()
+    {
+        var appointment = At(AppointmentStatus.AwaitingInspection);
+        var plan = Plan(appointment.Id);
+        Assert.Throws<InvalidOperationException>(() => appointment.AgreeRepairPlan(plan, false));
+        Assert.Throws<ArgumentException>(() => appointment.AgreeRepairPlan(Plan(Guid.NewGuid()), true));
+        Assert.Null(appointment.RepairPlan);
+        appointment.AgreeRepairPlan(plan, true);
+        Assert.Equal(AppointmentStatus.AwaitingInspection, appointment.Status);
+        Assert.Same(plan, appointment.RepairPlan);
+        appointment.Schedule(plan, true);
+        Assert.Equal(AppointmentStatus.Scheduled, appointment.Status);
+    }
+
+    [Fact]
+    public void StatusEventAndHandoverConfirmationValidateAndPreserveFacts()
+    {
+        var id = Guid.NewGuid();
+        var history = AppointmentStatusEvent.ForTransition(id, AppointmentStatus.InProgress, AppointmentStatus.Cancelled, "actor", Inspection, "  reason  ");
+        Assert.Equal("reason", history.Reason);
+        Assert.Equal(AppointmentStatus.InProgress, history.FromStatus);
+        Assert.Equal("actor", history.ActorId);
+        Assert.Throws<ArgumentException>(() => AppointmentStatusEvent.ForTransition(id, AppointmentStatus.AwaitingInspection, AppointmentStatus.Completed, "actor", Inspection));
+        Assert.Throws<ArgumentException>(() => AppointmentStatusEvent.ForTransition(id, AppointmentStatus.InProgress, AppointmentStatus.Cancelled, "actor", Inspection, "  "));
+        var confirmation = new PaymentHandoverConfirmation(id, "actor", Inspection);
+        Assert.Equal(id, confirmation.AppointmentId);
+        Assert.Equal("actor", confirmation.ActorId);
+        Assert.Equal(Inspection, confirmation.PaidAtUtc);
+        Assert.Equal(Inspection, confirmation.HandedOverAtUtc);
+        Assert.Throws<ArgumentException>(() => new PaymentHandoverConfirmation(id, "actor", Inspection.ToOffset(TimeSpan.FromHours(2))));
+    }
+
+    [Fact]
     public void StatusCannotBeAssignedThroughPublicSetterOrCreationDto()
     {
         var setter = typeof(Appointment).GetProperty(nameof(Appointment.Status))!.SetMethod;

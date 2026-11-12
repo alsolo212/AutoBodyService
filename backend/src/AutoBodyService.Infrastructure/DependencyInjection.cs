@@ -100,6 +100,8 @@ public static class DependencyInjection
         services.AddScoped<ICancelAppointmentService, CancelAppointmentService>();
         services.AddScoped<IAppointmentCreationStore, AppointmentCreationStore>();
         services.AddScoped<IAdminAuditWriter, AdminAuditWriter>();
+        services.AddScoped<IAdminAppointmentCommands, AdminAppointmentCommands>();
+        services.AddScoped<IAdminAppointmentStore, AdminAppointmentStore>();
         services.AddSingleton(TimeProvider.System);
 
         return services;

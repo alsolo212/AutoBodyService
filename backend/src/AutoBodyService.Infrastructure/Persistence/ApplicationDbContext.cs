@@ -20,6 +20,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<ScheduledReminder> ScheduledReminders => Set<ScheduledReminder>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<AppointmentStatusEvent> AppointmentStatusEvents => Set<AppointmentStatusEvent>();
+    public DbSet<PaymentHandoverConfirmation> PaymentHandoverConfirmations => Set<PaymentHandoverConfirmation>();
     public DbSet<AdminAuditEvent> AdminAuditEvents => Set<AdminAuditEvent>();
     public DbSet<InspectionDateOverride> InspectionDateOverrides => Set<InspectionDateOverride>();
 
@@ -61,11 +62,11 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     // status change cannot silently make a previously valid correction stale.
     private void ProtectRepairPlanChanges()
     {
-        foreach (var plan in ChangeTracker.Entries<RepairPlan>().Where(e => e.State == EntityState.Modified).ToArray())
+        foreach (var plan in ChangeTracker.Entries<RepairPlan>().Where(e => e.State is EntityState.Added or EntityState.Modified).ToArray())
         {
             var appointment = ChangeTracker.Entries<Appointment>().SingleOrDefault(e => e.Entity.Id == plan.Entity.AppointmentId)
                 ?? throw new InvalidOperationException("A repair plan must be changed through its tracked appointment.");
-            appointment.Property(a => a.Status).IsModified = true;
+            if (appointment.State != EntityState.Added) appointment.Property(a => a.Status).IsModified = true;
         }
     }
 
@@ -155,6 +156,14 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasIndex(x => x.OccurredAtUtc);
             entity.HasIndex(x => new { x.Action, x.OccurredAtUtc });
             entity.HasIndex(x => new { x.ActorId, x.OccurredAtUtc });
+        });
+        builder.Entity<PaymentHandoverConfirmation>(entity =>
+        {
+            entity.HasKey(x => x.AppointmentId);
+            entity.Property(x => x.ActorId).IsRequired();
+            entity.HasOne<Appointment>().WithOne().HasForeignKey<PaymentHandoverConfirmation>(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.HandedOverAtUtc);
         });
         builder.Entity<Notification>(entity =>
         {
