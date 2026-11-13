@@ -4,7 +4,7 @@
   <a routerLink="/admin/inspection-calendar">Календар оглядів <span aria-hidden="true">↗</span></a>
   <a routerLink="/admin/assignments">Розподіл робіт <span aria-hidden="true">↗</span></a>
   <a routerLink="/admin/employees">Працівники <span aria-hidden="true">↗</span></a>
-  <a routerLink="/admin/prices">Послуги та ціни <small>У підготовці</small> <span aria-hidden="true">↗</span></a>
+  <a routerLink="/admin/prices">Послуги та ціни <span aria-hidden="true">↗</span></a>
 </nav>
 @if (loading()) { <p class="dashboard-state" role="status">Завантажуємо огляд…</p> }
 @if (error()) { <div class="auth-alert" role="alert">{{ error() }} <button type="button" class="retry" (click)="reload()">Спробувати ще раз</button></div> }

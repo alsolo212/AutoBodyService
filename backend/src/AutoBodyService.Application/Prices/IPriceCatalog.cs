@@ -4,7 +4,10 @@ namespace AutoBodyService.Application.Prices;
 public sealed record PublicPriceItem(Guid Id, string Name, string Description, decimal Price, string PriceExact, string Currency, bool IsFrom);
 /// <summary>Administrative price record, including its optimistic concurrency version.</summary>
 public sealed record AdminPriceItem(Guid Id, string Name, string Description, decimal Price, string Currency, bool IsFrom,
-    int SortOrder, bool IsPublished, bool IsArchived, uint Version);
+    int SortOrder, bool IsPublished, bool IsArchived, uint Version)
+{
+    public string PriceExact => Price.ToString(System.Globalization.CultureInfo.InvariantCulture);
+}
 public sealed record PriceChange(string? Name, string? Description, decimal? Price, bool? IsFrom, int? SortOrder, bool? IsPublished, bool? IsArchived);
 public enum PriceUpdateResult { Success, NotFound, Conflict, Invalid }
 public interface IPriceCatalog

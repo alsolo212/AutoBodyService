@@ -92,6 +92,8 @@ public sealed class PriceCatalogPostgresTests(PostgresIdentityFixture fixture) :
         Assert.Equal(0m, rows[1].GetProperty("price").GetDecimal()); Assert.True(rows[1].GetProperty("isFrom").GetBoolean());
         Assert.Equal(12345678901234567890.12345678m, rows[0].GetProperty("price").GetDecimal());
         Assert.Equal("12345678901234567890.12345678", rows[0].GetProperty("priceExact").GetString());
+        Assert.Equal("12345678901234567890.12345678", second.GetProperty("priceExact").GetString());
+        Assert.Equal("12345678901234567890.12345678", (await actor.GetFromJsonAsync<JsonElement>($"{AdminPath}/{secondId}")).GetProperty("priceExact").GetString());
         Assert.Equal("UAH", rows[0].GetProperty("currency").GetString());
         Assert.False(rows[0].TryGetProperty("version", out _)); Assert.False(rows[0].TryGetProperty("isArchived", out _));
         first = await Change(actor, firstId, new { version = first.GetProperty("version").GetUInt32(), isArchived = true });

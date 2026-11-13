@@ -1,0 +1,13 @@
+.price-form { display: grid; gap: 1rem; }
+.price-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.price-options, .price-actions { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+.price-options label { display: flex; align-items: center; gap: .5rem; }
+.price-options input { width: 1.15rem; height: 1.15rem; }
+.hint { color: var(--muted); font-size: .875rem; margin: .35rem 0 0; }
+.price-list { list-style: none; padding: 0; margin: 0; }
+.price-card { display: flex; justify-content: space-between; align-items: start; gap: 1rem; border-top: 1px solid var(--line); padding: 1rem 0; }
+.price-card > div { min-width: 0; overflow-wrap: anywhere; }
+.price-card h3, .price-card p { margin: 0 0 .5rem; }
+.price-card button { flex: none; }
+textarea { min-height: 5rem; }
+@media (max-width: 600px) { .price-grid { grid-template-columns: 1fr; } .price-card { flex-direction: column; } }

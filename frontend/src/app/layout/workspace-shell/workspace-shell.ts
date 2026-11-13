@@ -7,10 +7,11 @@ import { finalize } from 'rxjs';
 import { Dashboard } from '../../features/admin/dashboard/dashboard';
 import { Employees } from '../../features/admin/employees/employees';
 import { AssignmentBoard } from '../../features/admin/assignment-board/assignment-board';
+import { PricesEditor } from '../../features/admin/prices/prices-editor';
 
 @Component({
   selector: 'app-workspace-shell',
-  imports: [RouterLink, UiState, ApiStatus, Dashboard, Employees, AssignmentBoard],
+  imports: [RouterLink, UiState, ApiStatus, Dashboard, Employees, AssignmentBoard, PricesEditor],
   template: `
     <a class="skip-link" [attr.href]="isAdmin ? '/' + routePath + '#workspace-main' : '/account/appointments#workspace-main'">Перейти до вмісту</a>
     <div class="workspace">
@@ -44,6 +45,8 @@ import { AssignmentBoard } from '../../features/admin/assignment-board/assignmen
               <app-admin-dashboard />
             } @else if (isAdmin && section === 'Розподіл робіт') {
               @defer (on immediate) { <app-assignment-board /> } @placeholder { <p role="status">Завантажуємо розподіл робіт…</p> }
+            } @else if (isAdmin && section === 'Послуги та ціни') {
+              <app-prices-editor />
             } @else if (isAdmin && section === 'Працівники') {
               <app-employees />
             } @else {

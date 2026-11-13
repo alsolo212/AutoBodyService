@@ -1,0 +1,81 @@
+import { expect, test } from '@playwright/test';
+import { randomInt } from 'node:crypto';
+
+test('admin editor publishes exact prices and leaves the customer agreed price intact', async ({ page, browser }) => {
+  test.skip(process.env['E2E_LIVE_API'] !== '1', 'Requires an isolated API and PostgreSQL.');
+  const visitorContext = await browser.newContext({ ignoreHTTPSErrors: true });
+  try {
+    const visitor = await visitorContext.newPage();
+    await visitor.goto('/#prices');
+    await expect(visitor.locator('#prices')).toContainText('Опублікованих послуг поки немає');
+    const contacts = await visitor.evaluate(async () => (await fetch('/api/public/contacts')).json());
+    expect(contacts.phone).toBe(process.env['E2E_TEST_CONTACT_PHONE']);
+    await expect(visitor.locator('#contacts')).toContainText(contacts.phone);
+    expect(contacts.address).toBeNull(); expect(contacts.workingHours).toBeNull();
+    await expect(visitor.locator('#contacts')).not.toContainText('Години роботи:');
+    await expect(visitor.locator('.header-action')).toContainText('Увійти');
+    await page.goto('/login');
+    await page.getByLabel('Номер телефону').fill(process.env['E2E_ADMIN_PHONE']!);
+    await page.getByLabel('Пароль', { exact: true }).fill(process.env['E2E_ADMIN_PASSWORD']!);
+    await page.getByRole('button', { name: 'Увійти' }).click(); await expect(page).toHaveURL(/\/admin$/);
+    await page.goto('/admin/prices');
+    await page.getByLabel('Назва послуги').fill('Кузовний ремонт');
+    await page.getByLabel('Короткий опис').fill('Опис ремонту');
+    await page.getByLabel('Ціна, грн').fill('12345678901234567890,12345678');
+    await page.getByLabel('Порядок').fill('10'); await page.getByLabel('Ціна «від»').check(); await page.getByLabel('Опубліковано').check();
+    await page.getByRole('button', { name: 'Додати послугу' }).click(); await expect(page.getByText('Послугу додано.')).toBeVisible();
+    await page.getByLabel('Назва послуги').fill('Прихована послуга'); await page.getByLabel('Ціна, грн').fill('0');
+    await page.getByLabel('Порядок').fill('0'); await page.getByRole('button', { name: 'Додати послугу' }).click();
+    await expect(page.getByRole('button', { name: 'Редагувати: Прихована послуга' })).toBeVisible();
+    await page.reload(); await page.getByRole('button', { name: 'Редагувати: Кузовний ремонт' }).click();
+    await expect(page.getByLabel('Ціна, грн')).toHaveValue('12345678901234567890,12345678');
+    await page.getByLabel('Ціна, грн').fill('1250,35'); await page.getByRole('button', { name: 'Зберегти зміни' }).click();
+    await expect(page.getByText('Зміни збережено.')).toBeVisible();
+    await visitor.reload(); await expect(visitor.locator('#prices')).toContainText('від 1250,35 ₴');
+    await expect(visitor.locator('#prices')).not.toContainText('Прихована послуга');
+    await page.getByRole('button', { name: 'Редагувати: Прихована послуга' }).click();
+    await page.getByLabel('Порядок').fill('-2'); await page.getByLabel('Опубліковано').check();
+    await page.getByRole('button', { name: 'Зберегти зміни' }).click(); await expect(page.getByText('Зміни збережено.')).toBeVisible();
+    await visitor.reload(); await expect(visitor.locator('#prices .price-list li').first()).toContainText('Прихована послуга');
+    const id = await page.evaluate(async () => {
+      await fetch('/api/auth/antiforgery');
+      const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
+      const headers = { 'Content-Type': 'application/json', RequestVerificationToken: token };
+      const checked = async (response: Response, status: number) => { if (response.status !== status) throw new Error(`Expected ${status}, got ${response.status}`); return response; };
+      const schedule = await (await checked(await fetch('/api/admin/inspection-schedule'), 200)).json();
+      const intervals = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(dayOfWeek => ({ dayOfWeek, start: '09:00', end: '10:00' }));
+      const preview = await (await checked(await fetch('/api/admin/inspection-schedule/preview', { method: 'POST', headers, body: JSON.stringify({ version: schedule.version, intervals }) }), 200)).json();
+      await checked(await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers, body: JSON.stringify({ version: schedule.version, intervals, confirmationToken: preview.confirmationToken }) }), 204);
+      const slots = await (await checked(await fetch('/api/inspection-slots?date=2099-09-10'), 200)).json();
+      const order = await (await checked(await fetch('/api/appointments', { method: 'POST', headers, body: JSON.stringify({ inspectionStartUtc: slots.slots[0].startUtc, vin: '1HGCM82633A123456', make: 'Тест', model: 'Авто', problemDescription: 'Огляд кузова' }) }), 201)).json();
+      const details = await (await checked(await fetch(`/api/appointments/${order.id}`), 200)).json();
+      await checked(await fetch(`/api/admin/appointments/${order.id}/repair-plan`, { method: 'PUT', headers, body: JSON.stringify({ version: details.version, price: 1250.35, plannedStartUtc: '2099-09-11T07:00:00Z', estimatedFinishUtc: '2099-09-12T07:00:00Z', inspectionPerformed: true }) }), 204);
+      return order.id as string;
+    });
+    await page.goto(`/account/appointments/${id}`);
+    const plan = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Узгоджені вартість і терміни' }) });
+    await expect(plan).toContainText('1 250,35');
+    await page.goto('/admin/prices'); await page.getByRole('button', { name: 'Редагувати: Кузовний ремонт' }).click();
+    await page.getByLabel('Ціна, грн').fill('9999,99'); await page.getByLabel('Опубліковано').uncheck(); await page.getByLabel('В архіві').check();
+    await page.getByRole('button', { name: 'Зберегти зміни' }).click(); await expect(page.getByText('Зміни збережено.')).toBeVisible();
+    await expect(page.locator('.price-card').filter({ hasText: 'Кузовний ремонт' })).toContainText('В архіві');
+    await visitor.reload(); await expect(visitor.locator('#prices')).not.toContainText('Кузовний ремонт');
+    await page.goto(`/account/appointments/${id}`); await expect(plan).toContainText('1 250,35');
+    await page.goto('/admin/prices');
+    for (const width of [320, 768, 1440]) {
+      await page.setViewportSize({ width, height: 800 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await visitor.setViewportSize({ width, height: 800 });
+      expect(await visitor.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    }
+    await visitor.goto('/register');
+    const phone = '000' + String(randomInt(10_000_000)).padStart(7, '0');
+    await visitor.getByLabel('Ім’я').fill('Клієнт'); await visitor.getByLabel('Номер телефону').fill(phone);
+    await visitor.getByLabel('Пароль', { exact: true }).fill('Example-password-123!');
+    await visitor.getByLabel('Повторіть пароль').fill('Example-password-123!');
+    await visitor.getByRole('button', { name: 'Зареєструватися' }).click(); await expect(visitor).toHaveURL(/\/account\/appointments$/);
+    expect(await visitor.evaluate(async () => (await fetch('/api/admin/prices')).status)).toBe(403);
+    await visitor.goto('/admin/prices'); await expect(visitor).toHaveURL(/\/account\/appointments$/);
+    await visitor.goto('/'); await expect(visitor.locator('.header-action')).toContainText('Особистий кабінет');
+  } finally { await visitorContext.close(); }
+});

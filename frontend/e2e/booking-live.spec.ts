@@ -52,6 +52,9 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await expect(page).toHaveURL(/#prices$/); await expect(page.locator('#prices')).toBeVisible();
   await expect(page.locator('#prices')).toBeInViewport();
   await page.goBack(); await expect(page).toHaveURL(/\/account\/book\/success$/);
+  await page.getByRole('link', { name: 'Контакти', exact: true }).click();
+  await expect(page).toHaveURL(/#contacts$/); await expect(page.locator('#contacts')).toBeInViewport();
+  await page.goBack(); await expect(page).toHaveURL(/\/account\/book\/success$/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('link', { name: 'Мої записи' }).last().click();
   await expect(page).toHaveURL(/\/account\/appointments$/);
