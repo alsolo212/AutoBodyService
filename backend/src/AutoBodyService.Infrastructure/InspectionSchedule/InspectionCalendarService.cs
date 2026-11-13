@@ -5,6 +5,7 @@ using AutoBodyService.Application.InspectionSchedule;
 using AutoBodyService.Application.Audit;
 using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Infrastructure.Persistence;
+using AutoBodyService.Infrastructure.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
@@ -47,9 +48,11 @@ public sealed class InspectionCalendarService(ApplicationDbContext db, IInspecti
         // Booking creation takes this same lock. Nothing can book against a stale preview while applying.
         await db.Database.ExecuteSqlRawAsync("SELECT 1 FROM \"InspectionSchedules\" WHERE \"Id\" = 1 FOR UPDATE", cancellationToken);
         var before = await readBefore();
+        var now = clock.GetUtcNow();
+        var rowsBefore = await Appointments(now, null, true).ToListAsync(cancellationToken);
+        var previousConflicts = (await FindConflictsAsync(rowsBefore, date, cancellationToken)).Select(x => x.Id).ToHashSet();
         var result = await update();
         if (result != ScheduleUpdateResult.Success) return new(result);
-        var now = clock.GetUtcNow();
         var rows = await Appointments(now, null, true).ToListAsync(cancellationToken);
         var conflicts = await FindConflictsAsync(rows, date, cancellationToken);
         // Bind the preview to the proposal, original version, and the exact affected records.
@@ -60,6 +63,10 @@ public sealed class InspectionCalendarService(ApplicationDbContext db, IInspecti
         if ((confirmationToken is not null && confirmationToken != fingerprint) || (conflicts.Count > 0 && confirmationToken != fingerprint))
             return new(ScheduleUpdateResult.Conflict, response);
         recordAudit(before);
+        foreach (var conflict in conflicts.Where(c => !previousConflicts.Contains(c.Id) && c.Status is not (AppointmentStatus.Cancelled or AppointmentStatus.Completed)))
+            await NotificationEvents.AddForAdministratorsAsync(db, conflict.Id, "AdminCalendarConflict", "Конфлікт розкладу",
+                "Зміна графіка вплинула на запис. Зв’яжіться з клієнтом вручну.", now,
+                $"schedule:{version}:{conflict.Id}", cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(ScheduleUpdateResult.Success, response);

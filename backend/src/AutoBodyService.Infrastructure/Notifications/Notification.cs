@@ -4,7 +4,7 @@ public sealed class Notification
 {
     public Guid Id { get; set; }
     public string RecipientId { get; set; } = null!;
-    public Guid AppointmentId { get; set; }
+    public Guid? AppointmentId { get; set; }
     public string Type { get; set; } = null!;
     public string Title { get; set; } = null!;
     public string Message { get; set; } = null!;

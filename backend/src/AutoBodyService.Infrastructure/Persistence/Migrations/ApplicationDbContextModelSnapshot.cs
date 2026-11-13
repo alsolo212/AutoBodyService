@@ -662,7 +662,7 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("AppointmentId")
+                    b.Property<Guid?>("AppointmentId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
@@ -1043,8 +1043,7 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.HasOne("AutoBodyService.Domain.Appointments.Appointment", null)
                         .WithMany()
                         .HasForeignKey("AppointmentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AutoBodyService.Infrastructure.Identity.ApplicationUser", null)
                         .WithMany()

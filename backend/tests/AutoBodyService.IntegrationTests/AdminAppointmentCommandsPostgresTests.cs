@@ -114,6 +114,12 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
         Assert.Equal(5, events.Count);
         Assert.Equal(new[] { AppointmentStatus.Scheduled, AppointmentStatus.InProgress, AppointmentStatus.AwaitingPayment, AppointmentStatus.Completed },
             events.Where(e => e.FromStatus != null).OrderBy(e => e.ChangedAtUtc).Select(e => e.ToStatus));
+        var notifications = await db.Notifications.AsNoTracking().Where(n => n.AppointmentId == id).ToListAsync();
+        foreach (var type in new[] { "RepairPlanChanged", "AppointmentScheduled", "AppointmentInProgress", "AppointmentAwaitingPayment", "AppointmentCompleted" })
+            Assert.Single(notifications, n => n.RecipientId == owner.Id && n.Type == type);
+        Assert.Single(notifications, n => n.RecipientId == admin.Id && n.Type == "AdminReadyForPayment");
+        Assert.Single(notifications, n => n.RecipientId == admin.Id && n.Type == "AdminContactAgreement");
+        Assert.Equal(notifications.Count, notifications.Select(n => n.EventKey).Distinct().Count());
         var completed = Assert.Single(events, e => e.ToStatus == AppointmentStatus.Completed);
         Assert.Equal(admin.Id, completed.ActorId);
         var confirmation = await db.PaymentHandoverConfirmations.SingleAsync(x => x.AppointmentId == id);
@@ -144,6 +150,28 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
     }
 
     [PostgresFact]
+    public async Task NotificationFailureRollsBackOperatorCancellationAndAudit()
+    {
+        var owner = await User("User"); var admin = await User("Admin"); var id = await Add(owner.Id);
+        using var actor = await Login(admin.Phone); var version = await Version(actor, id);
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE FUNCTION notification_operator_reject() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN IF NEW."Type" = 'AppointmentCancelled' THEN RAISE EXCEPTION 'test failure'; END IF; RETURN NEW; END $$;
+            CREATE TRIGGER notification_operator_reject_trigger BEFORE INSERT ON "Notifications" FOR EACH ROW EXECUTE FUNCTION notification_operator_reject();
+            """);
+        try
+        {
+            Assert.Equal(HttpStatusCode.InternalServerError, (await Cancel(actor, id, version)).StatusCode);
+            Assert.Equal(AppointmentStatus.AwaitingInspection, (await db.Appointments.AsNoTracking().SingleAsync(a => a.Id == id)).Status);
+            Assert.Single(await db.AppointmentStatusEvents.Where(e => e.AppointmentId == id).ToListAsync());
+            Assert.Empty(await db.AdminAuditEvents.Where(e => e.ObjectId == id.ToString()).ToListAsync());
+            Assert.Empty(await db.Notifications.Where(n => n.AppointmentId == id).ToListAsync());
+        }
+        finally { await db.Database.ExecuteSqlRawAsync("DROP TRIGGER notification_operator_reject_trigger ON \"Notifications\"; DROP FUNCTION notification_operator_reject();"); }
+    }
+
+    [PostgresFact]
     public async Task PlanCorrectionPersistsWithoutTransitionAndUsesVersion()
     {
         var owner = await User("User"); var admin = await User("Admin"); var id = await Add(owner.Id, AppointmentStatus.Scheduled);
@@ -160,6 +188,8 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         Assert.Single(await db.AppointmentStatusEvents.Where(e => e.AppointmentId == id).ToListAsync());
         Assert.Single(await db.AdminAuditEvents.Where(e => e.ObjectId == id.ToString() && e.Action == "RepairPlanChanged").ToListAsync());
+        Assert.Single(await db.Notifications.Where(n => n.AppointmentId == id && n.RecipientId == owner.Id && n.Type == "RepairPlanChanged").ToListAsync());
+        Assert.Single(await db.Notifications.Where(n => n.AppointmentId == id && n.RecipientId == admin.Id && n.Type == "AdminContactPlanChanged").ToListAsync());
     }
 
     [PostgresFact]
@@ -191,6 +221,7 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
             Assert.Equal(state is AppointmentStatus.Scheduled or AppointmentStatus.InProgress ? HttpStatusCode.NoContent : HttpStatusCode.Conflict, result.StatusCode);
         }
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Single(await db.Notifications.Where(n => n.AppointmentId == id && n.RecipientId == admin.Id && n.Type == "AppointmentCancelled").ToListAsync());
         var history = await db.AppointmentStatusEvents.SingleAsync(e => e.AppointmentId == id && e.ToStatus == AppointmentStatus.Cancelled);
         Assert.Equal(admin.Id, history.ActorId); Assert.Equal("Operator reason", history.Reason);
         var audit = await db.AdminAuditEvents.SingleAsync(e => e.ObjectId == id.ToString());

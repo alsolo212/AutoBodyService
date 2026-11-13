@@ -78,6 +78,8 @@ public sealed class InspectionCalendarPostgresTests(PostgresIdentityFixture fixt
         Assert.Equal(HttpStatusCode.Conflict, (await adminClient.PutAsJsonAsync("/api/admin/inspection-exceptions", new { version, date = date, exception = payload.exception, confirmationToken = token })).StatusCode);
         await using (var beforeScope = factory.Services.CreateAsyncScope())
             Assert.Empty(await beforeScope.ServiceProvider.GetRequiredService<ApplicationDbContext>().AdminAuditEvents.Where(e => e.ActorId == admin.Id).ToListAsync());
+        await using (var beforeNotifications = factory.Services.CreateAsyncScope())
+            Assert.Empty(await beforeNotifications.ServiceProvider.GetRequiredService<ApplicationDbContext>().Notifications.Where(n => n.AppointmentId == id && n.Type == "AdminCalendarConflict").ToListAsync());
         var second = await Read(await adminClient.PostAsJsonAsync("/api/admin/inspection-exceptions/preview", payload));
         Assert.Equal(new[] { id, secondId }.Order(), second.GetProperty("conflicts").EnumerateArray().Select(x => x.GetProperty("id").GetGuid()).Order());
         Assert.Equal(HttpStatusCode.OK, (await adminClient.PutAsJsonAsync("/api/admin/inspection-exceptions", new { version, date = date, exception = payload.exception, confirmationToken = second.GetProperty("confirmationToken").GetString() })).StatusCode);
@@ -86,6 +88,11 @@ public sealed class InspectionCalendarPostgresTests(PostgresIdentityFixture fixt
         Assert.Equal(AppointmentStatus.AwaitingInspection, (await db.Appointments.SingleAsync(a => a.Id == id)).Status);
         Assert.Single(await db.AppointmentStatusEvents.Where(e => e.AppointmentId == id).ToListAsync());
         Assert.Single(await db.AppointmentStatusEvents.Where(e => e.AppointmentId == secondId).ToListAsync());
+        var conflictNotifications = await db.Notifications.Where(n => (n.AppointmentId == id || n.AppointmentId == secondId) && n.Type == "AdminCalendarConflict").ToListAsync();
+        Assert.Contains(conflictNotifications, n => n.AppointmentId == id && n.RecipientId == admin.Id);
+        Assert.Contains(conflictNotifications, n => n.AppointmentId == secondId && n.RecipientId == admin.Id);
+        Assert.Contains(conflictNotifications, n => n.AppointmentId == id && n.RecipientId == super.Id);
+        Assert.All(conflictNotifications, n => Assert.DoesNotContain(privateReason, n.Message));
         var audit = Assert.Single(await db.AdminAuditEvents.Where(e => e.ActorId == admin.Id).ToListAsync());
         Assert.Equal("InspectionExceptionChanged", audit.Action);
         Assert.Equal("InspectionDate", audit.ObjectType);
@@ -117,6 +124,7 @@ public sealed class InspectionCalendarPostgresTests(PostgresIdentityFixture fixt
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         Assert.Equal(AppointmentStatus.AwaitingInspection, (await db.Appointments.SingleAsync(a => a.Id == id)).Status);
         Assert.Single(await db.AppointmentStatusEvents.Where(e => e.AppointmentId == id).ToListAsync());
+        Assert.Single(await db.Notifications.Where(n => n.AppointmentId == id && n.RecipientId == admin.Id && n.Type == "AdminCalendarConflict").ToListAsync());
         var events = await db.AdminAuditEvents.Where(e => e.ActorId == admin.Id).OrderBy(e => e.OccurredAtUtc).ToListAsync();
         Assert.Equal(2, events.Count);
         Assert.Equal(new[] { "InspectionExceptionChanged", "InspectionScheduleChanged" }, events.Select(e => e.Action));

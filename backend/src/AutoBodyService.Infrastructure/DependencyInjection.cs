@@ -1,4 +1,6 @@
 using AutoBodyService.Infrastructure.Persistence;
+using AutoBodyService.Application.Notifications;
+using AutoBodyService.Infrastructure.Notifications;
 using AutoBodyService.Application.Appointments;
 using AutoBodyService.Application.Employees;
 using AutoBodyService.Application.Prices;
@@ -97,6 +99,7 @@ public static class DependencyInjection
         services.AddScoped<SuperAdminInitializer>();
         services.AddScoped<IRegistrationService, RegistrationService>();
         services.AddScoped<IProfileService, ProfileService>();
+        services.AddScoped<INotificationHistory, NotificationHistory>();
         services.AddScoped<IInspectionScheduleService, InspectionScheduleService>();
         services.AddScoped<IInspectionCalendarService, InspectionCalendarService>();
         services.AddScoped<IInspectionExceptionsService, InspectionExceptionsService>();

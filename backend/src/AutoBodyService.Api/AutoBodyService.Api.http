@@ -230,3 +230,14 @@ RequestVerificationToken: {{xsrfToken}}
   "version": {{priceVersion}},
   "isArchived": true
 }
+
+### Notifications for the authenticated account, optionally unread=true or unread=false.
+GET {{baseUrl}}/api/notifications?unread=true
+
+### Mark one of the current account's notifications as read (antiforgery required).
+PATCH {{baseUrl}}/api/notifications/{{notificationId}}/read
+RequestVerificationToken: {{xsrfToken}}
+
+### Mark the current account's notification history as read.
+POST {{baseUrl}}/api/notifications/read-all
+RequestVerificationToken: {{xsrfToken}}
