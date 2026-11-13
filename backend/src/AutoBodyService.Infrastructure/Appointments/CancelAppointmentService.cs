@@ -22,6 +22,8 @@ public sealed class CancelAppointmentService(ApplicationDbContext db, TimeProvid
         var statusEvent = appointment.CancelByOwner(now);
         if (statusEvent is null) return CancelAppointmentResult.Conflict;
         db.AppointmentStatusEvents.Add(statusEvent);
+        await db.ScheduledReminders.Where(r => r.AppointmentId == appointmentId && r.ProcessedAtUtc == null)
+            .ExecuteUpdateAsync(set => set.SetProperty(r => r.ProcessedAtUtc, now).SetProperty(r => r.Outcome, "SkippedCancelled"), cancellationToken);
 
         var admins = await (from user in db.Users.AsNoTracking()
                             join userRole in db.Set<IdentityUserRole<string>>() on user.Id equals userRole.UserId

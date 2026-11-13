@@ -100,6 +100,8 @@ public static class DependencyInjection
         services.AddScoped<IRegistrationService, RegistrationService>();
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<INotificationHistory, NotificationHistory>();
+        services.AddScoped<ReminderProcessor>();
+        services.AddHostedService<ReminderBackgroundService>();
         services.AddScoped<IInspectionScheduleService, InspectionScheduleService>();
         services.AddScoped<IInspectionCalendarService, InspectionCalendarService>();
         services.AddScoped<IInspectionExceptionsService, InspectionExceptionsService>();

@@ -31,6 +31,9 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
                 foreach (var assignment in activeAssignments) assignment.Release(actorId, statusEvent.ChangedAtUtc);
             }
             db.AppointmentStatusEvents.Add(statusEvent);
+            if (statusEvent.ToStatus == AppointmentStatus.Cancelled)
+                await db.ScheduledReminders.Where(r => r.AppointmentId == id && r.ProcessedAtUtc == null)
+                    .ExecuteUpdateAsync(set => set.SetProperty(r => r.ProcessedAtUtc, statusEvent.ChangedAtUtc).SetProperty(r => r.Outcome, "SkippedCancelled"), cancellationToken);
             var (title, message) = statusEvent.ToStatus switch
             {
                 AppointmentStatus.Scheduled => ("Ремонт заплановано", "Умови ремонту погоджено. Перегляньте план замовлення."),

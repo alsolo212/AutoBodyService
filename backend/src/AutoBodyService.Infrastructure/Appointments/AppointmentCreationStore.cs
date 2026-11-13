@@ -39,7 +39,7 @@ public sealed class AppointmentCreationStore(ApplicationDbContext db, IInspectio
         foreach (var (type, lead) in new[] { ("Client24Hours", TimeSpan.FromHours(24)), ("Client2Hours", TimeSpan.FromHours(2)), ("Admin30Minutes", TimeSpan.FromMinutes(30)) })
         {
             var due = appointment.InspectionStartUtc - lead;
-            if (due > now) db.ScheduledReminders.Add(new ScheduledReminder { Id = Guid.NewGuid(), AppointmentId = appointment.Id, Type = type, DueAtUtc = due, EventKey = $"appointment:{appointment.Id}:reminder:{type}" });
+            if (due > now) db.ScheduledReminders.Add(new ScheduledReminder { Id = Guid.NewGuid(), AppointmentId = appointment.Id, RecipientId = type == "Admin30Minutes" ? null : appointment.UserId, Type = type, DueAtUtc = due, EventKey = $"appointment:{appointment.Id}:reminder:{type}" });
         }
         var recipients = NotificationDispatch.PendingRecipients(db);
         try

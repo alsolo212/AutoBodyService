@@ -242,6 +242,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         builder.Entity<ScheduledReminder>(entity =>
         {
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Outcome).HasMaxLength(32);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.RecipientId).OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.Type).HasMaxLength(100).IsRequired();
             entity.Property(x => x.EventKey).HasMaxLength(256).IsRequired();
             entity.HasIndex(x => x.EventKey).IsUnique();
