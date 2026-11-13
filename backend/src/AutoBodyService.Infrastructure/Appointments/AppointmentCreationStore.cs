@@ -3,6 +3,7 @@ using AutoBodyService.Application.InspectionSchedule;
 using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Infrastructure.Identity;
 using AutoBodyService.Infrastructure.Notifications;
+using AutoBodyService.Application.Notifications;
 using AutoBodyService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +11,7 @@ using Npgsql;
 
 namespace AutoBodyService.Infrastructure.Appointments;
 
-public sealed class AppointmentCreationStore(ApplicationDbContext db, IInspectionSlotsService slots, TimeProvider clock) : IAppointmentCreationStore
+public sealed class AppointmentCreationStore(ApplicationDbContext db, IInspectionSlotsService slots, TimeProvider clock, INotificationRealtimePublisher? publisher = null) : IAppointmentCreationStore
 {
     private static readonly TimeZoneInfo Zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
 
@@ -40,6 +41,7 @@ public sealed class AppointmentCreationStore(ApplicationDbContext db, IInspectio
             var due = appointment.InspectionStartUtc - lead;
             if (due > now) db.ScheduledReminders.Add(new ScheduledReminder { Id = Guid.NewGuid(), AppointmentId = appointment.Id, Type = type, DueAtUtc = due, EventKey = $"appointment:{appointment.Id}:reminder:{type}" });
         }
+        var recipients = NotificationDispatch.PendingRecipients(db);
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -47,6 +49,7 @@ public sealed class AppointmentCreationStore(ApplicationDbContext db, IInspectio
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "IX_Appointments_InspectionStartUtc" })
         { return new(CreateAppointmentStatus.Unavailable); }
+        await NotificationDispatch.AfterCommitAsync(publisher, recipients);
         return new(CreateAppointmentStatus.Created, appointment.Id, appointment.InspectionStartUtc);
 
         void AddNotification(string recipient, string type, string title, string message) => db.Notifications.Add(new Notification

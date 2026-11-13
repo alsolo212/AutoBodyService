@@ -3,11 +3,12 @@ using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Application.Audit;
 using AutoBodyService.Infrastructure.Persistence;
 using AutoBodyService.Infrastructure.Notifications;
+using AutoBodyService.Application.Notifications;
 using Microsoft.EntityFrameworkCore;
 
 namespace AutoBodyService.Infrastructure.Appointments;
 
-public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWriter audit, TimeProvider clock) : IAdminAppointmentStore
+public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWriter audit, TimeProvider clock, INotificationRealtimePublisher? publisher = null) : IAdminAppointmentStore
 {
     public async Task<AdminAppointmentResult> ExecuteAsync(Guid id, uint version, string actorId,
         Func<Domain.Appointments.Appointment, DateTimeOffset, AdminAppointmentMutation> mutate, CancellationToken cancellationToken)
@@ -62,10 +63,12 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
                 await NotificationEvents.AddForAdministratorsAsync(db, id, "AdminContactPlanChanged", "Завдання зв’язатися з клієнтом",
                     "План ремонту змінено. За потреби зв’яжіться з клієнтом.", now, eventId, cancellationToken);
         }
+        var recipients = NotificationDispatch.PendingRecipients(db);
         try
         {
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            await NotificationDispatch.AfterCommitAsync(publisher, recipients);
             return AdminAppointmentResult.Success;
         }
         catch (DbUpdateConcurrencyException) { return AdminAppointmentResult.Conflict; }

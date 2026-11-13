@@ -4,6 +4,9 @@ using AutoBodyService.Api.Security;
 using AutoBodyService.Api.Configuration;
 using Microsoft.AspNetCore.Mvc;
 using AutoBodyService.Infrastructure.Identity;
+using AutoBodyService.Api.Realtime;
+using AutoBodyService.Application.Notifications;
+using Microsoft.AspNetCore.Http.Connections;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +14,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddInfrastructure(builder.Configuration.GetConnectionString("AutoBodyService"));
 builder.Services.AddApiSecurity();
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<NotificationConnections>();
+builder.Services.AddScoped<INotificationRealtimePublisher, NotificationRealtimePublisher>();
 builder.Services.Configure<PublicContactsOptions>(builder.Configuration.GetSection("PublicContacts"));
 builder.Services.AddControllersWithViews(options => options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute()))
     .AddJsonOptions(options =>
@@ -45,6 +51,33 @@ app.UseHttpsRedirection();
 
 app.UseCors();
 app.UseRateLimiter();
+// WebSocket requests are not protected by CORS. Require browser Origins to match
+// the public HTTPS host, preserved by the trusted reverse proxy.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/hubs/notifications") && !context.Request.IsHttps)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+    if (context.Request.Path.StartsWithSegments("/hubs/notifications") &&
+        (context.Request.Path != "/hubs/notifications" || context.Request.QueryString.HasValue))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+    if (context.Request.Path.StartsWithSegments("/hubs/notifications") && context.Request.Headers.TryGetValue("Origin", out var origin))
+    {
+        if (origin.Count != 1 || !Uri.TryCreate(origin.ToString(), UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps || !string.Equals(uri.Authority, context.Request.Host.Value, StringComparison.OrdinalIgnoreCase) ||
+            uri.AbsolutePath != "/" || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+    }
+    await next();
+});
 app.UseAuthentication();
 app.Use(async (context, next) =>
 {
@@ -68,6 +101,11 @@ app.Use(async (context, next) =>
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<NotificationsHub>("/hubs/notifications", options =>
+{
+    options.CloseOnAuthenticationExpiration = true;
+    options.Transports = HttpTransportType.WebSockets;
+});
 
 app.Run();
 

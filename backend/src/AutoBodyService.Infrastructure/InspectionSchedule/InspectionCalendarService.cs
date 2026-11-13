@@ -6,13 +6,14 @@ using AutoBodyService.Application.Audit;
 using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Infrastructure.Persistence;
 using AutoBodyService.Infrastructure.Notifications;
+using AutoBodyService.Application.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace AutoBodyService.Infrastructure.InspectionSchedule;
 
 public sealed class InspectionCalendarService(ApplicationDbContext db, IInspectionScheduleService weekly,
-    IInspectionExceptionsService exceptions, IAdminAuditWriter audit, TimeProvider clock) : IInspectionCalendarService
+    IInspectionExceptionsService exceptions, IAdminAuditWriter audit, TimeProvider clock, INotificationRealtimePublisher? publisher = null) : IInspectionCalendarService
 {
     private static readonly TimeZoneInfo Zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
 
@@ -67,8 +68,10 @@ public sealed class InspectionCalendarService(ApplicationDbContext db, IInspecti
             await NotificationEvents.AddForAdministratorsAsync(db, conflict.Id, "AdminCalendarConflict", "Конфлікт розкладу",
                 "Зміна графіка вплинула на запис. Зв’яжіться з клієнтом вручну.", now,
                 $"schedule:{version}:{conflict.Id}", cancellationToken);
+        var recipients = NotificationDispatch.PendingRecipients(db);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        await NotificationDispatch.AfterCommitAsync(publisher, recipients);
         return new(ScheduleUpdateResult.Success, response);
     }
 

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using AutoBodyService.Application.Appointments;
+using AutoBodyService.Application.Notifications;
 using AutoBodyService.Application.InspectionSchedule;
 using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Infrastructure.Appointments;
@@ -170,6 +171,37 @@ public sealed class CancelAppointmentPostgresTests(PostgresIdentityFixture fixtu
         Assert.Equal(AppointmentStatus.Cancelled, (await db.Appointments.SingleAsync(a => a.Id == id)).Status);
         Assert.Equal(1, await db.AppointmentStatusEvents.CountAsync(e => e.AppointmentId == id && e.ToStatus == AppointmentStatus.Cancelled));
         Assert.Equal(1, await db.Notifications.CountAsync(n => n.AppointmentId == id && n.RecipientId == owner.Id && n.Type == "AppointmentCancelled"));
+    }
+
+    private sealed class CheckingPublisher(Func<IReadOnlyCollection<string>, Task> onPublish) : INotificationRealtimePublisher
+    {
+        public Task PublishAsync(IReadOnlyCollection<string> recipients) => onPublish(recipients);
+    }
+
+    [PostgresFact]
+    public async Task DeliveryRunsAfterCommitAndFailureDoesNotEraseHistory()
+    {
+        var owner = await User(ApplicationRoles.User); var id = await Add(owner.Id, BaseTime.AddDays(71));
+        var called = false;
+        var publisher = new CheckingPublisher(async recipients =>
+        {
+            Assert.Contains(owner.Id, recipients);
+            await using var verifyScope = factory.Services.CreateAsyncScope();
+            var verify = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Assert.Equal(AppointmentStatus.Cancelled, (await verify.Appointments.AsNoTracking().SingleAsync(a => a.Id == id)).Status);
+            Assert.Single(await verify.Notifications.Where(n => n.AppointmentId == id && n.RecipientId == owner.Id).ToListAsync());
+            called = true;
+            throw new InvalidOperationException("Simulated transport failure");
+        });
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var service = new CancelAppointmentService(scope.ServiceProvider.GetRequiredService<ApplicationDbContext>(), TimeProvider.System, publisher);
+            Assert.Equal(CancelAppointmentResult.Cancelled, await service.CancelOwnAsync(id, owner.Id, default));
+        }
+        Assert.True(called);
+        await using var finalScope = factory.Services.CreateAsyncScope();
+        Assert.Single(await finalScope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Notifications
+            .Where(n => n.AppointmentId == id && n.RecipientId == owner.Id).ToListAsync());
     }
 
     [PostgresFact]

@@ -55,6 +55,8 @@ free_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",
 export E2E_TLS_CERT="$test_dir/localhost.pem"
 export E2E_TLS_KEY="$test_dir/localhost.key"
 export E2E_API_CERT="$E2E_TLS_CERT"
+# The real Node SignalR client trusts only this disposable test certificate.
+export NODE_EXTRA_CA_CERTS="$E2E_TLS_CERT"
 export Kestrel__Certificates__Default__Path="$E2E_TLS_CERT"
 export Kestrel__Certificates__Default__KeyPath="$E2E_TLS_KEY"
 export ASPNETCORE_URLS="https://127.0.0.1:0"

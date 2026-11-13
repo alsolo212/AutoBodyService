@@ -100,6 +100,19 @@ public sealed class NotificationHistoryPostgresTests(PostgresIdentityFixture fix
     }
 
     [PostgresFact]
+    public async Task HubHttpHandshakeRejectsAnonymousCrossOriginAndQueryTokens()
+    {
+        using var anonymous = Client();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/hubs/notifications")).StatusCode);
+        var user = await User("User"); using var client = await Login(user.Phone);
+        using var foreign = new HttpRequestMessage(HttpMethod.Get, "/hubs/notifications");
+        foreign.Headers.TryAddWithoutValidation("Origin", "https://evil.invalid");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(foreign)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/hubs/notifications?access_token=example")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsync("/hubs/notifications/negotiate", null)).StatusCode);
+    }
+
+    [PostgresFact]
     public async Task UniqueEventKeyIsEnforcedByPostgresAndHistorySurvivesWithoutSignalR()
     {
         var user = await User("User"); var first = Item(user.Id, "Security", null, DateTimeOffset.UtcNow);

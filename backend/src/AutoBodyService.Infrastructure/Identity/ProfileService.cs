@@ -2,11 +2,12 @@ using AutoBodyService.Application.Profiles;
 using Microsoft.AspNetCore.Identity;
 using AutoBodyService.Infrastructure.Persistence;
 using AutoBodyService.Infrastructure.Notifications;
+using AutoBodyService.Application.Notifications;
 using Microsoft.EntityFrameworkCore;
 
 namespace AutoBodyService.Infrastructure.Identity;
 
-public sealed class ProfileService(UserManager<ApplicationUser> users, ApplicationDbContext db, TimeProvider clock) : IProfileService
+public sealed class ProfileService(UserManager<ApplicationUser> users, ApplicationDbContext db, TimeProvider clock, INotificationRealtimePublisher? publisher = null) : IProfileService
 {
     public async Task<OwnProfile?> GetAsync(string userId)
     {
@@ -40,8 +41,10 @@ public sealed class ProfileService(UserManager<ApplicationUser> users, Applicati
             NotificationEvents.Add(db, userId, null, "PasswordChanged", "Пароль змінено",
                 "Пароль вашого облікового запису змінено. Якщо це були не ви, зв’яжіться з адміністрацією.",
                 clock.GetUtcNow(), $"password-change:{eventId}:{userId}");
+            var recipients = NotificationDispatch.PendingRecipients(db);
             await db.SaveChangesAsync();
             if (transaction is not null) await transaction.CommitAsync();
+            await NotificationDispatch.AfterCommitAsync(publisher, recipients);
             return PasswordChangeResult.Success;
         }
         user.MustChangePassword = mustChangePassword;

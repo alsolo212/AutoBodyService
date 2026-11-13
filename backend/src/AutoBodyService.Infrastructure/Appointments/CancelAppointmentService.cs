@@ -1,13 +1,14 @@
 using AutoBodyService.Application.Appointments;
 using AutoBodyService.Infrastructure.Identity;
 using AutoBodyService.Infrastructure.Notifications;
+using AutoBodyService.Application.Notifications;
 using AutoBodyService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace AutoBodyService.Infrastructure.Appointments;
 
-public sealed class CancelAppointmentService(ApplicationDbContext db, TimeProvider clock) : ICancelAppointmentService
+public sealed class CancelAppointmentService(ApplicationDbContext db, TimeProvider clock, INotificationRealtimePublisher? publisher = null) : ICancelAppointmentService
 {
     public async Task<CancelAppointmentResult> CancelOwnAsync(Guid appointmentId, string ownerId, CancellationToken cancellationToken)
     {
@@ -31,10 +32,12 @@ public sealed class CancelAppointmentService(ApplicationDbContext db, TimeProvid
         foreach (var admin in admins)
             AddNotification(admin, "AdminAppointmentCancelled", "Запис скасовано", "Клієнт скасував запис на огляд.");
 
+        var recipients = NotificationDispatch.PendingRecipients(db);
         try
         {
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            await NotificationDispatch.AfterCommitAsync(publisher, recipients);
             return CancelAppointmentResult.Cancelled;
         }
         catch (DbUpdateConcurrencyException)
