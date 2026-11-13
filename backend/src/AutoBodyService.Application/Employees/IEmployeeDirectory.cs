@@ -1,7 +1,12 @@
 namespace AutoBodyService.Application.Employees;
 
-/// <summary>Directory entry. Assignment data will be added when assignment storage exists.</summary>
-public sealed record EmployeeDetails(Guid Id, string FullName, string Specialization, bool IsActive, uint Version);
+/// <summary>Minimal information needed to navigate to a currently assigned order.</summary>
+public sealed record EmployeeCurrentAssignment(Guid Id, Guid AppointmentId);
+/// <summary>Directory entry with current, unreleased assignments.</summary>
+public sealed record EmployeeDetails(Guid Id, string FullName, string Specialization, bool IsActive, uint Version)
+{
+    public IReadOnlyList<EmployeeCurrentAssignment> CurrentAssignments { get; init; } = [];
+}
 public sealed record EmployeeChange(string? FullName, string? Specialization, bool? IsActive);
 public enum EmployeeUpdateResult { Success, NotFound, Conflict }
 

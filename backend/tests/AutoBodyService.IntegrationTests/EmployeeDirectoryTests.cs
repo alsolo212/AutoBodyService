@@ -1,13 +1,16 @@
+using System.Data.Common;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
 using AutoBodyService.Domain.Employees;
 using AutoBodyService.Infrastructure.Identity;
+using AutoBodyService.Infrastructure.Employees;
 using AutoBodyService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
@@ -89,7 +92,7 @@ public sealed class EmployeeDirectoryPostgresTests(PostgresIdentityFixture fixtu
         Assert.Equal("Directory Example", item.GetProperty("fullName").GetString());
         Assert.Equal("Repair", item.GetProperty("specialization").GetString());
         Assert.True(item.GetProperty("isActive").GetBoolean());
-        Assert.False(item.TryGetProperty("assignments", out _));
+        Assert.Empty(item.GetProperty("currentAssignments").EnumerateArray());
         Assert.Equal($"{Path}/{id}", created.Headers.Location!.AbsolutePath);
         using var get = await superAdmin.GetAsync(created.Headers.Location);
         Assert.Equal(HttpStatusCode.OK, get.StatusCode);
@@ -146,6 +149,36 @@ public sealed class EmployeeDirectoryPostgresTests(PostgresIdentityFixture fixtu
         Assert.Equal("Validation", persisted.GetProperty("fullName").GetString());
         Assert.True(persisted.GetProperty("isActive").GetBoolean());
         Assert.Equal(version, persisted.GetProperty("version").GetUInt32());
+    }
+
+    [PostgresFact]
+    public async Task DirectoryLoadsMultipleEmployeesWithTwoDatabaseQueries()
+    {
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var seed = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            seed.Employees.AddRange(Enumerable.Range(0, 3).Select(i => new Employee(Guid.NewGuid(), $"Query worker {i}", "Repair", true)));
+            await seed.SaveChangesAsync();
+        }
+        var counter = new ReadCounter();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseNpgsql(Environment.GetEnvironmentVariable("AUTOBODY_IDENTITY_POSTGRES"))
+            .AddInterceptors(counter).Options;
+        await using var db = new ApplicationDbContext(options);
+        var employees = await new EmployeeDirectory(db).ListAsync(default);
+        Assert.True(employees.Count >= 3);
+        Assert.Equal(2, counter.Count);
+    }
+
+    private sealed class ReadCounter : DbCommandInterceptor
+    {
+        public int Count { get; private set; }
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            Count++;
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
     }
 
     [PostgresFact]

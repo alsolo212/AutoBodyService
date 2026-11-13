@@ -2,7 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { switchMap } from 'rxjs';
 
-export interface Employee { id: string; fullName: string; specialization: string; isActive: boolean; version: number; }
+export interface EmployeeCurrentAssignment { id: string; appointmentId: string; }
+export interface Employee { id: string; fullName: string; specialization: string; isActive: boolean; version: number; currentAssignments: EmployeeCurrentAssignment[]; }
 export interface ActiveAssignment { id: string; appointmentId: string; employeeId: string; }
 export interface EmployeeDetailsChange { fullName: string; specialization: string; }
 

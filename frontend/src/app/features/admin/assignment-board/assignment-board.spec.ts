@@ -8,8 +8,8 @@ import { ActiveAssignment, Employee } from '../employees/employees-api';
 import { AssignmentBoard } from './assignment-board';
 
 const car: AdminBoardCard = { id: 'order-1', make: 'Test', model: 'Car', customerName: 'Client', vin: 'VIN', status: 'InProgress', inspectionStartUtc: '2099-01-01T00:00:00Z', inspectionStartLocal: '2099-01-01T02:00:00+02:00', repairPlan: null, version: 1 };
-const first: Employee = { id: 'worker-1', fullName: 'Один', specialization: 'Маляр', isActive: true, version: 1 };
-const second: Employee = { id: 'worker-2', fullName: 'Два', specialization: 'Рихтувальник', isActive: true, version: 1 };
+const first: Employee = { id: 'worker-1', fullName: 'Один', specialization: 'Маляр', isActive: true, version: 1, currentAssignments: [] };
+const second: Employee = { id: 'worker-2', fullName: 'Два', specialization: 'Рихтувальник', isActive: true, version: 1, currentAssignments: [] };
 const inactive: Employee = { ...second, id: 'inactive', isActive: false };
 const one: ActiveAssignment = { id: 'assignment-1', appointmentId: car.id, employeeId: first.id };
 const two: ActiveAssignment = { id: 'assignment-2', appointmentId: car.id, employeeId: second.id };

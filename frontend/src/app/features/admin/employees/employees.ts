@@ -3,9 +3,9 @@ import { Component, DestroyRef, ElementRef, inject, signal, viewChild } from '@a
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, ValidatorFn, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { catchError, finalize, forkJoin, of } from 'rxjs';
+import { finalize } from 'rxjs';
 import { ConfirmDialog } from '../../../shared/confirm-dialog/confirm-dialog';
-import { ActiveAssignment, Employee, EmployeesApi } from './employees-api';
+import { Employee, EmployeesApi } from './employees-api';
 
 const validText: ValidatorFn = control => {
   const text = String(control.value ?? '');
@@ -25,7 +25,6 @@ export class Employees {
   private readonly dialog = viewChild.required(ConfirmDialog);
   private readonly nameInput = viewChild.required<ElementRef<HTMLInputElement>>('nameInput');
   readonly employees = signal<Employee[]>([]);
-  readonly assignments = signal<ActiveAssignment[] | null>(null);
   readonly loading = signal(false);
   readonly loadError = signal('');
   readonly actionError = signal('');
@@ -42,13 +41,11 @@ export class Employees {
   load() {
     if (this.saving() || this.loading()) return;
     this.loading.set(true); this.loadError.set('');
-    forkJoin({ items: this.api.list(), assignments: this.api.activeAssignments().pipe(catchError(() => of(null))) })
-      .pipe(finalize(() => this.loading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: result => { this.employees.set(result.items); this.assignments.set(result.assignments); },
+    this.api.list().pipe(finalize(() => this.loading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: employees => this.employees.set(employees),
       error: (error: unknown) => this.loadError.set(this.message(error, 'Не вдалося завантажити працівників.')),
     });
   }
-  assignmentsFor(employeeId: string) { return this.assignments()?.filter(item => item.employeeId === employeeId) ?? []; }
   edit(employee: Employee) {
     if (this.saving()) return;
     this.editing.set(employee); this.actionError.set(''); this.notice.set('');

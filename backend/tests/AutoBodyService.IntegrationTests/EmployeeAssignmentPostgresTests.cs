@@ -114,6 +114,66 @@ public sealed class EmployeeAssignmentPostgresTests(PostgresIdentityFixture fixt
         : client.PostAsJsonAsync($"/api/admin/appointments/{id}/transition", new { version, target = "AwaitingPayment" });
 
     [PostgresFact]
+    public async Task EmployeeDirectoryHttpShowsOnlyCurrentAssignmentsThroughLifecycleForBothAdminRoles()
+    {
+        var owner = await User("User"); var admin = await User("Admin"); var super = await User("SuperAdmin");
+        using var actor = await Login(admin.Phone); using var supervisor = await Login(super.Phone);
+        using var user = await Login(owner.Phone); using var anonymous = Client();
+        var emptyWorker = await Employee("No assignments"); var worker = await Employee("Directory lifecycle");
+        var firstOrder = await Appointment(owner.Id); var secondOrder = await Appointment(owner.Id);
+        const string directory = "/api/admin/employees";
+        async Task<JsonElement> Find(HttpClient client, Guid id)
+        {
+            using var response = await client.GetAsync(directory);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var list = await response.Content.ReadFromJsonAsync<JsonElement[]>();
+            return Assert.Single(list!, x => x.GetProperty("id").GetGuid() == id);
+        }
+        static JsonElement[] Assignments(JsonElement employee) => employee.GetProperty("currentAssignments").EnumerateArray().ToArray();
+        Assert.Empty(Assignments(await Find(actor, emptyWorker)));
+        Assert.Empty(Assignments(await Find(supervisor, worker)));
+        Assert.Equal(HttpStatusCode.Forbidden, (await user.GetAsync(directory)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(directory)).StatusCode);
+        using var first = await Assign(actor, firstOrder, worker); Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        var oldId = (await Body(first)).GetProperty("id").GetGuid();
+        var one = Assert.Single(Assignments(await Find(actor, worker)));
+        Assert.Equal(oldId, one.GetProperty("id").GetGuid()); Assert.Equal(firstOrder, one.GetProperty("appointmentId").GetGuid());
+        Assert.Equal(new[] { "appointmentId", "id" }, one.EnumerateObject().Select(p => p.Name).Order().ToArray());
+        using var second = await Assign(supervisor, secondOrder, worker); Assert.Equal(HttpStatusCode.Created, second.StatusCode);
+        var secondId = (await Body(second)).GetProperty("id").GetGuid();
+        var both = Assignments(await Find(supervisor, worker)); Assert.Equal(2, both.Length);
+        Assert.Equal(new[] { firstOrder, secondOrder }.Order(), both.Select(a => a.GetProperty("appointmentId").GetGuid()).Order());
+        Assert.Empty(Assignments(await Find(actor, emptyWorker)));
+        using var colleague = await Assign(supervisor, firstOrder, emptyWorker); Assert.Equal(HttpStatusCode.Created, colleague.StatusCode);
+        var colleagueId = (await Body(colleague)).GetProperty("id").GetGuid();
+        Assert.Equal(colleagueId, Assert.Single(Assignments(await Find(actor, emptyWorker))).GetProperty("id").GetGuid());
+        Assert.DoesNotContain(Assignments(await Find(supervisor, worker)), a => a.GetProperty("id").GetGuid() == colleagueId);
+        Assert.Equal(HttpStatusCode.NoContent, (await Release(supervisor, colleagueId)).StatusCode);
+        Assert.Empty(Assignments(await Find(actor, emptyWorker)));
+        Assert.Equal(HttpStatusCode.NoContent, (await Release(actor, oldId)).StatusCode);
+        Assert.Equal(secondId, Assert.Single(Assignments(await Find(actor, worker))).GetProperty("id").GetGuid());
+        using var reassigned = await Assign(actor, firstOrder, worker); Assert.Equal(HttpStatusCode.Created, reassigned.StatusCode);
+        var newId = (await Body(reassigned)).GetProperty("id").GetGuid(); Assert.NotEqual(oldId, newId);
+        var current = Assignments(await Find(actor, worker)); Assert.Equal(2, current.Length);
+        Assert.Contains(current, a => a.GetProperty("id").GetGuid() == newId);
+        var history = await actor.GetFromJsonAsync<JsonElement[]>($"{Path}?employeeId={worker}");
+        Assert.Equal(3, history!.Length);
+        Assert.NotEqual(JsonValueKind.Null, Assert.Single(history, h => h.GetProperty("id").GetGuid() == oldId).GetProperty("releasedAtUtc").ValueKind);
+        var entry = await Find(actor, worker); var version = entry.GetProperty("version").GetUInt32();
+        using var deactivate = await actor.PatchAsJsonAsync($"{directory}/{worker}", new { version, isActive = false });
+        Assert.Equal(HttpStatusCode.OK, deactivate.StatusCode);
+        var patched = await Body(deactivate); Assert.False(patched.GetProperty("isActive").GetBoolean()); Assert.Equal(2, Assignments(patched).Length);
+        var inactive = await Find(supervisor, worker); Assert.False(inactive.GetProperty("isActive").GetBoolean()); Assert.Equal(2, Assignments(inactive).Length);
+        Assert.Equal(2, Assignments(await actor.GetFromJsonAsync<JsonElement>($"{directory}/{worker}")).Length);
+        Assert.Equal(HttpStatusCode.NoContent, (await Exit(actor, firstOrder, await Version(actor, firstOrder), false)).StatusCode);
+        Assert.Equal(secondId, Assert.Single(Assignments(await Find(actor, worker))).GetProperty("id").GetGuid());
+        Assert.Equal(HttpStatusCode.NoContent, (await Exit(supervisor, secondOrder, await Version(supervisor, secondOrder), true)).StatusCode);
+        Assert.Empty(Assignments(await Find(supervisor, worker)));
+        history = await actor.GetFromJsonAsync<JsonElement[]>($"{Path}?employeeId={worker}");
+        Assert.Equal(3, history!.Length); Assert.All(history, h => Assert.NotEqual(JsonValueKind.Null, h.GetProperty("releasedAtUtc").ValueKind));
+    }
+
+    [PostgresFact]
     public async Task AssignmentHistoryReleaseReassignSnapshotsFiltersAndOwnerPrivacy()
     {
         var owner = await User("User"); var outsider = await User("User"); var admin = await User("Admin"); var super = await User("SuperAdmin");

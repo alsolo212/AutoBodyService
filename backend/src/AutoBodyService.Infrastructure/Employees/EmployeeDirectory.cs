@@ -7,15 +7,35 @@ namespace AutoBodyService.Infrastructure.Employees;
 
 public sealed class EmployeeDirectory(ApplicationDbContext db) : IEmployeeDirectory
 {
-    public async Task<IReadOnlyList<EmployeeDetails>> ListAsync(CancellationToken cancellationToken) =>
-        await db.Employees.AsNoTracking().OrderBy(e => e.FullName).ThenBy(e => e.Id)
+    public async Task<IReadOnlyList<EmployeeDetails>> ListAsync(CancellationToken cancellationToken)
+    {
+        var employees = await db.Employees.AsNoTracking().OrderBy(e => e.FullName).ThenBy(e => e.Id)
             .Select(e => new EmployeeDetails(e.Id, e.FullName, e.Specialization, e.IsActive, EF.Property<uint>(e, "Version")))
             .ToListAsync(cancellationToken);
+        return await IncludeCurrentAssignmentsAsync(employees, cancellationToken);
+    }
 
-    public Task<EmployeeDetails?> GetAsync(Guid id, CancellationToken cancellationToken) =>
-        db.Employees.AsNoTracking().Where(e => e.Id == id)
+    public async Task<EmployeeDetails?> GetAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var employee = await db.Employees.AsNoTracking().Where(e => e.Id == id)
             .Select(e => new EmployeeDetails(e.Id, e.FullName, e.Specialization, e.IsActive, EF.Property<uint>(e, "Version")))
             .SingleOrDefaultAsync(cancellationToken);
+        if (employee is null) return null;
+        return (await IncludeCurrentAssignmentsAsync([employee], cancellationToken))[0];
+    }
+
+    private async Task<IReadOnlyList<EmployeeDetails>> IncludeCurrentAssignmentsAsync(IReadOnlyList<EmployeeDetails> employees, CancellationToken cancellationToken)
+    {
+        if (employees.Count == 0) return employees;
+        var ids = employees.Select(e => e.Id).ToArray();
+        var rows = await db.EmployeeAssignments.AsNoTracking()
+            .Where(a => ids.Contains(a.EmployeeId) && a.ReleasedAtUtc == null)
+            .OrderBy(a => a.AssignedAtUtc).ThenBy(a => a.Id)
+            .Select(a => new { a.EmployeeId, Assignment = new EmployeeCurrentAssignment(a.Id, a.AppointmentId) })
+            .ToListAsync(cancellationToken);
+        var byEmployee = rows.ToLookup(row => row.EmployeeId, row => row.Assignment);
+        return employees.Select(e => e with { CurrentAssignments = byEmployee[e.Id].ToArray() }).ToArray();
+    }
 
     public async Task<EmployeeDetails> CreateAsync(string fullName, string specialization, bool isActive, CancellationToken cancellationToken)
     {
@@ -34,7 +54,7 @@ public sealed class EmployeeDirectory(ApplicationDbContext db) : IEmployeeDirect
         employee.Update(change.FullName ?? employee.FullName, change.Specialization ?? employee.Specialization, change.IsActive ?? employee.IsActive);
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { return (EmployeeUpdateResult.Conflict, null); }
-        return (EmployeeUpdateResult.Success, Details(employee));
+        return (EmployeeUpdateResult.Success, (await IncludeCurrentAssignmentsAsync([Details(employee)], cancellationToken))[0]);
     }
 
     private EmployeeDetails Details(Employee employee) => new(employee.Id, employee.FullName, employee.Specialization,

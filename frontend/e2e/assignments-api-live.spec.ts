@@ -28,9 +28,17 @@ test('live assignment lifecycle is reflected in employee directory and repair hi
     const assignment = await (await checked(await fetch('/api/admin/assignments', { method: 'POST', headers, body: JSON.stringify({ appointmentId: order.id, employeeId: employee.id }) }), 201)).json();
     return { order: order.id as string, employee: employee.id as string, assignment: assignment.id as string };
   });
+  const redundant: string[] = [];
+  page.on('request', request => { if (request.method() === 'GET' && request.url().includes('/api/admin/assignments?active=true')) redundant.push(request.url()); });
+  const directoryResponse = page.waitForResponse(response => response.url().endsWith('/api/admin/employees') && response.request().method() === 'GET');
   await page.goto('/admin/employees');
+  const directory = await (await directoryResponse).json();
+  const employeeRow = directory.find((row: { id: string }) => row.id === data.employee);
+  expect(employeeRow.currentAssignments).toEqual([{ id: data.assignment, appointmentId: data.order }]);
+  console.log('Employee API sample:', JSON.stringify(employeeRow));
   const card = page.locator('.employee-card').filter({ hasText: 'Тестовий майстер' });
   await expect(card.getByRole('link', { name: new RegExp(data.order) })).toHaveAttribute('href', `/admin/appointments/${data.order}`);
+  expect(redundant).toHaveLength(0);
   await card.getByRole('button', { name: /Деактивувати/ }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Деактивувати' }).click();
   await expect(card).toContainText('Неактивний');
