@@ -6,7 +6,7 @@ public sealed record NotificationItem(Guid Id, string Type, string Title, string
 
 public interface INotificationHistory
 {
-    Task<IReadOnlyList<NotificationItem>> GetAsync(string recipientId, bool administrator, bool? unread, CancellationToken cancellationToken);
+    Task<IReadOnlyList<NotificationItem>> GetAsync(string recipientId, bool? unread, CancellationToken cancellationToken);
     Task<bool> MarkReadAsync(string recipientId, Guid id, CancellationToken cancellationToken);
     Task MarkAllReadAsync(string recipientId, CancellationToken cancellationToken);
 }

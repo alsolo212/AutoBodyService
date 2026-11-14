@@ -8,6 +8,7 @@ using AutoBodyService.Application.Appointments;
 using AutoBodyService.Infrastructure.Appointments;
 using AutoBodyService.Infrastructure.InspectionSchedule;
 using AutoBodyService.Infrastructure.Identity;
+using AutoBodyService.Infrastructure.Notifications;
 using AutoBodyService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -73,6 +74,7 @@ public sealed class CreateAppointmentPostgresTests(PostgresIdentityFixture fixtu
             Assert.Contains(notifications, n => n.RecipientId == owner && n.Type == "AppointmentCreated");
             Assert.Contains(notifications, n => n.RecipientId == admin && n.Type == "AdminAppointmentCreated");
             Assert.Contains(notifications, n => n.RecipientId == super && n.Type == "AdminAppointmentCreated");
+            Assert.All(notifications, n => Assert.Equal(n.Type == "AppointmentCreated" ? NotificationAudience.Personal : NotificationAudience.Administrator, n.Audience));
             Assert.Equal(3, await db.ScheduledReminders.CountAsync(r => r.AppointmentId == id));
         }
     }

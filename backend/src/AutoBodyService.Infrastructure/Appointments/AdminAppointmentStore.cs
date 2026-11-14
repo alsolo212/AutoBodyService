@@ -44,7 +44,7 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
                 _ => throw new InvalidOperationException("Unexpected transition.")
             };
             var eventId = $"status:{statusEvent.Id}";
-            NotificationEvents.Add(db, appointment.UserId, id, $"Appointment{statusEvent.ToStatus}", title, message,
+            NotificationEvents.Add(db, appointment.UserId, id, NotificationAudience.Personal, $"Appointment{statusEvent.ToStatus}", title, message,
                 statusEvent.ChangedAtUtc, $"{eventId}:customer:{appointment.UserId}");
             if (statusEvent.ToStatus == AppointmentStatus.AwaitingPayment)
                 await NotificationEvents.AddForAdministratorsAsync(db, id, "AdminReadyForPayment", "Автомобіль готовий до видачі",
@@ -60,7 +60,7 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
             audit.RecordRepairPlanChange(actorId, id, mutation.PriceChanged, mutation.DatesChanged);
             var now = clock.GetUtcNow();
             var eventId = $"plan:{id}:{Guid.NewGuid()}";
-            NotificationEvents.Add(db, appointment.UserId, id, "RepairPlanChanged", "План ремонту змінено",
+            NotificationEvents.Add(db, appointment.UserId, id, NotificationAudience.Personal, "RepairPlanChanged", "План ремонту змінено",
                 "Вартість або терміни ремонту змінено. Перегляньте актуальний план замовлення.", now, $"{eventId}:customer:{appointment.UserId}");
             if (appointment.Status == AppointmentStatus.Scheduled)
                 await NotificationEvents.AddForAdministratorsAsync(db, id, "AdminContactPlanChanged", "Завдання зв’язатися з клієнтом",

@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Application.Notifications;
+using AutoBodyService.Application.InspectionSchedule;
 using AutoBodyService.Infrastructure.Identity;
 using AutoBodyService.Infrastructure.Notifications;
 using AutoBodyService.Infrastructure.Persistence;
@@ -14,6 +15,8 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
@@ -49,9 +52,9 @@ public sealed class NotificationHistoryPostgresTests(PostgresIdentityFixture fix
         Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync("/api/auth/login", new { phone, password = Password })).StatusCode);
         await Token(client); return client;
     }
-    private static Notification Item(string recipient, string type, Guid? appointment, DateTimeOffset created) => new()
+    private static Notification Item(string recipient, string type, Guid? appointment, DateTimeOffset created, NotificationAudience audience = NotificationAudience.Personal) => new()
     {
-        Id = Guid.NewGuid(), RecipientId = recipient, AppointmentId = appointment, Type = type, Title = "Title", Message = "Message",
+        Id = Guid.NewGuid(), RecipientId = recipient, AppointmentId = appointment, Audience = audience, Type = type, Title = "Title", Message = "Message",
         CreatedAtUtc = created, EventKey = Guid.NewGuid().ToString()
     };
 
@@ -62,8 +65,8 @@ public sealed class NotificationHistoryPostgresTests(PostgresIdentityFixture fix
         var when = DateTimeOffset.UtcNow.AddDays(-2); var appointment = new Appointment(Guid.NewGuid(), customer.Id, when.AddDays(10), "1HGCM82633A123456", "Make", "Model", "Issue", when);
         var older = Item(customer.Id, "AppointmentCreated", appointment.Id, when);
         var newer = Item(customer.Id, "AppointmentScheduled", appointment.Id, when.AddMinutes(1));
-        var adminItem = Item(admin.Id, "AdminAppointmentCreated", appointment.Id, when);
-        var superItem = Item(super.Id, "AdminAppointmentCreated", appointment.Id, when);
+        var adminItem = Item(admin.Id, "AdminAppointmentCreated", appointment.Id, when, NotificationAudience.Administrator);
+        var superItem = Item(super.Id, "AdminAppointmentCreated", appointment.Id, when, NotificationAudience.Administrator);
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -97,10 +100,134 @@ public sealed class NotificationHistoryPostgresTests(PostgresIdentityFixture fix
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var history = scope.ServiceProvider.GetRequiredService<INotificationHistory>();
-            Assert.Null(Assert.Single(await history.GetAsync(admin.Id, false, null, default)).Link);
+            Assert.Single(await history.GetAsync(admin.Id, null, default));
         }
         var temporary = await User("User", true); using var restricted = await Login(temporary.Phone);
         Assert.Equal(HttpStatusCode.Forbidden, (await restricted.GetAsync("/api/notifications")).StatusCode);
+    }
+
+    [PostgresFact]
+    public async Task RoleLossHidesAdministrativeHistoryAndReadMutationsWhilePersonalHistorySurvives()
+    {
+        var owner = await User("User"); var otherAdmin = await User("Admin"); var supervisor = await User("SuperAdmin");
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            Assert.True((await users.AddToRoleAsync((await users.FindByIdAsync(owner.Id))!, "Admin")).Succeeded);
+            var date = new DateOnly(2080, 1, 1).AddDays(RandomNumberGenerator.GetInt32(0, 9000));
+            var schedules = scope.ServiceProvider.GetRequiredService<IInspectionScheduleService>();
+            var current = await schedules.GetAsync(default);
+            Assert.Equal(ScheduleUpdateResult.Success, await schedules.UpdateAsync(current.Version, [new(date.DayOfWeek, new(9, 0), new(10, 0))], default));
+            using var admin = await Login(owner.Phone);
+            var slots = await admin.GetFromJsonAsync<JsonElement>($"/api/inspection-slots?date={date:yyyy-MM-dd}");
+            var start = slots.GetProperty("slots")[0].GetProperty("startUtc").GetDateTimeOffset();
+            using var created = await admin.PostAsJsonAsync("/api/appointments", new { inspectionStartUtc = start, vin = "1HGCM82633A123456", make = "Test", model = "Model", problemDescription = "Issue" });
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+            var appointmentId = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var stored = await db.Notifications.AsNoTracking().Where(n => n.AppointmentId == appointmentId && n.RecipientId == owner.Id).ToListAsync();
+            var personal = Assert.Single(stored, n => n.Type == "AppointmentCreated");
+            var roleEvent = Assert.Single(stored, n => n.Type == "AdminAppointmentCreated");
+            Assert.Equal(NotificationAudience.Personal, personal.Audience);
+            Assert.Equal(NotificationAudience.Administrator, roleEvent.Audience);
+            var ownerSuperOnly = Item(owner.Id, "SyntheticSecurityNotice", appointmentId, DateTimeOffset.UtcNow, NotificationAudience.SuperAdministrator);
+            var superOnly = Item(supervisor.Id, "SyntheticSecurityNotice", appointmentId, DateTimeOffset.UtcNow, NotificationAudience.SuperAdministrator);
+            var statusPersonal = Item(owner.Id, "AppointmentScheduled", appointmentId, DateTimeOffset.UtcNow, NotificationAudience.Personal);
+            var reminderPersonal = Item(owner.Id, "InspectionReminder2Hours", appointmentId, DateTimeOffset.UtcNow, NotificationAudience.Personal);
+            db.Notifications.AddRange(ownerSuperOnly, superOnly, statusPersonal, reminderPersonal); await db.SaveChangesAsync();
+            var initial = (await admin.GetFromJsonAsync<JsonElement[]>("/api/notifications"))!;
+            Assert.Contains(initial, n => n.GetProperty("id").GetGuid() == personal.Id && n.GetProperty("link").GetString() == $"/account/appointments/{appointmentId}");
+            Assert.Contains(initial, n => n.GetProperty("id").GetGuid() == roleEvent.Id && n.GetProperty("link").GetString() == $"/admin/appointments/{appointmentId}");
+            Assert.DoesNotContain(initial, n => n.GetProperty("id").GetGuid() == ownerSuperOnly.Id);
+            Assert.Equal(HttpStatusCode.NotFound, (await admin.PatchAsync($"/api/notifications/{ownerSuperOnly.Id}/read", null)).StatusCode);
+            using (var other = await Login(otherAdmin.Phone))
+                Assert.Equal(HttpStatusCode.NotFound, (await other.PatchAsync($"/api/notifications/{roleEvent.Id}/read", null)).StatusCode);
+            using (var super = await Login(supervisor.Phone))
+            {
+                Assert.Contains((await super.GetFromJsonAsync<JsonElement[]>("/api/notifications"))!, n => n.GetProperty("id").GetGuid() == superOnly.Id);
+                Assert.Equal(HttpStatusCode.NotFound, (await super.PatchAsync($"/api/notifications/{ownerSuperOnly.Id}/read", null)).StatusCode);
+            }
+            Assert.Equal(HttpStatusCode.NoContent, (await admin.PostAsync("/api/auth/logout", null)).StatusCode);
+            Assert.True((await users.RemoveFromRoleAsync((await users.FindByIdAsync(owner.Id))!, "Admin")).Succeeded);
+            using var customer = await Login(owner.Phone);
+            var visible = (await customer.GetFromJsonAsync<JsonElement[]>("/api/notifications?unread=true"))!;
+            Assert.Equal(new[] { personal.Id, statusPersonal.Id, reminderPersonal.Id }.Order(), visible.Select(n => n.GetProperty("id").GetGuid()).Order());
+            Assert.Equal(HttpStatusCode.NotFound, (await customer.PatchAsync($"/api/notifications/{roleEvent.Id}/read", null)).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await customer.PatchAsync($"/api/notifications/{ownerSuperOnly.Id}/read", null)).StatusCode);
+            customer.DefaultRequestHeaders.Remove("RequestVerificationToken");
+            Assert.Equal(HttpStatusCode.BadRequest, (await customer.PostAsync("/api/notifications/read-all", null)).StatusCode);
+            await Token(customer);
+            Assert.Equal(HttpStatusCode.NoContent, (await customer.PatchAsync($"/api/notifications/{personal.Id}/read", null)).StatusCode);
+            Assert.Equal(2, (await customer.GetFromJsonAsync<JsonElement[]>("/api/notifications?unread=true"))!.Length);
+            Assert.Equal(HttpStatusCode.NoContent, (await customer.PostAsync("/api/notifications/read-all", null)).StatusCode);
+            Assert.Empty((await customer.GetFromJsonAsync<JsonElement[]>("/api/notifications?unread=true"))!);
+            Assert.Null((await db.Notifications.AsNoTracking().SingleAsync(n => n.Id == roleEvent.Id)).ReadAtUtc);
+            Assert.Null((await db.Notifications.AsNoTracking().SingleAsync(n => n.Id == ownerSuperOnly.Id)).ReadAtUtc);
+            Assert.NotNull((await db.Notifications.AsNoTracking().SingleAsync(n => n.Id == statusPersonal.Id)).ReadAtUtc);
+            Assert.NotNull((await db.Notifications.AsNoTracking().SingleAsync(n => n.Id == reminderPersonal.Id)).ReadAtUtc);
+            Assert.Equal(HttpStatusCode.NoContent, (await customer.PostAsync("/api/auth/logout", null)).StatusCode);
+            Assert.True((await users.AddToRoleAsync((await users.FindByIdAsync(owner.Id))!, "Admin")).Succeeded);
+            using var restored = await Login(owner.Phone);
+            var restoredUnread = (await restored.GetFromJsonAsync<JsonElement[]>("/api/notifications?unread=true"))!;
+            Assert.Equal(roleEvent.Id, Assert.Single(restoredUnread).GetProperty("id").GetGuid());
+            Assert.Equal(HttpStatusCode.NotFound, (await restored.PatchAsync($"/api/notifications/{ownerSuperOnly.Id}/read", null)).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await restored.PostAsync("/api/auth/logout", null)).StatusCode);
+            Assert.True((await users.AddToRoleAsync((await users.FindByIdAsync(owner.Id))!, "SuperAdmin")).Succeeded);
+            using var promoted = await Login(owner.Phone);
+            Assert.Contains((await promoted.GetFromJsonAsync<JsonElement[]>("/api/notifications?unread=true"))!, n => n.GetProperty("id").GetGuid() == ownerSuperOnly.Id);
+            Assert.Equal(HttpStatusCode.NoContent, (await promoted.PatchAsync($"/api/notifications/{ownerSuperOnly.Id}/read", null)).StatusCode);
+        }
+    }
+
+    [PostgresFact]
+    public async Task MigrationClassifiesKnownLegacyEventsAndRestrictsUnknownTypesWithoutDeletingHistory()
+    {
+        var schema = "notification_upgrade_" + Guid.NewGuid().ToString("N");
+        var connectionString = Environment.GetEnvironmentVariable("AUTOBODY_IDENTITY_POSTGRES")!;
+        await using var connection = new NpgsqlConnection(connectionString); await connection.OpenAsync();
+        await using (var create = new NpgsqlCommand($"CREATE SCHEMA \"{schema}\"", connection)) await create.ExecuteNonQueryAsync();
+        try
+        {
+            var isolated = new NpgsqlConnectionStringBuilder(connectionString) { SearchPath = schema }.ConnectionString;
+            await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseNpgsql(isolated).Options);
+            var migrator = db.Database.GetService<IMigrator>();
+            await migrator.MigrateAsync("20261113110646_ReminderRecipientAndOutcome");
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "AspNetUsers" ("Id", "Name", "PhoneNormalized", "UserName", "PhoneNumber", "MustChangePassword", "IsBlocked", "EmailConfirmed", "PhoneNumberConfirmed", "TwoFactorEnabled", "LockoutEnabled", "AccessFailedCount")
+                VALUES ('legacy-owner', 'Test', '+380000000001', '+380000000001', '+380000000001', false, false, false, false, false, false, 0);
+                INSERT INTO "Notifications" ("Id", "RecipientId", "AppointmentId", "Type", "Title", "Message", "CreatedAtUtc", "ReadAtUtc", "EventKey")
+                SELECT gen_random_uuid(), 'legacy-owner', NULL, t, 'Title', 'Message', '2030-01-01 00:00:00+00', NULL, 'legacy:' || t
+                FROM unnest(ARRAY['AppointmentCreated','AppointmentCancelled','AppointmentScheduled','AppointmentInProgress',
+                    'AppointmentAwaitingPayment','AppointmentCompleted','RepairPlanChanged','PasswordChanged',
+                    'InspectionReminder24Hours','InspectionReminder2Hours','AdminAppointmentCreated','AdminAppointmentCancelled',
+                    'AdminReadyForPayment','AdminContactAgreement','AdminContactPlanChanged','AdminCalendarConflict',
+                    'AdminInspectionReminder30Minutes','UnknownLegacy']) AS t;
+                """);
+            await migrator.MigrateAsync();
+            var notifications = await db.Notifications.AsNoTracking().ToDictionaryAsync(n => n.Type);
+            Assert.Equal(18, notifications.Count);
+            Assert.All(notifications, entry => { Assert.Equal("legacy:" + entry.Key, entry.Value.EventKey); Assert.Equal("Message", entry.Value.Message); });
+            foreach (var type in new[] { "AppointmentCreated", "AppointmentCancelled", "AppointmentScheduled", "AppointmentInProgress", "AppointmentAwaitingPayment", "AppointmentCompleted", "RepairPlanChanged", "PasswordChanged", "InspectionReminder24Hours", "InspectionReminder2Hours" })
+                Assert.Equal(NotificationAudience.Personal, notifications[type].Audience);
+            foreach (var type in new[] { "AdminAppointmentCreated", "AdminAppointmentCancelled", "AdminReadyForPayment", "AdminContactAgreement", "AdminContactPlanChanged", "AdminCalendarConflict", "AdminInspectionReminder30Minutes" })
+                Assert.Equal(NotificationAudience.Administrator, notifications[type].Audience);
+            Assert.Equal(NotificationAudience.Restricted, notifications["UnknownLegacy"].Audience);
+            var history = new NotificationHistory(db, TimeProvider.System);
+            Assert.Equal(10, (await history.GetAsync("legacy-owner", null, default)).Count);
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "AspNetUserRoles" ("UserId", "RoleId") SELECT 'legacy-owner', "Id" FROM "AspNetRoles" WHERE "Name" = 'SuperAdmin';
+                """);
+            var privilegedHistory = await history.GetAsync("legacy-owner", null, default);
+            Assert.Equal(17, privilegedHistory.Count);
+            Assert.DoesNotContain(privilegedHistory, n => n.Type == "UnknownLegacy");
+            var failure = await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlRawAsync("UPDATE \"Notifications\" SET \"Audience\" = 99 WHERE \"Type\" = 'UnknownLegacy'"));
+            Assert.Equal(PostgresErrorCodes.CheckViolation, failure.SqlState);
+        }
+        finally
+        {
+            await using var drop = new NpgsqlCommand($"DROP SCHEMA \"{schema}\" CASCADE", connection);
+            await drop.ExecuteNonQueryAsync();
+        }
     }
 
     [PostgresFact]
@@ -196,6 +323,7 @@ public sealed class NotificationHistoryPostgresTests(PostgresIdentityFixture fix
         Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync("/api/auth/change-password", new { currentPassword = Password, newPassword = "Another-password-123!" })).StatusCode);
         var notification = Assert.Single(await db.Notifications.AsNoTracking().Where(n => n.RecipientId == user.Id).ToListAsync());
         Assert.Equal("PasswordChanged", notification.Type); Assert.Null(notification.AppointmentId);
+        Assert.Equal(NotificationAudience.Personal, notification.Audience);
         Assert.DoesNotContain(Password, notification.Message); Assert.DoesNotContain("Another-password-123!", notification.Message);
     }
 }

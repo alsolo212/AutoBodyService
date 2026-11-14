@@ -18,7 +18,7 @@ public sealed class NotificationsController(INotificationHistory notifications) 
     {
         var recipient = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (recipient is null) return Unauthorized();
-        return Ok(await notifications.GetAsync(recipient, User.IsInRole(ApplicationRoles.Admin) || User.IsInRole(ApplicationRoles.SuperAdmin), unread, cancellationToken));
+        return Ok(await notifications.GetAsync(recipient, unread, cancellationToken));
     }
 
     /// <summary>Marks an accessible notification as read; repeating the operation is harmless.</summary>

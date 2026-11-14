@@ -30,9 +30,9 @@ public sealed class CancelAppointmentService(ApplicationDbContext db, TimeProvid
                             join role in db.Roles.AsNoTracking() on userRole.RoleId equals role.Id
                             where !user.IsBlocked && (role.Name == ApplicationRoles.Admin || role.Name == ApplicationRoles.SuperAdmin)
                             select user.Id).Distinct().ToListAsync(cancellationToken);
-        AddNotification(ownerId, "AppointmentCancelled", "Запис скасовано", "Ваш запис на огляд скасовано.");
+        AddNotification(ownerId, NotificationAudience.Personal, "AppointmentCancelled", "Запис скасовано", "Ваш запис на огляд скасовано.");
         foreach (var admin in admins)
-            AddNotification(admin, "AdminAppointmentCancelled", "Запис скасовано", "Клієнт скасував запис на огляд.");
+            AddNotification(admin, NotificationAudience.Administrator, "AdminAppointmentCancelled", "Запис скасовано", "Клієнт скасував запис на огляд.");
 
         var recipients = NotificationDispatch.PendingRecipients(db);
         try
@@ -47,9 +47,9 @@ public sealed class CancelAppointmentService(ApplicationDbContext db, TimeProvid
             return CancelAppointmentResult.Conflict;
         }
 
-        void AddNotification(string recipient, string type, string title, string message) => db.Notifications.Add(new Notification
+        void AddNotification(string recipient, NotificationAudience audience, string type, string title, string message) => db.Notifications.Add(new Notification
         {
-            Id = Guid.NewGuid(), RecipientId = recipient, AppointmentId = appointmentId, Type = type,
+            Id = Guid.NewGuid(), RecipientId = recipient, AppointmentId = appointmentId, Audience = audience, Type = type,
             Title = title, Message = message, CreatedAtUtc = now, EventKey = $"appointment:{appointmentId}:{type}:{recipient}"
         });
     }

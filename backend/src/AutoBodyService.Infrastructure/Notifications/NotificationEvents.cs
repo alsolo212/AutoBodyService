@@ -8,10 +8,10 @@ namespace AutoBodyService.Infrastructure.Notifications;
 // Stages records in the caller's DbContext; the business transaction owns SaveChanges and commit.
 internal static class NotificationEvents
 {
-    internal static void Add(ApplicationDbContext db, string recipient, Guid? appointmentId, string type,
+    internal static void Add(ApplicationDbContext db, string recipient, Guid? appointmentId, NotificationAudience audience, string type,
         string title, string message, DateTimeOffset now, string eventKey)
         => db.Notifications.Add(new Notification { Id = Guid.NewGuid(), RecipientId = recipient, AppointmentId = appointmentId,
-            Type = type, Title = title, Message = message, CreatedAtUtc = now, EventKey = eventKey });
+            Audience = audience, Type = type, Title = title, Message = message, CreatedAtUtc = now, EventKey = eventKey });
 
     internal static async Task<List<string>> AdministratorsAsync(ApplicationDbContext db, CancellationToken cancellationToken) =>
         await (from user in db.Users.AsNoTracking()
@@ -24,6 +24,6 @@ internal static class NotificationEvents
         string title, string message, DateTimeOffset now, string eventId, CancellationToken cancellationToken)
     {
         foreach (var recipient in await AdministratorsAsync(db, cancellationToken))
-            Add(db, recipient, appointmentId, type, title, message, now, $"{eventId}:{type}:{recipient}");
+            Add(db, recipient, appointmentId, NotificationAudience.Administrator, type, title, message, now, $"{eventId}:{type}:{recipient}");
     }
 }

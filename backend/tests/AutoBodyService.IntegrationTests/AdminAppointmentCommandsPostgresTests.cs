@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Infrastructure.Identity;
+using AutoBodyService.Infrastructure.Notifications;
 using AutoBodyService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -119,6 +120,7 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
             Assert.Single(notifications, n => n.RecipientId == owner.Id && n.Type == type);
         Assert.Single(notifications, n => n.RecipientId == admin.Id && n.Type == "AdminReadyForPayment");
         Assert.Single(notifications, n => n.RecipientId == admin.Id && n.Type == "AdminContactAgreement");
+        Assert.All(notifications, n => Assert.Equal(n.RecipientId == owner.Id ? NotificationAudience.Personal : NotificationAudience.Administrator, n.Audience));
         Assert.Equal(notifications.Count, notifications.Select(n => n.EventKey).Distinct().Count());
         var completed = Assert.Single(events, e => e.ToStatus == AppointmentStatus.Completed);
         Assert.Equal(admin.Id, completed.ActorId);

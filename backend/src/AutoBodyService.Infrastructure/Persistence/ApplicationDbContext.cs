@@ -234,6 +234,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Message).HasMaxLength(1000).IsRequired();
             entity.Property(x => x.EventKey).HasMaxLength(256).IsRequired();
+            entity.ToTable(t => t.HasCheckConstraint("CK_Notifications_Audience", "\"Audience\" BETWEEN 0 AND 3"));
             entity.HasIndex(x => x.EventKey).IsUnique();
             entity.HasIndex(x => new { x.RecipientId, x.CreatedAtUtc });
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.RecipientId).OnDelete(DeleteBehavior.Restrict);

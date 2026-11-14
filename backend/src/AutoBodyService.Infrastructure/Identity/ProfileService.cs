@@ -38,7 +38,7 @@ public sealed class ProfileService(UserManager<ApplicationUser> users, Applicati
         if (result.Succeeded)
         {
             var eventId = Guid.NewGuid();
-            NotificationEvents.Add(db, userId, null, "PasswordChanged", "Пароль змінено",
+            NotificationEvents.Add(db, userId, null, NotificationAudience.Personal, "PasswordChanged", "Пароль змінено",
                 "Пароль вашого облікового запису змінено. Якщо це були не ви, зв’яжіться з адміністрацією.",
                 clock.GetUtcNow(), $"password-change:{eventId}:{userId}");
             var recipients = NotificationDispatch.PendingRecipients(db);

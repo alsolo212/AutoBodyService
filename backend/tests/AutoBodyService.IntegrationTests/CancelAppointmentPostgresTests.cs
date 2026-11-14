@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using AutoBodyService.Application.Appointments;
 using AutoBodyService.Application.Notifications;
+using AutoBodyService.Infrastructure.Notifications;
 using AutoBodyService.Application.InspectionSchedule;
 using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Infrastructure.Appointments;
@@ -85,6 +86,7 @@ public sealed class CancelAppointmentPostgresTests(PostgresIdentityFixture fixtu
             Assert.Contains(notifications, n => n.RecipientId == owner.Id && n.Type == "AppointmentCancelled");
             Assert.Contains(notifications, n => n.RecipientId == admin.Id && n.Type == "AdminAppointmentCancelled");
             Assert.Contains(notifications, n => n.RecipientId == super.Id && n.Type == "AdminAppointmentCancelled");
+            Assert.All(notifications, n => Assert.Equal(n.Type == "AppointmentCancelled" ? NotificationAudience.Personal : NotificationAudience.Administrator, n.Audience));
             Assert.Equal(notifications.Count, notifications.Select(n => n.EventKey).Distinct().Count());
         }
         using var booking = await client.PostAsJsonAsync("/api/appointments", new { inspectionStartUtc = BaseTime, vin = "1HGCM82633A123456", make = "Test", model = "Model", problemDescription = "Issue" });

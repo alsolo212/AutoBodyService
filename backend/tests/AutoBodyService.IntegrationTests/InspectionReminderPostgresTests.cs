@@ -170,8 +170,8 @@ public sealed class InspectionReminderPostgresTests(PostgresIdentityFixture fixt
         var reminder = await db.ScheduledReminders.SingleAsync(r => r.Id == pair.Reminder);
         Assert.Equal("Sent", reminder.Outcome); Assert.Equal(due, reminder.ProcessedAtUtc);
         var notification = Assert.Single(await db.Notifications.Where(n => n.AppointmentId == pair.Appointment).ToListAsync());
-        Assert.Equal(owner, notification.RecipientId); Assert.Equal($"reminder:{pair.Reminder}:{owner}", notification.EventKey);
-        db.Notifications.Add(new Notification { Id = Guid.NewGuid(), AppointmentId = pair.Appointment, RecipientId = owner, Type = "Test", Title = "Test", Message = "Test", CreatedAtUtc = due, EventKey = notification.EventKey });
+        Assert.Equal(owner, notification.RecipientId); Assert.Equal(NotificationAudience.Personal, notification.Audience); Assert.Equal($"reminder:{pair.Reminder}:{owner}", notification.EventKey);
+        db.Notifications.Add(new Notification { Id = Guid.NewGuid(), AppointmentId = pair.Appointment, RecipientId = owner, Audience = NotificationAudience.Personal, Type = "Test", Title = "Test", Message = "Test", CreatedAtUtc = due, EventKey = notification.EventKey });
         var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
         Assert.Equal(PostgresErrorCodes.UniqueViolation, Assert.IsType<PostgresException>(error.InnerException).SqlState);
         await using var duplicateScope = fixture.Factory.Services.CreateAsyncScope();
@@ -376,6 +376,7 @@ public sealed class InspectionReminderPostgresTests(PostgresIdentityFixture fixt
         var due = start.AddMinutes(-30); await Process(new FakeTimeProvider(due), due.AddSeconds(-1));
         await using var scope = fixture.Factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var recipients = await db.Notifications.Where(n => n.AppointmentId == item.Appointment).Select(n => n.RecipientId).ToListAsync();
+        Assert.All(await db.Notifications.Where(n => n.AppointmentId == item.Appointment).ToListAsync(), n => Assert.Equal(NotificationAudience.Administrator, n.Audience));
         Assert.Contains(admin, recipients); Assert.Contains(super, recipients);
         Assert.DoesNotContain(blocked, recipients); Assert.DoesNotContain(owner, recipients); Assert.DoesNotContain(otherUser, recipients);
         var allowed = await (from user in db.Users

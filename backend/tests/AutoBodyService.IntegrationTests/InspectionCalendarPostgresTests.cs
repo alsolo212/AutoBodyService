@@ -5,6 +5,7 @@ using System.Text.Json;
 using AutoBodyService.Application.InspectionSchedule;
 using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Infrastructure.Identity;
+using AutoBodyService.Infrastructure.Notifications;
 using AutoBodyService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -93,6 +94,7 @@ public sealed class InspectionCalendarPostgresTests(PostgresIdentityFixture fixt
         Assert.Contains(conflictNotifications, n => n.AppointmentId == secondId && n.RecipientId == admin.Id);
         Assert.Contains(conflictNotifications, n => n.AppointmentId == id && n.RecipientId == super.Id);
         Assert.All(conflictNotifications, n => Assert.DoesNotContain(privateReason, n.Message));
+        Assert.All(conflictNotifications, n => Assert.Equal(NotificationAudience.Administrator, n.Audience));
         var audit = Assert.Single(await db.AdminAuditEvents.Where(e => e.ActorId == admin.Id).ToListAsync());
         Assert.Equal("InspectionExceptionChanged", audit.Action);
         Assert.Equal("InspectionDate", audit.ObjectType);

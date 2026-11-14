@@ -57,7 +57,7 @@ public sealed class ReminderProcessor(ApplicationDbContext db, TimeProvider cloc
                     _ => ("AdminInspectionReminder30Minutes", "Наближається огляд", "Огляд відбудеться за 30 хвилин.")
                 };
                 foreach (var recipient in recipients)
-                    NotificationEvents.Add(db, recipient, appointment.Id, type, title,
+                    NotificationEvents.Add(db, recipient, appointment.Id, reminder.Type == "Admin30Minutes" ? NotificationAudience.Administrator : NotificationAudience.Personal, type, title,
                         $"{text} Час огляду: {local:dd.MM.yyyy HH:mm} (Київ, UTC{local:zzz}).", now,
                         $"reminder:{reminder.Id}:{recipient}");
                 skip = recipients.Count == 0 ? "SkippedRecipient" : "Sent";

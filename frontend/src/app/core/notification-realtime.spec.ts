@@ -65,6 +65,25 @@ describe('NotificationRealtime', () => {
     auth.session.set(user); TestBed.tick(); http.expectOne('/api/notifications').flush([]); await Promise.resolve(); http.expectOne('/api/notifications').flush([]);
     const third = mock.connections[2]; auth.session.set(null); TestBed.tick(); expect(third.stop).toHaveBeenCalledOnce();
   });
+  it('clears former administrative history and cancels stale responses on role and account changes', async () => {
+    const admin = { ...user, roles: ['User', 'Admin'] };
+    auth.session.set(admin); TestBed.tick();
+    http.expectOne('/api/notifications').flush([item('admin-only', '2030-01-02T00:00:00Z'), item('personal', '2030-01-01T00:00:00Z')]);
+    await Promise.resolve();
+    http.expectOne('/api/notifications').flush([item('admin-only', '2030-01-02T00:00:00Z'), item('personal', '2030-01-01T00:00:00Z')]);
+    expect(service.unreadCount()).toBe(2);
+    const first = mock.connections[0]; first.handlers['NotificationsChanged']();
+    const stale = http.expectOne('/api/notifications');
+    auth.session.set(user); TestBed.tick();
+    expect(stale.cancelled).toBe(true); expect(first.stop).toHaveBeenCalledOnce();
+    expect(service.history()).toEqual([]); expect(service.unreadCount()).toBe(0);
+    http.expectOne('/api/notifications').flush([item('personal', '2030-01-01T00:00:00Z')]);
+    await Promise.resolve(); http.expectOne('/api/notifications').flush([item('personal', '2030-01-01T00:00:00Z')]);
+    expect(service.history().map(value => value.id)).toEqual(['personal']); expect(service.unreadCount()).toBe(1);
+    auth.session.set({ ...user, phone: '+380000000002' }); TestBed.tick();
+    expect(service.history()).toEqual([]); expect(service.unreadCount()).toBe(0);
+    http.expectOne('/api/notifications').flush([]); await Promise.resolve(); http.expectOne('/api/notifications').flush([]);
+  });
   it('checks a clean server close and stops when the cookie has been revoked', async () => {
     await signIn(); const hub = mock.connections[0]; hub.state = 'Disconnected'; hub.handlers['closed']();
     http.expectOne('/api/auth/session').flush(null, { status: 401, statusText: 'Unauthorized' }); TestBed.tick();

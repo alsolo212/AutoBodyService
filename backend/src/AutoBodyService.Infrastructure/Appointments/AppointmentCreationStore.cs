@@ -34,8 +34,8 @@ public sealed class AppointmentCreationStore(ApplicationDbContext db, IInspectio
                             where !user.IsBlocked && (role.Name == ApplicationRoles.Admin || role.Name == ApplicationRoles.SuperAdmin)
                             select user.Id).Distinct().ToListAsync(cancellationToken);
         var local = TimeZoneInfo.ConvertTime(appointment.InspectionStartUtc, Zone);
-        AddNotification(appointment.UserId, "AppointmentCreated", "Запис на огляд створено", $"Огляд заплановано на {local:dd.MM.yyyy HH:mm} (Київ, UTC{local:zzz}).");
-        foreach (var admin in admins) AddNotification(admin, "AdminAppointmentCreated", "Новий запис на огляд", "Створено новий запис на огляд. Перегляньте замовлення та зв’яжіться з клієнтом за потреби.");
+        AddNotification(appointment.UserId, NotificationAudience.Personal, "AppointmentCreated", "Запис на огляд створено", $"Огляд заплановано на {local:dd.MM.yyyy HH:mm} (Київ, UTC{local:zzz}).");
+        foreach (var admin in admins) AddNotification(admin, NotificationAudience.Administrator, "AdminAppointmentCreated", "Новий запис на огляд", "Створено новий запис на огляд. Перегляньте замовлення та зв’яжіться з клієнтом за потреби.");
         foreach (var (type, lead) in new[] { ("Client24Hours", TimeSpan.FromHours(24)), ("Client2Hours", TimeSpan.FromHours(2)), ("Admin30Minutes", TimeSpan.FromMinutes(30)) })
         {
             var due = appointment.InspectionStartUtc - lead;
@@ -52,9 +52,9 @@ public sealed class AppointmentCreationStore(ApplicationDbContext db, IInspectio
         await NotificationDispatch.AfterCommitAsync(publisher, recipients);
         return new(CreateAppointmentStatus.Created, appointment.Id, appointment.InspectionStartUtc);
 
-        void AddNotification(string recipient, string type, string title, string message) => db.Notifications.Add(new Notification
+        void AddNotification(string recipient, NotificationAudience audience, string type, string title, string message) => db.Notifications.Add(new Notification
         {
-            Id = Guid.NewGuid(), RecipientId = recipient, AppointmentId = appointment.Id, Type = type, Title = title,
+            Id = Guid.NewGuid(), RecipientId = recipient, AppointmentId = appointment.Id, Audience = audience, Type = type, Title = title,
             Message = message, CreatedAtUtc = now, EventKey = $"appointment:{appointment.Id}:{type}:{recipient}"
         });
     }

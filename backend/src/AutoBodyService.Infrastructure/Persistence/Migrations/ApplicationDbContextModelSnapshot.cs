@@ -665,6 +665,9 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("AppointmentId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Audience")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -704,7 +707,10 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RecipientId", "CreatedAtUtc");
 
-                    b.ToTable("Notifications");
+                    b.ToTable("Notifications", t =>
+                        {
+                            t.HasCheckConstraint("CK_Notifications_Audience", "\"Audience\" BETWEEN 0 AND 3");
+                        });
                 });
 
             modelBuilder.Entity("AutoBodyService.Infrastructure.Notifications.ScheduledReminder", b =>
