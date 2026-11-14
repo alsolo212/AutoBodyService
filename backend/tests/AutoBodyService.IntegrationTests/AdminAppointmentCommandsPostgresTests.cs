@@ -193,6 +193,48 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
     }
 
     [PostgresFact]
+    public async Task DateOnlyPlanChangeTargetsOwnerAndAdministratorsAndContactDoesNotReadNotifications()
+    {
+        var owner = await User("Admin"); var actor = await User("Admin"); var super = await User("SuperAdmin");
+        var outsider = await User("User"); var blocked = await User("Admin");
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var blockedUser = await db.Users.SingleAsync(u => u.Id == blocked.Id);
+            blockedUser.IsBlocked = true;
+            await db.SaveChangesAsync();
+        }
+        var id = await Add(owner.Id, AppointmentStatus.Scheduled);
+        using var operatorClient = await Login(actor.Phone); using var ownerClient = await Login(owner.Phone);
+        using var outsiderClient = await Login(outsider.Phone);
+        var version = await Version(operatorClient, id);
+        Assert.Equal(HttpStatusCode.NoContent, (await operatorClient.PutAsJsonAsync(Url(id) + "/repair-plan", Plan(version))).StatusCode);
+        var revised = new { version, price = 100m, plannedStartUtc = PlanStart, estimatedFinishUtc = PlanStart.AddDays(2), inspectionPerformed = true };
+        Assert.Equal(HttpStatusCode.NoContent, (await operatorClient.PutAsJsonAsync(Url(id) + "/repair-plan", revised)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await operatorClient.PutAsJsonAsync(Url(id) + "/repair-plan", revised)).StatusCode);
+        await using var verify = factory.Services.CreateAsyncScope();
+        var dbContext = verify.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var notifications = await dbContext.Notifications.AsNoTracking().Where(n => n.AppointmentId == id).ToListAsync();
+        var personal = Assert.Single(notifications, n => n.RecipientId == owner.Id && n.Type == "RepairPlanChanged");
+        Assert.Single(notifications, n => n.RecipientId == owner.Id && n.Type == "AdminContactPlanChanged");
+        Assert.Single(notifications, n => n.RecipientId == actor.Id && n.Type == "AdminContactPlanChanged");
+        Assert.Single(notifications, n => n.RecipientId == super.Id && n.Type == "AdminContactPlanChanged");
+        Assert.DoesNotContain(notifications, n => n.RecipientId == outsider.Id || n.RecipientId == blocked.Id);
+        Assert.Single(notifications, n => n.Type == "RepairPlanChanged");
+        Assert.Equal(notifications.Count, notifications.Select(n => n.EventKey).Distinct().Count());
+        var ownerHistory = (await ownerClient.GetFromJsonAsync<JsonElement[]>("/api/notifications"))!;
+        Assert.Equal($"/account/appointments/{id}", Assert.Single(ownerHistory, n => n.GetProperty("id").GetGuid() == personal.Id).GetProperty("link").GetString());
+        Assert.Contains(ownerHistory, n => n.GetProperty("type").GetString() == "AdminContactPlanChanged" && n.GetProperty("link").GetString() == $"/admin/appointments/{id}");
+        Assert.DoesNotContain((await outsiderClient.GetFromJsonAsync<JsonElement[]>("/api/notifications"))!, n => n.GetProperty("id").GetGuid() == personal.Id);
+        Assert.Equal(HttpStatusCode.NotFound, (await outsiderClient.PatchAsync($"/api/notifications/{personal.Id}/read", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await operatorClient.PostAsJsonAsync(Url(id) + "/manual-contact", new { reason = "Agreement" })).StatusCode);
+        var afterContact = await dbContext.Notifications.AsNoTracking().Where(n => n.AppointmentId == id).ToListAsync();
+        Assert.Equal(notifications.Select(n => n.Id).Order(), afterContact.Select(n => n.Id).Order());
+        Assert.All(afterContact, n => Assert.Null(n.ReadAtUtc));
+        Assert.Single(await dbContext.ManualContactEvents.Where(e => e.AppointmentId == id).ToListAsync());
+    }
+
+    [PostgresFact]
     public async Task AuthenticationRolesCsrfAndSeparateCancellationRulesAreEnforced()
     {
         var owner = await User("User"); var admin = await User("Admin"); var super = await User("SuperAdmin");

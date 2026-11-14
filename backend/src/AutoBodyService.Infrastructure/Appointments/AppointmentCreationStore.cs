@@ -34,7 +34,7 @@ public sealed class AppointmentCreationStore(ApplicationDbContext db, IInspectio
                             where !user.IsBlocked && (role.Name == ApplicationRoles.Admin || role.Name == ApplicationRoles.SuperAdmin)
                             select user.Id).Distinct().ToListAsync(cancellationToken);
         var local = TimeZoneInfo.ConvertTime(appointment.InspectionStartUtc, Zone);
-        AddNotification(appointment.UserId, "AppointmentCreated", "Запис на огляд створено", $"Огляд заплановано на {local:dd.MM.yyyy HH:mm} за київським часом.");
+        AddNotification(appointment.UserId, "AppointmentCreated", "Запис на огляд створено", $"Огляд заплановано на {local:dd.MM.yyyy HH:mm} (Київ, UTC{local:zzz}).");
         foreach (var admin in admins) AddNotification(admin, "AdminAppointmentCreated", "Новий запис на огляд", "Створено новий запис на огляд. Перегляньте замовлення та зв’яжіться з клієнтом за потреби.");
         foreach (var (type, lead) in new[] { ("Client24Hours", TimeSpan.FromHours(24)), ("Client2Hours", TimeSpan.FromHours(2)), ("Admin30Minutes", TimeSpan.FromMinutes(30)) })
         {

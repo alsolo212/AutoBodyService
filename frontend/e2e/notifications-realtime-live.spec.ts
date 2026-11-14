@@ -118,6 +118,19 @@ test('cookie SignalR isolates recipients, revalidates sessions and reconnects af
 
     const container = process.env['PROFILE_VERIFY_CONTAINER'] ?? '';
     if (!/^autobody-ui-verify-[0-9a-f]+$/.test(container)) throw new Error('Missing isolated test database');
+    // Simulate only the Identity stamp changing; no future admin API is assumed.
+    execFileSync('docker', ['exec', container, 'psql', '-U', 'auth_test', '-d', 'auth_test', '-c',
+      `UPDATE "AspNetUsers" SET "SecurityStamp" = 'rotated-test-stamp' WHERE "PhoneNormalized" = '+380000000083'`], { stdio: 'ignore' });
+    const stampCancellation = await page.evaluate(async id => {
+      const detail = await (await fetch(`/api/appointments/${id}`)).json();
+      await fetch('/api/auth/antiforgery');
+      const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
+      return (await fetch(`/api/admin/appointments/${id}/cancel`, { method: 'POST', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token }, body: JSON.stringify({ version: detail.version, confirmed: true, reason: 'Test' }) })).status;
+    }, cBooking.body.id);
+    expect(stampCancellation).toBe(204);
+    await expect.poll(() => third!.state).not.toBe('Connected');
+    expect(receivedC).toHaveLength(1);
+    expect(await c.page.evaluate(async () => (await fetch('/api/notifications')).status)).toBe(401);
     execFileSync('docker', ['exec', container, 'psql', '-U', 'auth_test', '-d', 'auth_test', '-c',
       `UPDATE "AspNetUsers" SET "IsBlocked" = true WHERE "PhoneNormalized" = '+380000000082'`], { stdio: 'ignore' });
     const blockedCancellation = await page.evaluate(async id => {
@@ -129,17 +142,6 @@ test('cookie SignalR isolates recipients, revalidates sessions and reconnects af
     expect(blockedCancellation).toBe(204);
     await expect.poll(() => second!.state).not.toBe('Connected');
     expect(receivedB).toHaveLength(1);
-    execFileSync('docker', ['exec', container, 'psql', '-U', 'auth_test', '-d', 'auth_test', '-c',
-      `DELETE FROM "AspNetUserRoles" WHERE "UserId" = (SELECT "Id" FROM "AspNetUsers" WHERE "PhoneNormalized" = '+380000000083')`], { stdio: 'ignore' });
-    const roleCancellation = await page.evaluate(async id => {
-      const detail = await (await fetch(`/api/appointments/${id}`)).json();
-      await fetch('/api/auth/antiforgery');
-      const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
-      return (await fetch(`/api/admin/appointments/${id}/cancel`, { method: 'POST', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token }, body: JSON.stringify({ version: detail.version, confirmed: true, reason: 'Test' }) })).status;
-    }, cBooking.body.id);
-    expect(roleCancellation).toBe(204);
-    await expect.poll(() => third!.state).not.toBe('Connected');
-    expect(receivedC).toHaveLength(1);
   } finally {
     await first?.stop(); await second?.stop(); await third?.stop(); await a.context.close(); await b.context.close(); await c.context.close();
   }

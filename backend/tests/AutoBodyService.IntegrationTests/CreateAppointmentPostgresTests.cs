@@ -78,6 +78,34 @@ public sealed class CreateAppointmentPostgresTests(PostgresIdentityFixture fixtu
     }
 
     [PostgresFact]
+    public async Task BookingConfirmationDistinguishesBothOccurrencesOfKyivRepeatedHour()
+    {
+        var owner = await CreateUser("User", "+380000000048");
+        var date = new DateOnly(2031, 10, 26);
+        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        {
+            var schedules = scope.ServiceProvider.GetRequiredService<IInspectionScheduleService>();
+            var current = await schedules.GetAsync(default);
+            Assert.Equal(ScheduleUpdateResult.Success, await schedules.UpdateAsync(current.Version,
+                [new(date.DayOfWeek, new TimeOnly(3, 0), new TimeOnly(4, 0))], default));
+        }
+        using var client = await Login("+380000000048");
+        var instants = new[] { new DateTimeOffset(2031, 10, 26, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2031, 10, 26, 1, 0, 0, TimeSpan.Zero) };
+        var offsets = new[] { "UTC+03:00", "UTC+02:00" };
+        for (var i = 0; i < instants.Length; i++)
+        {
+            using var response = await client.PostAsJsonAsync(Url, Payload(instants[i]));
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+            var id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+            await using var scope = fixture.Factory.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var notification = await db.Notifications.SingleAsync(n => n.AppointmentId == id && n.RecipientId == owner && n.Type == "AppointmentCreated");
+            Assert.Contains("26.10.2031 03:00", notification.Message);
+            Assert.Contains(offsets[i], notification.Message);
+        }
+    }
+
+    [PostgresFact]
     public async Task SimultaneousRequestsProduceOneAppointmentAndOneSetOfEvents()
     {
         await CreateUser("User", "+380000000044");

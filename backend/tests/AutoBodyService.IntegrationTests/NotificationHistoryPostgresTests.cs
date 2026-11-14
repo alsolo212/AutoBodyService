@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.WebSockets;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Application.Notifications;
@@ -8,6 +10,8 @@ using AutoBodyService.Infrastructure.Identity;
 using AutoBodyService.Infrastructure.Notifications;
 using AutoBodyService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -110,6 +114,47 @@ public sealed class NotificationHistoryPostgresTests(PostgresIdentityFixture fix
         Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(foreign)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/hubs/notifications?access_token=example")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsync("/hubs/notifications/negotiate", null)).StatusCode);
+    }
+
+    [PostgresFact]
+    public async Task ActiveHubClosesWhenIdentityCookieExpires()
+    {
+        var user = await User("User");
+        using var shortSessionFactory = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+            services.PostConfigure<CookieAuthenticationOptions>(IdentityConstants.ApplicationScheme, options =>
+            {
+                options.ExpireTimeSpan = TimeSpan.FromSeconds(4);
+                options.SlidingExpiration = false;
+            })));
+        using var client = shortSessionFactory.CreateClient(new() { BaseAddress = new Uri("https://localhost"), HandleCookies = true, AllowAutoRedirect = false });
+        await Token(client);
+        using var login = await client.PostAsJsonAsync("/api/auth/login", new { phone = user.Phone, password = Password });
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+        var identity = Assert.Single(login.Headers.GetValues("Set-Cookie"), value => value.StartsWith(".AspNetCore.Identity.Application="));
+        var ws = shortSessionFactory.Server.CreateWebSocketClient();
+        ws.ConfigureRequest = request => request.Headers.Cookie = identity.Split(';')[0];
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var socket = await ws.ConnectAsync(new Uri("wss://localhost/hubs/notifications"), timeout.Token);
+        await socket.SendAsync(Encoding.UTF8.GetBytes("{\"protocol\":\"json\",\"version\":1}\u001e"), WebSocketMessageType.Text, true, timeout.Token);
+        var buffer = new byte[1024];
+        var handshake = await socket.ReceiveAsync(buffer, timeout.Token);
+        Assert.Equal(WebSocketMessageType.Text, handshake.MessageType);
+        Assert.Equal("{}\u001e", Encoding.UTF8.GetString(buffer, 0, handshake.Count));
+        WebSocketReceiveResult closed;
+        do
+        {
+            closed = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), timeout.Token);
+            if (closed.MessageType == WebSocketMessageType.Text)
+            {
+                var frames = Encoding.UTF8.GetString(buffer, 0, closed.Count).Split('\u001e', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var frame in frames)
+                {
+                    using var json = JsonDocument.Parse(frame);
+                    Assert.Contains(json.RootElement.GetProperty("type").GetInt32(), new[] { 6, 7 });
+                }
+            }
+        } while (closed.MessageType != WebSocketMessageType.Close);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/notifications")).StatusCode);
     }
 
     [PostgresFact]

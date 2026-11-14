@@ -113,11 +113,17 @@ public sealed class InspectionReminderPostgresTests(PostgresIdentityFixture fixt
         var owner = await User("User");
         var scenarios = new[] {
             (TimeSpan.FromHours(25), new[] { "Admin30Minutes", "Client24Hours", "Client2Hours" }),
+            (TimeSpan.FromHours(24).Add(TimeSpan.FromSeconds(1)), new[] { "Admin30Minutes", "Client24Hours", "Client2Hours" }),
             (TimeSpan.FromHours(24), new[] { "Admin30Minutes", "Client2Hours" }),
+            (TimeSpan.FromHours(24).Subtract(TimeSpan.FromSeconds(1)), new[] { "Admin30Minutes", "Client2Hours" }),
             (TimeSpan.FromHours(3), new[] { "Admin30Minutes", "Client2Hours" }),
+            (TimeSpan.FromHours(2).Add(TimeSpan.FromSeconds(1)), new[] { "Admin30Minutes", "Client2Hours" }),
             (TimeSpan.FromHours(2), new[] { "Admin30Minutes" }),
+            (TimeSpan.FromHours(2).Subtract(TimeSpan.FromSeconds(1)), new[] { "Admin30Minutes" }),
             (TimeSpan.FromMinutes(45), new[] { "Admin30Minutes" }),
+            (TimeSpan.FromMinutes(30).Add(TimeSpan.FromSeconds(1)), new[] { "Admin30Minutes" }),
             (TimeSpan.FromMinutes(30), Array.Empty<string>()),
+            (TimeSpan.FromMinutes(30).Subtract(TimeSpan.FromSeconds(1)), Array.Empty<string>()),
             (TimeSpan.FromMinutes(10), Array.Empty<string>()) };
         foreach (var (before, expected) in scenarios)
         {
@@ -251,6 +257,10 @@ public sealed class InspectionReminderPostgresTests(PostgresIdentityFixture fixt
             var reminder = await verify.ScheduledReminders.SingleAsync(r => r.Id == item.Reminder);
             Assert.Equal("SkippedCancelled", reminder.Outcome); Assert.NotNull(reminder.ProcessedAtUtc);
             Assert.Empty(await verify.Notifications.Where(n => n.AppointmentId == item.Appointment && n.Type.Contains("Reminder")).ToListAsync());
+            var cancellation = await verify.Notifications.Where(n => n.AppointmentId == item.Appointment).ToListAsync();
+            Assert.Single(cancellation, n => n.RecipientId == owner && n.Type == "AppointmentCancelled");
+            if (i < 2) Assert.Single(cancellation, n => n.RecipientId == actor && n.Type == "AdminAppointmentCancelled");
+            else Assert.DoesNotContain(cancellation, n => n.Type == "AdminAppointmentCancelled");
         }
     }
 
