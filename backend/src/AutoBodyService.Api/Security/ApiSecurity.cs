@@ -28,8 +28,10 @@ public static class ApiSecurity
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-                context.Request.Path.StartsWithSegments("/api/auth") && !HttpMethods.IsGet(context.Request.Method)
-                    ? RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ =>
+                (context.Request.Path.StartsWithSegments("/api/auth") || context.Request.Path.StartsWithSegments("/api/admin/users")) && !HttpMethods.IsGet(context.Request.Method)
+                    ? RateLimitPartition.GetFixedWindowLimiter(
+                        (context.Request.Path.StartsWithSegments("/api/auth") ? "auth:" : "admin-users:") +
+                        (context.Connection.RemoteIpAddress?.ToString() ?? "unknown"), _ =>
                         new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 })
                     : RateLimitPartition.GetNoLimiter("other"));
         });

@@ -12,4 +12,5 @@ public interface IAdminAuditWriter
     void RecordRepairPlanChange(string actorId, Guid appointmentId, bool priceChanged, bool datesChanged);
     void RecordPriceItemChange(string actorId, Guid priceItemId, bool created);
     void RecordManualContact(string actorId, Guid appointmentId, ManualContactReason reason);
+    void RecordAccountAction(string actorId, string targetId, string action, bool? value);
 }

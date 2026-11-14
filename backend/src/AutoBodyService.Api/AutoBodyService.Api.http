@@ -241,3 +241,27 @@ RequestVerificationToken: {{xsrfToken}}
 ### Mark the current account's notification history as read.
 POST {{baseUrl}}/api/notifications/read-all
 RequestVerificationToken: {{xsrfToken}}
+
+### Search allowed accounts (Admin/SuperAdmin).
+GET {{baseUrl}}/api/admin/users?search={{search}}
+
+### Reset a permitted account; the response contains a one-time temporary secret.
+POST {{baseUrl}}/api/admin/users/{{userId}}/reset-password
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{ "version": "{{userVersion}}" }
+
+### Change Admin membership (SuperAdmin only).
+PUT {{baseUrl}}/api/admin/users/{{userId}}/roles
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{ "version": "{{userVersion}}", "isAdmin": true }
+
+### Block or unblock (SuperAdmin only).
+PATCH {{baseUrl}}/api/admin/users/{{userId}}/block
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{ "version": "{{userVersion}}", "isBlocked": true }

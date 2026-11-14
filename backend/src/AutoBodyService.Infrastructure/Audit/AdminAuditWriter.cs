@@ -42,6 +42,13 @@ public sealed class AdminAuditWriter(ApplicationDbContext db, TimeProvider clock
         Add(actorId, "ManualContactRecorded", "Appointment", appointmentId.ToString("D"), new { reason = reason.ToString() });
     }
 
+    public void RecordAccountAction(string actorId, string targetId, string action, bool? value)
+    {
+        if (action is not ("AccountPasswordReset" or "AccountAdminChanged" or "AccountBlockedChanged"))
+            throw new ArgumentOutOfRangeException(nameof(action));
+        Add(actorId, action, "ApplicationUser", targetId, new { value });
+    }
+
     // Reasons are free text and may contain private data; never copy them into audit details.
     private static object? SafeException(InspectionException? value) => value is null ? null : new
     {
