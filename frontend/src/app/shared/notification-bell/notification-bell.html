@@ -1,0 +1,24 @@
+@if (auth.session() && !auth.session()?.mustChangePassword) {
+<details class="bell" (keydown.escape)="close($event)">
+  <summary [attr.aria-label]="'Сповіщення, непрочитаних: ' + notifications.unreadCount()">
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-2 7-2 9h16c0-2-2-2-2-9ZM10 20a2 2 0 0 0 4 0" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span class="bell__count" aria-hidden="true">{{ notifications.unreadCount() > 99 ? '99+' : notifications.unreadCount() }}</span>
+  </summary>
+  <section class="bell__panel" aria-label="Останні сповіщення">
+    <div class="bell__heading"><strong>Сповіщення</strong><span>{{ notifications.unreadCount() }} непрочитаних</span></div>
+    @if (notifications.loading() && !notifications.loaded()) { <p role="status">Завантажуємо сповіщення…</p> }
+    @else if (notifications.error()) { <p role="alert">{{ notifications.error() }}</p><button type="button" (click)="notifications.refresh()">Спробувати ще раз</button> }
+    @else if (!recent().length) { <p>Сповіщень поки немає.</p> }
+    @else {
+      <ul>@for (item of recent(); track item.id) {
+        <li [class.bell__unread]="!item.readAtUtc">
+          @if (!item.readAtUtc) { <span class="bell__status">Нове</span> }
+          <strong>{{ item.title }}</strong><span>{{ item.message }}</span><time [attr.datetime]="item.createdAtUtc">{{ format(item.createdAtUtc, true) }}</time>
+          @if (safeLink(item.link); as link) { <a [routerLink]="link">Відкрити замовлення</a> }
+        </li>
+      }</ul>
+    }
+    <a class="bell__all" [routerLink]="area() === 'admin' ? '/admin/notifications' : '/account/notifications'">Усі сповіщення <span aria-hidden="true">→</span></a>
+  </section>
+</details>
+}

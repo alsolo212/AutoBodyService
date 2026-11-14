@@ -1,3 +1,4 @@
+import { NotificationBell } from '../../../shared/notification-bell/notification-bell';
 import { DOCUMENT } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, ElementRef, Injector, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
@@ -14,7 +15,7 @@ const contactLabels: Record<ContactReason, string> = {
   Agreement: 'Узгодження ремонту', ReadyForPayment: 'Готовність до оплати та видачі',
 };
 
-@Component({ selector: 'app-admin-appointment-details', imports: [RouterLink, ReactiveFormsModule], templateUrl: './appointment-details.html', styleUrl: './appointment-details.scss' })
+@Component({ selector: 'app-admin-appointment-details', imports: [RouterLink, ReactiveFormsModule, NotificationBell], templateUrl: './appointment-details.html', styleUrl: './appointment-details.scss' })
 export class AppointmentDetailsAdmin {
   private readonly api = inject(AdminAppointmentApi);
   private readonly route = inject(ActivatedRoute);

@@ -8,10 +8,12 @@ import { Dashboard } from '../../features/admin/dashboard/dashboard';
 import { Employees } from '../../features/admin/employees/employees';
 import { AssignmentBoard } from '../../features/admin/assignment-board/assignment-board';
 import { PricesEditor } from '../../features/admin/prices/prices-editor';
+import { NotificationBell } from '../../shared/notification-bell/notification-bell';
+import { NotificationInbox } from '../../features/notifications/notification-inbox/notification-inbox';
 
 @Component({
   selector: 'app-workspace-shell',
-  imports: [RouterLink, UiState, ApiStatus, Dashboard, Employees, AssignmentBoard, PricesEditor],
+  imports: [RouterLink, UiState, ApiStatus, Dashboard, Employees, AssignmentBoard, PricesEditor, NotificationBell, NotificationInbox],
   template: `
     <a class="skip-link" [attr.href]="isAdmin ? '/' + routePath + '#workspace-main' : '/account/appointments#workspace-main'">Перейти до вмісту</a>
     <div class="workspace">
@@ -21,6 +23,7 @@ import { PricesEditor } from '../../features/admin/prices/prices-editor';
         <a class="workspace-home" routerLink="/">На головну</a>
         @if (isAdmin) { <a class="workspace-switch" routerLink="/account/appointments">Особистий кабінет</a> }
         @else if (isStaff()) { <a class="workspace-switch" routerLink="/admin">Панель керування</a> }
+        <app-notification-bell [area]="isAdmin ? 'admin' : 'account'" />
         <button class="button button--secondary" type="button" (click)="logout()" [disabled]="loggingOut()">{{ loggingOut() ? 'Виходимо…' : 'Вийти' }}</button>
         <button class="menu-toggle button button--secondary" type="button" (click)="menuOpen.update(value => !value)" [attr.aria-expanded]="menuOpen()" aria-controls="workspace-nav">{{ menuOpen() ? 'Закрити меню' : 'Меню' }}</button>
       </header>
@@ -33,7 +36,7 @@ import { PricesEditor } from '../../features/admin/prices/prices-editor';
               @for (item of primaryItems; track item) { <li>@if (isAdmin && item === 'Огляд') { <a class="sidebar__item" [class.sidebar__item--active]="!section" [attr.aria-current]="!section ? 'page' : null" routerLink="/admin">{{ item }}</a> } @else if (isAdmin && item === 'Календар оглядів') { <a class="sidebar__item" routerLink="/admin/inspection-calendar">{{ item }}</a> } @else if (isAdmin && item === 'Замовлення') { <a class="sidebar__item" routerLink="/admin/appointments">{{ item }}</a> } @else if (isAdmin && item === 'Розподіл робіт') { <a class="sidebar__item" routerLink="/admin/assignments">{{ item }}</a> } @else if (!isAdmin && item === 'Запис на огляд') { <a class="sidebar__item" routerLink="/account/book">{{ item }}</a> } @else { <span class="sidebar__item" [class.sidebar__item--active]="$first" [attr.aria-current]="$first ? 'page' : null">{{ item }}</span> }</li> }
             </ul>
             <p class="sidebar__label">{{ isAdmin ? 'КЕРУВАННЯ' : 'ОСОБИСТЕ' }}</p>
-            <ul>@for (item of secondaryItems; track item) { <li>@if (isAdmin && item === 'Працівники') { <a class="sidebar__item" routerLink="/admin/employees">{{ item }}</a> } @else if (isAdmin && item === 'Послуги та ціни') { <a class="sidebar__item" routerLink="/admin/prices">{{ item }}</a> } @else if (item === 'Мій профіль') { <a class="sidebar__item" [routerLink]="isAdmin ? '/admin/profile' : '/account/profile'">{{ item }}</a> } @else { <span class="sidebar__item">{{ item }}</span> }</li> }</ul>
+            <ul>@for (item of secondaryItems; track item) { <li>@if (isAdmin && item === 'Працівники') { <a class="sidebar__item" routerLink="/admin/employees">{{ item }}</a> } @else if (isAdmin && item === 'Послуги та ціни') { <a class="sidebar__item" routerLink="/admin/prices">{{ item }}</a> } @else if (item === 'Сповіщення') { <a class="sidebar__item" [class.sidebar__item--active]="section === 'Сповіщення'" [attr.aria-current]="section === 'Сповіщення' ? 'page' : null" [routerLink]="isAdmin ? '/admin/notifications' : '/account/notifications'">{{ item }}</a> } @else if (item === 'Мій профіль') { <a class="sidebar__item" [routerLink]="isAdmin ? '/admin/profile' : '/account/profile'">{{ item }}</a> } @else { <span class="sidebar__item">{{ item }}</span> }</li> }</ul>
           </nav>
           <div class="sidebar__note"><span>УВАГА ДО ДЕТАЛЕЙ</span><p>Усе важливе про автомобіль — в одному місці.</p></div>
         </aside>
@@ -47,6 +50,8 @@ import { PricesEditor } from '../../features/admin/prices/prices-editor';
               @defer (on immediate) { <app-assignment-board /> } @placeholder { <p role="status">Завантажуємо розподіл робіт…</p> }
             } @else if (isAdmin && section === 'Послуги та ціни') {
               <app-prices-editor />
+            } @else if (isAdmin && section === 'Сповіщення') {
+              <app-notification-inbox />
             } @else if (isAdmin && section === 'Працівники') {
               <app-employees />
             } @else {

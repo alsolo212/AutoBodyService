@@ -4,10 +4,11 @@ import { AuthService, destination } from '../../core/auth';
 import { RouterLink } from '@angular/router';
 import { PublicContacts } from '../../shared/public-contacts/public-contacts';
 import { PublicPrices } from '../../shared/public-prices/public-prices';
+import { NotificationBell } from '../../shared/notification-bell/notification-bell';
 
 @Component({
   selector: 'app-public-shell',
-  imports: [RouterLink, PublicContacts, PublicPrices],
+  imports: [RouterLink, PublicContacts, PublicPrices, NotificationBell],
   template: `
     <a class="skip-link" href="#main">Перейти до вмісту</a>
     <header class="site-header">
@@ -17,6 +18,7 @@ import { PublicPrices } from '../../shared/public-prices/public-prices';
           <a href="#services">Послуги</a><a href="#prices">Ціни</a><a href="#process">Як це працює</a><a href="#contacts">Контакти</a>
         </nav>
         @if (sessionLoading()) { <span class="header-action" role="status">Перевіряємо вхід…</span> } @else { <a class="button button--outline header-action" [routerLink]="sessionTarget()">{{ sessionLabel() }} <span aria-hidden="true">↗</span></a> }
+        @if (auth.session() && !auth.session()?.mustChangePassword) { <app-notification-bell [area]="isStaff() ? 'admin' : 'account'" /> }
         <details class="public-mobile-nav"><summary>Меню</summary><nav aria-label="Мобільна навігація"><a href="#services">Послуги</a><a href="#prices">Ціни</a><a href="#process">Як це працює</a><a href="#contacts">Контакти</a>@if (!sessionLoading()) { <a [routerLink]="sessionTarget()">{{ sessionLabel() }}</a> } @else { <span role="status">Перевіряємо вхід…</span> }</nav></details>
       </div>
     </header>
@@ -28,7 +30,6 @@ import { PublicPrices } from '../../shared/public-prices/public-prices';
             <h1>Увага до деталей.<br><em>Турбота про авто.</em></h1>
             <p class="hero__lead">Від першого огляду до повернення автомобіля — зрозумілий процес і вся інформація про ремонт в одному місці.</p>
             <div class="hero__actions"><a class="button button--primary" routerLink="/account/book">Записатися на огляд <span aria-hidden="true">↗</span></a><a class="text-link" href="#process">Як це працює <span aria-hidden="true">↓</span></a></div>
-            @if (!sessionLoading() && auth.session() && !auth.session()?.mustChangePassword) { <p>Сповіщення ще в розробці.</p> }
           </div>
           <aside class="hero-card" aria-label="Етапи обслуговування">
             <div class="hero-card__top"><span>ВАШ АВТОМОБІЛЬ</span><span>01 / 05</span></div>
@@ -51,6 +52,7 @@ import { PublicPrices } from '../../shared/public-prices/public-prices';
 export class PublicShell {
   readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
+  readonly isStaff = () => this.auth.session()?.roles.some(role => role === 'Admin' || role === 'SuperAdmin') ?? false;
   readonly sessionLoading = signal(true);
   readonly sessionTarget = signal('/login');
   readonly sessionLabel = signal('Увійти');

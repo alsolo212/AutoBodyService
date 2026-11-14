@@ -2,7 +2,7 @@
   <a class="skip-link" href="#calendar-main">Перейти до вмісту</a>
   <header class="profile-header">
     <a class="brand" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a>
-    <nav aria-label="Навігація панелі керування"><a routerLink="/admin">Панель керування</a><a routerLink="/admin/profile">Мій профіль</a><a routerLink="/account/appointments">Особистий кабінет</a></nav>
+    <nav aria-label="Навігація панелі керування"><a routerLink="/admin">Панель керування</a><a routerLink="/admin/profile">Мій профіль</a><a routerLink="/account/appointments">Особистий кабінет</a></nav><app-notification-bell area="admin" />
     <button class="button button--secondary" type="button" [disabled]="loggingOut()" (click)="logout()">{{ loggingOut() ? 'Виходимо…' : 'Вийти' }}</button>
   </header>
   <main class="calendar-main" id="calendar-main">

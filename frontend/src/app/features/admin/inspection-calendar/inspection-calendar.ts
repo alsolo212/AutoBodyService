@@ -1,3 +1,4 @@
+import { NotificationBell } from '../../../shared/notification-bell/notification-bell';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal, viewChild } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -14,7 +15,7 @@ const shortTime = (value: string) => value.slice(0, 5);
 
 @Component({
   selector: 'app-inspection-calendar',
-  imports: [ReactiveFormsModule, RouterLink, ConfirmDialog],
+  imports: [ReactiveFormsModule, RouterLink, ConfirmDialog, NotificationBell],
   templateUrl: './inspection-calendar.html',
   styleUrl: './inspection-calendar.scss',
 })

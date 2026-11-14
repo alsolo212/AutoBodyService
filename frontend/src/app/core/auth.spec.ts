@@ -42,6 +42,26 @@ describe('AuthService', () => {
     expect(request.request.body).toEqual({ currentPassword: 'old-test', newPassword: 'new-test' });
     request.flush(null);
   });
+  it('defers a session check until password change has refreshed the cookie', () => {
+    const user = { name: 'Test', phone: '+380000000000', roles: ['User'], mustChangePassword: false };
+    service.changePassword('old-test', 'new-test').subscribe();
+    http.expectOne('/api/auth/antiforgery').flush(null);
+    const changing = http.expectOne('/api/auth/change-password');
+    let session: unknown;
+    service.getSession().subscribe(value => session = value);
+    http.expectNone('/api/auth/session'); changing.flush(null);
+    http.expectOne('/api/auth/session').flush(user); expect(session).toEqual(user);
+  });
+  it('does not restore a stale session response after logout', () => {
+    const user = { name: 'Test', phone: '+380000000000', roles: ['User'], mustChangePassword: false };
+    service.session.set(user);
+    let result: unknown = user;
+    service.getSession().subscribe(value => result = value);
+    const old = http.expectOne('/api/auth/session');
+    service.logout().subscribe(); http.expectOne('/api/auth/antiforgery').flush(null); http.expectOne('/api/auth/logout').flush(null);
+    old.flush(user);
+    expect(service.session()).toBeNull(); expect(result).toBeNull();
+  });
   it('refreshes antiforgery before logout and clears session on success', () => {
     service.session.set({ name: 'Test', phone: '+380000000000', roles: ['User'], mustChangePassword: false });
     service.logout().subscribe();

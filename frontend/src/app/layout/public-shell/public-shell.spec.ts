@@ -1,12 +1,14 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
+import { NotificationRealtime } from '../../core/notification-realtime';
 import { provideRouter } from '@angular/router';
 import { PublicShell } from './public-shell';
 
 describe('public shell', () => {
   let http: HttpTestingController;
-  beforeEach(() => { TestBed.configureTestingModule({ imports: [PublicShell], providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()] }); http = TestBed.inject(HttpTestingController); });
+  beforeEach(() => { TestBed.configureTestingModule({ imports: [PublicShell], providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: NotificationRealtime, useValue: { history: signal([]), unreadCount: signal(0), loading: signal(false), loaded: signal(true), error: signal(''), refresh: () => {} } }] }); http = TestBed.inject(HttpTestingController); });
   afterEach(() => http.verify());
   function start() {
     const fixture = TestBed.createComponent(PublicShell); fixture.detectChanges();

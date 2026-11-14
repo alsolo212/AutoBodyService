@@ -1,3 +1,4 @@
+import { NotificationBell } from '../../../shared/notification-bell/notification-bell';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, CdkDropListGroup } from '@angular/cdk/drag-drop';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, inject, signal } from '@angular/core';
@@ -17,7 +18,7 @@ const successor: Partial<Record<AppointmentStatus, AppointmentStatus>> = {
 };
 const emptyColumns = (): Column[] => statuses.map(status => ({ status, page: 1, total: 0, items: [], filtered: false }));
 
-@Component({ selector: 'app-appointments-board', imports: [RouterLink, ReactiveFormsModule, CdkDropListGroup, CdkDropList, CdkDrag, CdkDragHandle],
+@Component({ selector: 'app-appointments-board', imports: [NotificationBell, RouterLink, ReactiveFormsModule, CdkDropListGroup, CdkDropList, CdkDrag, CdkDragHandle],
   templateUrl: './appointments-board.html', styleUrl: './appointments-board.scss' })
 export class AppointmentsBoard {
   private readonly api = inject(AdminAppointmentApi);

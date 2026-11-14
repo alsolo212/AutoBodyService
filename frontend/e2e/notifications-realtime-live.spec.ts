@@ -84,12 +84,14 @@ test('cookie SignalR isolates recipients, revalidates sessions and reconnects af
     const cBooking = await book(c.page, 0); expect(cBooking.status).toBe(201);
     await expect.poll(() => receivedC.length).toBe(1);
 
-    const changed = await a.page.evaluate(async () => {
-      await fetch('/api/auth/antiforgery');
-      const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
-      return (await fetch('/api/auth/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token }, body: JSON.stringify({ currentPassword: 'Example-password-123!', newPassword: 'Another-password-123!' }) })).status;
-    });
-    expect(changed).toBe(204);
+    await a.page.goto('/account/profile');
+    await a.page.getByLabel('Поточний пароль').fill('Example-password-123!');
+    await a.page.getByLabel('Новий пароль', { exact: true }).fill('Another-password-123!');
+    await a.page.getByLabel('Повторіть новий пароль').fill('Another-password-123!');
+    const change = a.page.waitForResponse(response => response.url().endsWith('/api/auth/change-password') && response.request().method() === 'POST');
+    await a.page.getByRole('button', { name: 'Змінити пароль' }).click();
+    expect((await change).status()).toBe(204);
+    await expect(a.page.getByText('Пароль змінено.', { exact: true })).toBeVisible();
     await expect.poll(() => first!.state).not.toBe('Connected');
     expect(receivedA).toHaveLength(2);
     await first.stop();

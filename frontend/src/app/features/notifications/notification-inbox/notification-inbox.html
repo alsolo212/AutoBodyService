@@ -1,0 +1,27 @@
+<section class="inbox" aria-labelledby="notification-title">
+  <p class="eyebrow"><span class="eyebrow__line"></span> ОСОБИСТІ СПОВІЩЕННЯ</p>
+  <div class="inbox__heading"><div><h1 id="notification-title">Сповіщення</h1><p>Історія доступних вам повідомлень.</p></div>
+    <button class="button button--secondary" type="button" (click)="readAll()" [disabled]="busy() || !auth.session() || !notifications.unreadCount()">Позначити всі прочитаними</button>
+  </div>
+  <div class="inbox__filters" aria-label="Фільтр сповіщень">
+    <button type="button" [attr.aria-pressed]="filter() === 'all'" (click)="filter.set('all')">Усі</button>
+    <button type="button" [attr.aria-pressed]="filter() === 'unread'" (click)="filter.set('unread')">Непрочитані <span>{{ notifications.unreadCount() }}</span></button>
+  </div>
+  @if (actionError()) { <p class="auth-alert" role="alert">{{ actionError() }}</p> }
+  @if (!auth.session()) { <div class="inbox__state" role="alert">Сесію завершено. <a routerLink="/login">Увійти знову</a></div> }
+  @else if (notifications.loading() && !notifications.loaded()) { <p class="inbox__state" role="status">Завантажуємо сповіщення…</p> }
+  @else if (notifications.error()) { <div class="inbox__state" role="alert"><p>{{ notifications.error() }}</p><button class="button button--secondary" type="button" (click)="notifications.refresh()">Спробувати ще раз</button></div> }
+  @else if (!visible().length) { <p class="inbox__state">{{ filter() === 'unread' ? 'Непрочитаних сповіщень немає.' : 'Сповіщень поки немає.' }}</p> }
+  @else {
+    <ol class="inbox__list">@for (item of visible(); track item.id) {
+      <li class="inbox__item" [class.inbox__item--unread]="!item.readAtUtc">
+        <div class="inbox__meta"><span>{{ item.readAtUtc ? 'Прочитано' : 'Нове' }}</span><time [attr.datetime]="item.createdAtUtc">{{ format(item.createdAtUtc, true) }} · Київ</time></div>
+        <h2>{{ item.title }}</h2><p>{{ item.message }}</p>
+        <div class="inbox__actions">
+          @if (safeLink(item.link); as link) { <a [routerLink]="link">Відкрити замовлення →</a> }
+          @if (!item.readAtUtc) { <button type="button" (click)="read(item.id)" [disabled]="busy()">Позначити прочитаним</button> }
+        </div>
+      </li>
+    }</ol>
+  }
+</section>

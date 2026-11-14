@@ -13,12 +13,15 @@ import { AppointmentDetail } from './features/appointments/appointment-detail/ap
 import { AppointmentDetailsAdmin } from './features/admin/appointment-details/appointment-details';
 import { InspectionCalendar } from './features/admin/inspection-calendar/inspection-calendar';
 import { authGuard, guestGuard, temporaryPasswordGuard } from './core/auth-guards';
+import { NotificationPage } from './features/notifications/notification-page/notification-page';
 export const routes: Routes = [
   { path: '', component: PublicShell, title: 'AutoBodyService' },
   { path: 'login', component: Login, canActivate: [guestGuard], title: 'Вхід — AutoBodyService' },
   { path: 'register', component: Register, canActivate: [guestGuard], title: 'Реєстрація — AutoBodyService' },
   { path: 'forgot-password', component: ForgotPassword, title: 'Відновлення доступу — AutoBodyService' },
   { path: 'account/change-temporary-password', component: ChangePasswordRequired, canActivate: [temporaryPasswordGuard], title: 'Зміна пароля — AutoBodyService' },
+  { path: 'account/notifications', component: NotificationPage, canActivate: [authGuard], data: { area: 'account' }, title: 'Сповіщення — AutoBodyService' },
+  { path: 'admin/notifications', component: WorkspaceShell, canActivate: [authGuard], data: { area: 'admin', section: 'Сповіщення' }, title: 'Сповіщення — AutoBodyService' },
   { path: 'account/profile', component: Profile, canActivate: [authGuard], data: { area: 'account' }, title: 'Мій профіль — AutoBodyService' },
   { path: 'admin/profile', component: Profile, canActivate: [authGuard], data: { area: 'admin' }, title: 'Мій профіль — AutoBodyService' },
   { path: 'account/book/success', component: BookingSuccess, canActivate: [authGuard], data: { area: 'account' }, title: 'Запис підтверджено — AutoBodyService' },
