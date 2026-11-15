@@ -121,6 +121,26 @@ describe('NotificationRealtime', () => {
     auth.session.set(null); TestBed.tick(); expect(old.cancelled).toBe(true);
     expect(auth.session()).toBeNull(); expect(service.history()).toEqual([]);
   });
+  it('ignores a session response arriving immediately after revocation', async () => {
+    await signIn(); const hub = mock.connections[0];
+    hub.handlers['reconnecting'](); const old = http.expectOne('/api/auth/session');
+    auth.invalidateSession(); old.flush(user);
+    expect(auth.session()).toBeNull();
+    TestBed.tick(); expect(service.history()).toEqual([]); expect(hub.stop).toHaveBeenCalledOnce();
+  });
+  it('does not invalidate a new session when an old notification action fails', async () => {
+    await signIn();
+    service.markAllRead().subscribe({ error: () => {} });
+    http.expectOne('/api/auth/antiforgery').flush(null);
+    const old = http.expectOne('/api/notifications/read-all');
+    auth.invalidateSession();
+    const nextUser = { ...user, phone: '+380000000002' };
+    auth.session.set(nextUser);
+    old.flush(null, { status: 401, statusText: 'Unauthorized' });
+    expect(auth.session()).toEqual(nextUser);
+    TestBed.tick(); http.expectOne('/api/notifications').flush([]);
+    await Promise.resolve(); http.expectOne('/api/notifications').flush([]);
+  });
   it('uses antiforgery for read operations and refreshes only after success', async () => {
     await signIn(); service.markRead('id/unsafe').subscribe();
     http.expectOne('/api/auth/antiforgery').flush(null);

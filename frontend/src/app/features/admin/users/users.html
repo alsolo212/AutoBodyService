@@ -1,0 +1,46 @@
+<div class="workspace-heading">
+  <div><p class="eyebrow"><span class="eyebrow__line"></span> ПАНЕЛЬ КЕРУВАННЯ</p><h1>Користувачі</h1><p>Пошук облікових записів та безпечне керування доступом.</p></div>
+</div>
+<section class="workspace-panel" aria-labelledby="users-search-title">
+  <div class="panel-heading"><div><p class="panel-eyebrow">ОБЛІКОВІ ЗАПИСИ</p><h2 id="users-search-title">Пошук користувачів</h2></div></div>
+  <form class="search-form" [formGroup]="searchForm" (ngSubmit)="load()" role="search">
+    <div class="field"><label class="field__label" for="users-search">Ім’я або номер телефону</label>
+      <input id="users-search" class="field__input" type="search" formControlName="search" maxlength="100" autocomplete="off" placeholder="Введіть ім’я або телефон" />
+      <p class="field__hint">Показано не більше 100 результатів. Уточніть пошук за потреби.</p>
+    </div>
+    <button class="button button--primary" type="submit" [disabled]="saving()">Знайти</button>
+  </form>
+</section>
+<section class="workspace-panel" aria-labelledby="users-list-title" [attr.aria-busy]="loading() || saving()">
+  <div class="panel-heading"><div><p class="panel-eyebrow">ДОСТУПНІ ВАМ</p><h2 id="users-list-title">Облікові записи</h2></div></div>
+  @if (actionError()) { <p class="auth-alert" role="alert">{{ actionError() }}</p> }
+  @if (notice()) { <p class="success" role="status">{{ notice() }}</p> }
+  @if (loading()) { <p role="status">Завантажуємо користувачів…</p> }
+  @else if (loadError()) { <div class="auth-alert" role="alert">{{ loadError() }} <button class="text-button" type="button" (click)="load()">Спробувати ще раз</button></div> }
+  @else if (!users().length) { <p class="empty">Користувачів не знайдено. Змініть умови пошуку.</p> }
+  @else {
+    <ul class="user-list">
+      @for (user of users(); track user.id) {
+        <li class="user-card">
+          <div class="user-info"><h3>{{ user.name }}</h3><p>{{ user.phone }}</p>
+            <div class="badges"><span class="badge">{{ user.isAdmin ? 'Адміністратор' : 'Користувач' }}</span><span class="badge" [class.badge--blocked]="user.isBlocked">{{ user.isBlocked ? 'Заблоковано' : 'Активний' }}</span></div>
+          </div>
+          <div class="user-actions">
+            <button class="button button--secondary" type="button" [disabled]="saving()" [attr.aria-label]="'Скинути пароль: ' + user.name" (click)="ask('reset', user)">Скинути пароль</button>
+            @if (isSuperAdmin()) {
+              <button class="button button--secondary" type="button" [disabled]="saving()" [attr.aria-label]="(user.isAdmin ? 'Відкликати роль адміністратора: ' : 'Призначити адміністратором: ') + user.name" (click)="ask('role', user)">{{ user.isAdmin ? 'Відкликати роль адміністратора' : 'Призначити адміністратором' }}</button>
+              <button class="button button--secondary" type="button" [disabled]="saving()" [attr.aria-label]="(user.isBlocked ? 'Розблокувати: ' : 'Заблокувати: ') + user.name" (click)="ask('block', user)">{{ user.isBlocked ? 'Розблокувати' : 'Заблокувати' }}</button>
+            }
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</section>
+<app-confirm-dialog dialogId="user-action" [title]="confirmTitle()" [description]="confirmDescription()" confirmLabel="Підтвердити" (confirmed)="execute()" (closed)="pending.set(null)" />
+<dialog #secretDialog class="confirm-dialog secret-dialog" aria-labelledby="temporary-password-title" aria-describedby="temporary-password-description" (close)="clearSecret()">
+  <h2 id="temporary-password-title">Тимчасовий пароль</h2>
+  <p id="temporary-password-description">Передайте цей пароль клієнту вручну поза системою. Після закриття вікна його неможливо переглянути знову. Під час входу потрібно буде змінити пароль.</p>
+  @if (secret(); as password) { <p class="temporary-password" aria-label="Тимчасовий пароль">{{ password }}</p> }
+  <div class="dialog-actions"><button class="button button--primary" type="button" autofocus (click)="clearSecret()">Зрозуміло, закрити</button></div>
+</dialog>

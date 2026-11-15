@@ -62,6 +62,15 @@ describe('AuthService', () => {
     old.flush(user);
     expect(service.session()).toBeNull(); expect(result).toBeNull();
   });
+  it('does not restore a stale session response after revocation', () => {
+    const user = { name: 'Test', phone: '+380000000000', roles: ['Admin'], mustChangePassword: false };
+    service.session.set(user);
+    let result: unknown = user;
+    service.getSession().subscribe(value => result = value);
+    const old = http.expectOne('/api/auth/session');
+    service.invalidateSession(); old.flush(user);
+    expect(service.session()).toBeNull(); expect(result).toBeNull();
+  });
   it('refreshes antiforgery before logout and clears session on success', () => {
     service.session.set({ name: 'Test', phone: '+380000000000', roles: ['User'], mustChangePassword: false });
     service.logout().subscribe();

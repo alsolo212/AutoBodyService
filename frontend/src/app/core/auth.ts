@@ -17,6 +17,8 @@ export class AuthService {
   readonly passwordChangeRevision = signal(0);
   readonly passwordChanges = new Subject<'start' | 'end'>();
   private sessionRevision = 0;
+  sessionVersion() { return this.sessionRevision; }
+  invalidateSession() { this.sessionRevision++; this.session.set(null); }
   private token() { return this.http.get<void>('/api/auth/antiforgery'); }
   getSession() {
     return defer(() => this.passwordChanging()

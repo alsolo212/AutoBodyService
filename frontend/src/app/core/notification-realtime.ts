@@ -51,13 +51,14 @@ export class NotificationRealtime {
       if (this.account === null || generation !== this.generation || this.auth.passwordChanging()) return of(null);
       this.loading.set(true); this.error.set('');
       const passwordRevision = this.auth.passwordChangeRevision();
+      const sessionRevision = this.auth.sessionVersion();
       return this.http.get<NotificationItem[]>('/api/notifications').pipe(
-        map(items => ({ items, generation, passwordRevision })),
+        map(items => ({ items, generation, passwordRevision, sessionRevision })),
         catchError((error: HttpErrorResponse) => {
-          if (generation === this.generation) {
+          if (generation === this.generation && sessionRevision === this.auth.sessionVersion()) {
             if (error.status === 401 || error.status === 403) {
               if (this.auth.passwordChanging() || passwordRevision !== this.auth.passwordChangeRevision()) return of(null);
-              this.items.set([]); this.auth.session.set(null);
+              this.items.set([]); this.auth.invalidateSession();
               this.error.set('Сесію завершено. Увійдіть знову.');
             } else this.error.set('Не вдалося завантажити сповіщення. Спробуйте ще раз.');
           }
@@ -66,7 +67,7 @@ export class NotificationRealtime {
         finalize(() => { if (generation === this.generation) this.loading.set(false); }),
       );
     }), takeUntilDestroyed(this.destroyRef)).subscribe(result => {
-      if (!result || result.generation !== this.generation || result.passwordRevision !== this.auth.passwordChangeRevision() || this.account === null) return;
+      if (!result || result.generation !== this.generation || result.passwordRevision !== this.auth.passwordChangeRevision() || result.sessionRevision !== this.auth.sessionVersion() || this.account === null) return;
       const unique = new Map(result.items.map(item => [item.id, item]));
       // Stable sorting preserves the server's tie-break order for equal millisecond timestamps.
       this.items.set([...unique.values()].sort((a, b) => Date.parse(b.createdAtUtc) - Date.parse(a.createdAtUtc)));
@@ -106,41 +107,44 @@ export class NotificationRealtime {
 
   markRead(id: string): Observable<void> {
     const passwordRevision = this.auth.passwordChangeRevision();
+    const sessionRevision = this.auth.sessionVersion();
     return this.http.get<void>('/api/auth/antiforgery').pipe(
       switchMap(() => this.http.patch<void>(`/api/notifications/${encodeURIComponent(id)}/read`, null)),
       tap(() => this.refresh()),
-      catchError(error => this.handleActionError(error, passwordRevision)),
+      catchError(error => this.handleActionError(error, passwordRevision, sessionRevision)),
     );
   }
 
   markAllRead(): Observable<void> {
     const passwordRevision = this.auth.passwordChangeRevision();
+    const sessionRevision = this.auth.sessionVersion();
     return this.http.get<void>('/api/auth/antiforgery').pipe(
       switchMap(() => this.http.post<void>('/api/notifications/read-all', null)),
       tap(() => this.refresh()),
-      catchError(error => this.handleActionError(error, passwordRevision)),
+      catchError(error => this.handleActionError(error, passwordRevision, sessionRevision)),
     );
   }
 
-  private handleActionError(error: unknown, passwordRevision: number): Observable<never> {
-    if (error instanceof HttpErrorResponse && !this.auth.passwordChanging() && passwordRevision === this.auth.passwordChangeRevision() && (error.status === 401 || error.status === 403)) this.auth.session.set(null);
+  private handleActionError(error: unknown, passwordRevision: number, sessionRevision: number): Observable<never> {
+    if (error instanceof HttpErrorResponse && sessionRevision === this.auth.sessionVersion() && !this.auth.passwordChanging() && passwordRevision === this.auth.passwordChangeRevision() && (error.status === 401 || error.status === 403)) this.auth.invalidateSession();
     return throwError(() => error);
   }
 
   private revalidate(generation: number, sync = false, resume = false): void {
     if (this.auth.passwordChanging()) return;
     const passwordRevision = this.auth.passwordChangeRevision();
+    const sessionRevision = this.auth.sessionVersion();
     this.sessionCheck?.unsubscribe();
     this.sessionCheck = this.http.get<AuthSession>('/api/auth/session').subscribe({
       next: session => {
-        if (generation !== this.generation || passwordRevision !== this.auth.passwordChangeRevision()) return;
+        if (generation !== this.generation || passwordRevision !== this.auth.passwordChangeRevision() || sessionRevision !== this.auth.sessionVersion()) return;
         this.auth.session.set(session);
         if (accountKey(session) !== this.account) return;
         if (resume && (!this.connection || this.connection.state === HubConnectionState.Disconnected)) { void this.connect(generation); return; }
         if (sync) this.refresh();
       },
       error: (error: HttpErrorResponse) => {
-        if (generation === this.generation && !this.auth.passwordChanging() && passwordRevision === this.auth.passwordChangeRevision() && (error.status === 401 || error.status === 403)) this.auth.session.set(null);
+        if (generation === this.generation && sessionRevision === this.auth.sessionVersion() && !this.auth.passwordChanging() && passwordRevision === this.auth.passwordChangeRevision() && (error.status === 401 || error.status === 403)) this.auth.invalidateSession();
       },
     });
   }
