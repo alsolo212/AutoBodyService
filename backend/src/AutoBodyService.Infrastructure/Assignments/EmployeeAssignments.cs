@@ -1,4 +1,5 @@
 using AutoBodyService.Application.Assignments;
+using AutoBodyService.Application.Audit;
 using AutoBodyService.Domain.Assignments;
 using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Infrastructure.Persistence;
@@ -7,7 +8,7 @@ using Npgsql;
 
 namespace AutoBodyService.Infrastructure.Assignments;
 
-public sealed class EmployeeAssignments(ApplicationDbContext db, TimeProvider clock) : IEmployeeAssignments
+public sealed class EmployeeAssignments(ApplicationDbContext db, TimeProvider clock, IAdminAuditWriter audit) : IEmployeeAssignments
 {
     public async Task<IReadOnlyList<AssignmentDetails>> ListAsync(Guid? appointmentId, Guid? employeeId, bool? active, CancellationToken cancellationToken)
     {
@@ -46,6 +47,7 @@ public sealed class EmployeeAssignments(ApplicationDbContext db, TimeProvider cl
             return (AssignmentResult.Conflict, null);
         var assignment = EmployeeAssignment.Assign(appointment, employee, actorId, clock.GetUtcNow());
         db.EmployeeAssignments.Add(assignment);
+        audit.RecordAssignmentChange(actorId, assignment.Id, appointmentId, employeeId, false, false);
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -67,6 +69,7 @@ public sealed class EmployeeAssignments(ApplicationDbContext db, TimeProvider cl
         if (assignment is null) return AssignmentResult.NotFound;
         if (assignment.ReleasedAtUtc is not null) return AssignmentResult.Conflict;
         assignment.Release(actorId, clock.GetUtcNow());
+        audit.RecordAssignmentChange(actorId, assignment.Id, assignment.AppointmentId, assignment.EmployeeId, true, false);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return AssignmentResult.Success;

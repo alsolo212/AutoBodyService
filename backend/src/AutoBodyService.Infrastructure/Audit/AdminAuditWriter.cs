@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using AutoBodyService.Application.Audit;
 using AutoBodyService.Application.InspectionSchedule;
 using AutoBodyService.Infrastructure.Persistence;
@@ -15,11 +16,37 @@ public sealed class AdminAuditWriter(ApplicationDbContext db, TimeProvider clock
         Add(actorId, "InspectionExceptionChanged", "InspectionDate", date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
             new { before = SafeException(before), after = SafeException(after) });
 
-    public void RecordAppointmentStatusChange(string actorId, Guid appointmentId, AppointmentStatus from, AppointmentStatus to)
+    public void RecordAppointmentStatusChange(string actorId, Guid appointmentId, AppointmentStatus from, AppointmentStatus to, Guid? statusEventId = null)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(appointmentId, Guid.Empty);
         if (!Enum.IsDefined(from) || !Enum.IsDefined(to)) throw new ArgumentOutOfRangeException(nameof(to));
-        Add(actorId, "AppointmentStatusChanged", "Appointment", appointmentId.ToString("D"), new { from = from.ToString(), to = to.ToString() });
+        Add(actorId, "AppointmentStatusChanged", "Appointment", appointmentId.ToString("D"), new { from = from.ToString(), to = to.ToString(), statusEventId });
+    }
+
+    public void RecordAssignmentChange(string actorId, Guid assignmentId, Guid appointmentId, Guid employeeId, bool released, bool automatic)
+    {
+        ArgumentOutOfRangeException.ThrowIfEqual(assignmentId, Guid.Empty);
+        ArgumentOutOfRangeException.ThrowIfEqual(appointmentId, Guid.Empty);
+        ArgumentOutOfRangeException.ThrowIfEqual(employeeId, Guid.Empty);
+        if (automatic && !released) throw new ArgumentException("Only release can be automatic.");
+        Add(actorId, released ? "AssignmentReleased" : "AssignmentCreated", "EmployeeAssignment", assignmentId.ToString("D"),
+            new { appointmentId, employeeId, automatic });
+    }
+
+    public async Task<AuditPage> ReadAsync(AuditQuery filter, CancellationToken cancellationToken)
+    {
+        var query = db.AdminAuditEvents.AsNoTracking().AsQueryable();
+        if (filter.FromUtc is { } from) query = query.Where(e => e.OccurredAtUtc >= from);
+        if (filter.ToUtc is { } to) query = query.Where(e => e.OccurredAtUtc < to);
+        if (filter.Action is { } action) query = query.Where(e => e.Action == action);
+        if (filter.ActorId is { } actor) query = query.Where(e => e.ActorId == actor);
+        var total = await query.CountAsync(cancellationToken);
+        var ordered = filter.Descending
+            ? query.OrderByDescending(e => e.OccurredAtUtc).ThenByDescending(e => e.Id)
+            : query.OrderBy(e => e.OccurredAtUtc).ThenBy(e => e.Id);
+        var events = await ordered.Skip((filter.Page - 1) * filter.PageSize).Take(filter.PageSize).ToListAsync(cancellationToken);
+        return new AuditPage(total, filter.Page, filter.PageSize, events.Select(e => new AuditEntry(
+            e.Id, e.OccurredAtUtc, e.ActorId, e.Action, e.ObjectType, e.ObjectId, AuditDetails.Safe(e.Action, e.Details))).ToArray());
     }
 
     public void RecordRepairPlanChange(string actorId, Guid appointmentId, bool priceChanged, bool datesChanged)

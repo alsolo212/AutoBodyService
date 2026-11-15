@@ -187,6 +187,16 @@ public sealed class EmployeeAssignmentPostgresTests(PostgresIdentityFixture fixt
         Assert.Equal(HttpStatusCode.Conflict, (await Assign(actor, order, worker)).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await Release(actor, firstId)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await Release(actor, firstId)).StatusCode);
+        await using (var auditScope = factory.Services.CreateAsyncScope())
+        {
+            var auditDb = auditScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var events = await auditDb.AdminAuditEvents.Where(e => e.ObjectId == firstId.ToString()).ToListAsync();
+            Assert.Equal(2, events.Count);
+            Assert.Single(events, e => e.Action == "AssignmentCreated" && e.ActorId == admin.Id);
+            var released = Assert.Single(events, e => e.Action == "AssignmentReleased" && e.ActorId == admin.Id);
+            using var details = JsonDocument.Parse(released.Details);
+            Assert.False(details.RootElement.GetProperty("automatic").GetBoolean());
+        }
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -401,7 +411,21 @@ public sealed class EmployeeAssignmentPostgresTests(PostgresIdentityFixture fixt
             var statusEvent = await db.AppointmentStatusEvents.SingleAsync(e => e.AppointmentId == order && e.ToStatus == expected);
             var assignments = await db.EmployeeAssignments.AsNoTracking().Where(a => a.AppointmentId == order).ToListAsync();
             Assert.Equal(2, assignments.Count); Assert.All(assignments, a => { Assert.Equal(statusEvent.ChangedAtUtc, a.ReleasedAtUtc); Assert.Equal(admin.Id, a.ReleasedById); });
-            Assert.Single(await db.AdminAuditEvents.Where(e => e.ObjectId == order.ToString() && e.Action == "AppointmentStatusChanged").ToListAsync());
+            var statusAudit = Assert.Single(await db.AdminAuditEvents.Where(e => e.ObjectId == order.ToString() && e.Action == "AppointmentStatusChanged").ToListAsync());
+            using (var details = JsonDocument.Parse(statusAudit.Details))
+                Assert.Equal(statusEvent.Id, details.RootElement.GetProperty("statusEventId").GetGuid());
+            if (cancel) Assert.Equal("Test", statusEvent.Reason);
+            foreach (var assignment in assignments)
+            {
+                var history = await db.AdminAuditEvents.Where(e => e.ObjectId == assignment.Id.ToString()).ToListAsync();
+                Assert.Equal(2, history.Count);
+                Assert.Single(history, e => e.Action == "AssignmentCreated" && e.ActorId == admin.Id);
+                var released = Assert.Single(history, e => e.Action == "AssignmentReleased" && e.ActorId == admin.Id);
+                using var details = JsonDocument.Parse(released.Details);
+                Assert.True(details.RootElement.GetProperty("automatic").GetBoolean());
+                Assert.Equal(order, details.RootElement.GetProperty("appointmentId").GetGuid());
+                Assert.Equal(assignment.EmployeeId, details.RootElement.GetProperty("employeeId").GetGuid());
+            }
         }
     }
 
@@ -432,6 +456,41 @@ public sealed class EmployeeAssignmentPostgresTests(PostgresIdentityFixture fixt
             }
         }
         finally { await db.Database.ExecuteSqlRawAsync("DROP TRIGGER assignment_reject_audit_test ON \"AdminAuditEvents\"; DROP FUNCTION assignment_reject_audit_test();"); }
+    }
+
+    [PostgresFact]
+    public async Task AssignmentAuditFailureRollsBackManualCreationAndRelease()
+    {
+        var owner = await User("User"); var admin = await User("Admin"); using var actor = await Login(admin.Phone);
+        var order = await Appointment(owner.Id); var worker = await Employee("Rollback");
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE FUNCTION reject_assignment_audit_test() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN IF NEW."Action" IN ('AssignmentCreated', 'AssignmentReleased') THEN RAISE EXCEPTION 'test failure'; END IF; RETURN NEW; END $$;
+            CREATE TRIGGER reject_assignment_audit_test BEFORE INSERT ON "AdminAuditEvents" FOR EACH ROW EXECUTE FUNCTION reject_assignment_audit_test();
+            """);
+        try
+        {
+            Assert.Equal(HttpStatusCode.InternalServerError, (await Assign(actor, order, worker)).StatusCode);
+            Assert.Empty(await db.EmployeeAssignments.AsNoTracking().Where(a => a.AppointmentId == order).ToListAsync());
+        }
+        finally { await db.Database.ExecuteSqlRawAsync("DROP TRIGGER reject_assignment_audit_test ON \"AdminAuditEvents\"; DROP FUNCTION reject_assignment_audit_test();"); }
+        using var success = await Assign(actor, order, worker);
+        Assert.Equal(HttpStatusCode.Created, success.StatusCode);
+        var assignmentId = (await Body(success)).GetProperty("id").GetGuid();
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE FUNCTION reject_assignment_audit_test() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN IF NEW."Action" = 'AssignmentReleased' THEN RAISE EXCEPTION 'test failure'; END IF; RETURN NEW; END $$;
+            CREATE TRIGGER reject_assignment_audit_test BEFORE INSERT ON "AdminAuditEvents" FOR EACH ROW EXECUTE FUNCTION reject_assignment_audit_test();
+            """);
+        try
+        {
+            Assert.Equal(HttpStatusCode.InternalServerError, (await Release(actor, assignmentId)).StatusCode);
+            var saved = await db.EmployeeAssignments.AsNoTracking().SingleAsync(a => a.Id == assignmentId);
+            Assert.Null(saved.ReleasedAtUtc);
+            Assert.Single(await db.AdminAuditEvents.AsNoTracking().Where(e => e.ObjectId == assignmentId.ToString()).ToListAsync());
+        }
+        finally { await db.Database.ExecuteSqlRawAsync("DROP TRIGGER reject_assignment_audit_test ON \"AdminAuditEvents\"; DROP FUNCTION reject_assignment_audit_test();"); }
     }
 
     [PostgresFact]

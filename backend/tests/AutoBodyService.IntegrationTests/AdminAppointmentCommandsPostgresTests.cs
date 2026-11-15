@@ -147,7 +147,8 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
             Assert.Equal(statusEvent.ActorId, auditEvent.ActorId);
             Assert.Equal("Appointment", auditEvent.ObjectType);
             using var detailsPayload = JsonDocument.Parse(auditEvent.Details);
-            Assert.Equal(2, detailsPayload.RootElement.EnumerateObject().Count());
+            Assert.Equal(3, detailsPayload.RootElement.EnumerateObject().Count());
+            Assert.Equal(statusEvent.Id, detailsPayload.RootElement.GetProperty("statusEventId").GetGuid());
         }
     }
 
@@ -270,6 +271,13 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
         Assert.Equal(admin.Id, history.ActorId); Assert.Equal("Operator reason", history.Reason);
         var audit = await db.AdminAuditEvents.SingleAsync(e => e.ObjectId == id.ToString());
         Assert.DoesNotContain("Operator reason", audit.Details);
+        using (var safe = JsonDocument.Parse(audit.Details)) Assert.Equal(history.Id, safe.RootElement.GetProperty("statusEventId").GetGuid());
+        var auditPage = await supervisor.GetFromJsonAsync<JsonElement>($"/api/admin/audit-log?actorId={admin.Id}&action=AppointmentStatusChanged&pageSize=100");
+        var entry = Assert.Single(auditPage.GetProperty("items").EnumerateArray(), e => e.GetProperty("objectId").GetString() == id.ToString());
+        Assert.Equal(history.Id, entry.GetProperty("details").GetProperty("statusEventId").GetGuid());
+        Assert.DoesNotContain("Operator reason", entry.ToString());
+        var appointmentDetails = await Details(supervisor, id);
+        Assert.Contains(appointmentDetails.GetProperty("history").EnumerateArray(), e => e.GetProperty("reason").ValueKind == JsonValueKind.String && e.GetProperty("reason").GetString() == "Operator reason");
     }
 
     [PostgresFact]

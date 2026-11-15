@@ -105,12 +105,16 @@ public sealed class InspectionCalendarPostgresTests(PostgresIdentityFixture fixt
         Assert.DoesNotContain(privateReason, audit.Details);
         Assert.DoesNotContain(token!, audit.Details);
         Assert.DoesNotContain("customerName", audit.Details, StringComparison.OrdinalIgnoreCase);
+        var result = await superClient.GetFromJsonAsync<JsonElement>($"/api/admin/audit-log?actorId={admin.Id}&action=InspectionExceptionChanged");
+        var entry = Assert.Single(result.GetProperty("items").EnumerateArray());
+        Assert.Equal("Closed", entry.GetProperty("details").GetProperty("after").GetProperty("mode").GetString());
+        Assert.DoesNotContain(privateReason, result.ToString());
     }
 
     [PostgresFact]
     public async Task WeeklyAndIndividualSlotPreviewsFindExistingFutureInspections()
     {
-        var owner = await User("User"); var admin = await User("Admin"); var id = await Initialize(owner.Id); using var client = await Login(admin.Phone);
+        var owner = await User("User"); var admin = await User("Admin"); var super = await User("SuperAdmin"); var id = await Initialize(owner.Id); using var client = await Login(admin.Phone); using var supervisor = await Login(super.Phone);
         var weekly = await Read(await client.GetAsync("/api/admin/inspection-schedule")); var version = weekly.GetProperty("version").GetGuid();
         var weeklyPreview = await Read(await client.PostAsJsonAsync("/api/admin/inspection-schedule/preview", new { version, intervals = Array.Empty<object>() }));
         Assert.Contains(weeklyPreview.GetProperty("conflicts").EnumerateArray(), item => item.GetProperty("id").GetGuid() == id);
@@ -136,5 +140,12 @@ public sealed class InspectionCalendarPostgresTests(PostgresIdentityFixture fixt
         using var details = JsonDocument.Parse(weeklyEvent.Details);
         Assert.NotEmpty(details.RootElement.GetProperty("before").EnumerateArray());
         Assert.Empty(details.RootElement.GetProperty("after").EnumerateArray());
+        var result = await supervisor.GetFromJsonAsync<JsonElement>($"/api/admin/audit-log?actorId={admin.Id}&action=InspectionScheduleChanged");
+        var entry = Assert.Single(result.GetProperty("items").EnumerateArray());
+        var firstInterval = entry.GetProperty("details").GetProperty("before").EnumerateArray().First();
+        Assert.True(firstInterval.TryGetProperty("DayOfWeek", out _));
+        Assert.True(firstInterval.TryGetProperty("Start", out _));
+        Assert.True(firstInterval.TryGetProperty("End", out _));
+        Assert.Empty(entry.GetProperty("details").GetProperty("after").EnumerateArray());
     }
 }

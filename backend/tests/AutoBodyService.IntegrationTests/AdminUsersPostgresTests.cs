@@ -118,6 +118,11 @@ public sealed class AdminUsersPostgresTests(PostgresIdentityFixture fixture) : I
         Assert.NotEqual(temporary, stored.PasswordHash); Assert.False(await users.CheckPasswordAsync(stored, temporary));
         var audit = await db.AdminAuditEvents.Where(x => x.ObjectId == customer.Id && x.Action == "AccountPasswordReset").ToArrayAsync();
         Assert.Single(audit); Assert.Equal(admin.Id, audit[0].ActorId); Assert.DoesNotContain(temporary, audit[0].Details);
+        using var supervisor = Client(); await Login(supervisor, super);
+        var auditPage = await supervisor.GetFromJsonAsync<JsonElement>($"/api/admin/audit-log?actorId={admin.Id}&action=AccountPasswordReset");
+        var entry = Assert.Single(auditPage.GetProperty("items").EnumerateArray());
+        Assert.Equal(customer.Id, entry.GetProperty("objectId").GetString());
+        Assert.DoesNotContain(temporary, auditPage.ToString());
         var notices = await db.Notifications.Where(x => x.Type == "AccountPasswordReset" && (x.RecipientId == customer.Id || x.RecipientId == super.Id)).ToArrayAsync();
         Assert.Equal(2, notices.Length); Assert.All(notices, n => { Assert.DoesNotContain(temporary, n.Title); Assert.DoesNotContain(temporary, n.Message); Assert.DoesNotContain(temporary, n.EventKey); });
         Assert.DoesNotContain(logs.Entries, entry => entry.Contains(temporary, StringComparison.Ordinal));
@@ -243,7 +248,9 @@ public sealed class AdminUsersPostgresTests(PostgresIdentityFixture fixture) : I
         public void RecordExpenseChange(string actorId, Guid expenseId, decimal? beforeAmount, decimal afterAmount, bool beforeHasDescription, bool afterHasDescription, bool descriptionChanged) => throw new InvalidOperationException("Audit unavailable");
         public void RecordWeeklyScheduleChange(string actorId, IReadOnlyList<WeeklyInterval> before, IReadOnlyList<WeeklyInterval> after) => throw new NotSupportedException();
         public void RecordDateExceptionChange(string actorId, DateOnly date, InspectionException? before, InspectionException? after) => throw new NotSupportedException();
-        public void RecordAppointmentStatusChange(string actorId, Guid appointmentId, AppointmentStatus from, AppointmentStatus to) => throw new NotSupportedException();
+        public void RecordAppointmentStatusChange(string actorId, Guid appointmentId, AppointmentStatus from, AppointmentStatus to, Guid? statusEventId = null) => throw new NotSupportedException();
+        public void RecordAssignmentChange(string actorId, Guid assignmentId, Guid appointmentId, Guid employeeId, bool released, bool automatic) => throw new NotSupportedException();
+        public Task<AuditPage> ReadAsync(AuditQuery query, CancellationToken cancellationToken) => throw new NotSupportedException();
         public void RecordRepairPlanChange(string actorId, Guid appointmentId, bool priceChanged, bool datesChanged) => throw new NotSupportedException();
         public void RecordPriceItemChange(string actorId, Guid priceItemId, bool created) => throw new NotSupportedException();
         public void RecordManualContact(string actorId, Guid appointmentId, ManualContactReason reason) => throw new NotSupportedException();

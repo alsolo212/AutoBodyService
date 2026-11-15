@@ -177,6 +177,15 @@ public sealed class FinanceReportsPostgresTests : IDisposable
         Assert.True(details2.RootElement.GetProperty("before").GetProperty("hasDescription").GetBoolean());
         Assert.False(details2.RootElement.GetProperty("after").GetProperty("hasDescription").GetBoolean());
         Assert.DoesNotContain("Test supplies", string.Join(' ', audit.Select(a => a.Details)));
+        var history = await later.GetFromJsonAsync<JsonElement>($"/api/admin/audit-log?actorId={super.Id}&action=ExpenseCorrected&direction=asc");
+        var corrections = history.GetProperty("items").EnumerateArray().Where(e => e.GetProperty("objectId").GetString() == id.ToString()).ToArray();
+        Assert.Equal(2, corrections.Length);
+        Assert.Equal(0.10m, corrections[0].GetProperty("details").GetProperty("before").GetProperty("amount").GetDecimal());
+        Assert.Equal(12.34m, corrections[0].GetProperty("details").GetProperty("after").GetProperty("amount").GetDecimal());
+        Assert.Equal(12.34m, corrections[1].GetProperty("details").GetProperty("before").GetProperty("amount").GetDecimal());
+        Assert.Equal(15.67m, corrections[1].GetProperty("details").GetProperty("after").GetProperty("amount").GetDecimal());
+        Assert.DoesNotContain("Test supplies", history.ToString());
+        Assert.DoesNotContain("Adjusted", history.ToString());
     }
 
     [PostgresFact]
@@ -291,7 +300,9 @@ public sealed class FinanceReportsPostgresTests : IDisposable
             new AdminAuditWriter(db, clock).RecordExpenseChange("missing-test-actor", expenseId, beforeAmount, afterAmount, beforeHasDescription, afterHasDescription, descriptionChanged);
         public void RecordWeeklyScheduleChange(string actorId, IReadOnlyList<WeeklyInterval> before, IReadOnlyList<WeeklyInterval> after) => throw new NotSupportedException();
         public void RecordDateExceptionChange(string actorId, DateOnly date, InspectionException? before, InspectionException? after) => throw new NotSupportedException();
-        public void RecordAppointmentStatusChange(string actorId, Guid appointmentId, AppointmentStatus from, AppointmentStatus to) => throw new NotSupportedException();
+        public void RecordAppointmentStatusChange(string actorId, Guid appointmentId, AppointmentStatus from, AppointmentStatus to, Guid? statusEventId = null) => throw new NotSupportedException();
+        public void RecordAssignmentChange(string actorId, Guid assignmentId, Guid appointmentId, Guid employeeId, bool released, bool automatic) => throw new NotSupportedException();
+        public Task<AuditPage> ReadAsync(AuditQuery query, CancellationToken cancellationToken) => throw new NotSupportedException();
         public void RecordRepairPlanChange(string actorId, Guid appointmentId, bool priceChanged, bool datesChanged) => throw new NotSupportedException();
         public void RecordPriceItemChange(string actorId, Guid priceItemId, bool created) => throw new NotSupportedException();
         public void RecordManualContact(string actorId, Guid appointmentId, ManualContactReason reason) => throw new NotSupportedException();

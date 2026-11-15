@@ -285,3 +285,6 @@ Content-Type: application/json
 RequestVerificationToken: {{xsrfToken}}
 
 { "version": {{expenseVersion}}, "amount": 130.50 }
+
+### SuperAdmin: read administrative history (authenticated cookie required)
+GET {{baseUrl}}/api/admin/audit-log?direction=desc&page=1&pageSize=25

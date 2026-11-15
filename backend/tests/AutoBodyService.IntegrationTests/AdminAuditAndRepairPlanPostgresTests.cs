@@ -171,7 +171,9 @@ public sealed class AdminAuditAndRepairPlanPostgresTests(PostgresIdentityFixture
     {
         public void RecordWeeklyScheduleChange(string actorId, IReadOnlyList<WeeklyInterval> before, IReadOnlyList<WeeklyInterval> after) => throw new InvalidOperationException("Audit unavailable");
         public void RecordDateExceptionChange(string actorId, DateOnly date, InspectionException? before, InspectionException? after) => throw new InvalidOperationException("Audit unavailable");
-        public void RecordAppointmentStatusChange(string actorId, Guid appointmentId, AppointmentStatus from, AppointmentStatus to) => throw new InvalidOperationException("Audit unavailable");
+        public void RecordAppointmentStatusChange(string actorId, Guid appointmentId, AppointmentStatus from, AppointmentStatus to, Guid? statusEventId = null) => throw new InvalidOperationException("Audit unavailable");
+        public void RecordAssignmentChange(string actorId, Guid assignmentId, Guid appointmentId, Guid employeeId, bool released, bool automatic) => throw new NotSupportedException();
+        public Task<AuditPage> ReadAsync(AuditQuery query, CancellationToken cancellationToken) => throw new NotSupportedException();
         public void RecordRepairPlanChange(string actorId, Guid appointmentId, bool priceChanged, bool datesChanged) => throw new InvalidOperationException("Audit unavailable");
         public void RecordPriceItemChange(string actorId, Guid priceItemId, bool created) => throw new InvalidOperationException("Audit unavailable");
         public void RecordManualContact(string actorId, Guid appointmentId, ManualContactReason reason) => throw new InvalidOperationException("Audit unavailable");

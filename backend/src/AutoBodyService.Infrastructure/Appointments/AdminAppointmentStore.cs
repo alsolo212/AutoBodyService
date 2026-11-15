@@ -28,7 +28,11 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
             if (statusEvent.FromStatus == AppointmentStatus.InProgress && statusEvent.ToStatus != AppointmentStatus.InProgress)
             {
                 var activeAssignments = await db.EmployeeAssignments.Where(a => a.AppointmentId == id && a.ReleasedAtUtc == null).ToListAsync(cancellationToken);
-                foreach (var assignment in activeAssignments) assignment.Release(actorId, statusEvent.ChangedAtUtc);
+                foreach (var assignment in activeAssignments)
+                {
+                    assignment.Release(actorId, statusEvent.ChangedAtUtc);
+                    audit.RecordAssignmentChange(actorId, assignment.Id, id, assignment.EmployeeId, true, true);
+                }
             }
             db.AppointmentStatusEvents.Add(statusEvent);
             if (statusEvent.ToStatus == AppointmentStatus.Cancelled)
@@ -52,7 +56,7 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
             if (statusEvent.ToStatus == AppointmentStatus.Scheduled)
                 await NotificationEvents.AddForAdministratorsAsync(db, id, "AdminContactAgreement", "Завдання зв’язатися з клієнтом",
                     "Умови ремонту погоджено. За потреби зв’яжіться з клієнтом.", statusEvent.ChangedAtUtc, eventId, cancellationToken);
-            audit.RecordAppointmentStatusChange(actorId, id, statusEvent.FromStatus!.Value, statusEvent.ToStatus);
+            audit.RecordAppointmentStatusChange(actorId, id, statusEvent.FromStatus!.Value, statusEvent.ToStatus, statusEvent.Id);
         }
         if (mutation.Confirmation is not null) db.PaymentHandoverConfirmations.Add(mutation.Confirmation);
         if (mutation.PriceChanged || mutation.DatesChanged)
