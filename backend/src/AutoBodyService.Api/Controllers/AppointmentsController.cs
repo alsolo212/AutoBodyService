@@ -36,6 +36,20 @@ public sealed class AppointmentsController(ICreateAppointmentService service, IA
         return Ok(await queries.GetMineAsync(owner, selected, cancellationToken));
     }
 
+    /// <summary>Get the current account's own appointment details, regardless of role.</summary>
+    [HttpGet("my/{id:guid}")]
+    [ProducesResponseType(typeof(CustomerAppointmentDetails), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> MyDetails(Guid id, CancellationToken cancellationToken)
+    {
+        var owner = users.GetUserId(User);
+        if (owner is null) return Unauthorized();
+        var own = await queries.GetOwnAsync(id, owner, cancellationToken);
+        return own is null ? NotFound() : Ok(own);
+    }
+
     /// <summary>Get details available to the owner or to an administrator.</summary>
     [HttpGet("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status200OK)]

@@ -288,3 +288,10 @@ RequestVerificationToken: {{xsrfToken}}
 
 ### SuperAdmin: read administrative history (authenticated cookie required)
 GET {{baseUrl}}/api/admin/audit-log?direction=desc&page=1&pageSize=25
+
+### Owner-scoped appointment details (every role; authenticated cookie required)
+GET {{baseUrl}}/api/appointments/my/00000000-0000-4000-8000-000000000001
+
+### Finance report returns 422 if exact monthly totals cannot fit decimal;
+### GET /expenses remains available to correct the original records.
+GET {{baseUrl}}/api/admin/reports/finance?year=2026&month=11

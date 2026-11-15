@@ -104,13 +104,30 @@ describe('Reports', () => {
     const fixture = create(); const component = fixture.componentInstance;
     component.filterForm.patchValue({ fromDate: '2025-01-01' }); component.applyFilters();
     reportRequest().flush(null, { status: 400, statusText: 'Bad Request' });
-    const other = expensesRequest(); expect(other.cancelled).toBe(true); fixture.detectChanges();
+    expensesRequest().flush(expenses); fixture.detectChanges();
     expect(component.loadError()).toContain('Перевірте суму');
     expect(fixture.nativeElement.querySelector('#order-from')).not.toBeNull();
     component.filterForm.patchValue({ fromDate: '' }); component.applyFilters();
     flushData({ ...report, completedCount: 0, revenueExact: '0', expensesExact: '0', resultExact: '0', filteredCount: 0, orders: [] }, { ...expenses, total: 0, items: [] }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('0,00 ₴');
     expect(fixture.nativeElement.textContent).toContain('витрат немає');
+  });
+  it('keeps expenses editable when totals exceed the supported range and reloads after correction', () => {
+    const fixture = create(); const component = fixture.componentInstance;
+    component.load(); reportRequest().flush(null, { status: 422, statusText: 'Unprocessable Entity' });
+    expensesRequest().flush({ ...expenses, items: [{ ...expense, amountExact: '79228162514264337593543950335' }] });
+    fixture.detectChanges();
+    expect(component.loadError()).toContain('перевищують підтримуваний діапазон');
+    expect(component.report()).toBeNull(); expect(component.expenses()?.items).toHaveLength(1);
+    expect(fixture.nativeElement.textContent).toContain('Матеріали');
+    component.edit(component.expenses()!.items[0]); component.expenseForm.patchValue({ amount: '12,34' }); component.save();
+    http.expectOne('/api/auth/antiforgery').flush(null);
+    const correction = http.expectOne('/api/admin/reports/expenses/expense-1');
+    expect(correction.request.method).toBe('PATCH');
+    correction.flush({ ...expense, amountExact: '12.34', version: 11 });
+    flushData(); fixture.detectChanges();
+    expect(component.loadError()).toBe(''); expect(component.report()).not.toBeNull();
+    expect(component.notice()).toContain('залишається за вересень 2026');
   });
   it('clears financial data after authorization loss and ignores a late response', () => {
     const fixture = create(); const component = fixture.componentInstance;

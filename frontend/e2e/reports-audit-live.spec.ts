@@ -66,7 +66,7 @@ test('all twenty agreed routes resolve without duplicate or phantom admin links'
   test.setTimeout(120000);
   test.skip(process.env['E2E_LIVE_API'] !== '1', 'Requires isolated API and PostgreSQL');
   for (const path of ['/', '/login', '/register', '/forgot-password']) {
-    await page.goto(path); await expect(page.locator('h1')).toHaveCount(1);
+    await page.goto(path, { waitUntil: 'domcontentloaded' }); await expect(page.locator('h1')).toHaveCount(1);
     await expect(page).toHaveURL(new RegExp(path === '/' ? '/$' : `${path}$`));
   }
   await login(page, process.env['E2E_ADMIN_PHONE']!, process.env['E2E_ADMIN_PASSWORD']!);
@@ -76,7 +76,7 @@ test('all twenty agreed routes resolve without duplicate or phantom admin links'
     '/admin', '/admin/appointments', `/admin/appointments/${id}`, '/admin/assignments', '/admin/inspection-calendar', '/admin/employees',
     '/admin/prices', '/admin/users', '/admin/notifications', '/admin/profile', '/admin/reports'];
   for (const path of paths) {
-    await page.goto(path); await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await page.goto(path, { waitUntil: 'domcontentloaded' }); await expect(page).toHaveURL(new RegExp(`${path}$`));
     await expect(page.locator('h1')).toHaveCount(1);
     await expect(page.getByText('Розділ у підготовці', { exact: true })).toHaveCount(0);
   }

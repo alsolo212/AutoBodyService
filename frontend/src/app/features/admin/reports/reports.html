@@ -55,9 +55,11 @@
       <div class="field"><label class="field__label" for="expense-amount">Сума, ₴</label><input id="expense-amount" class="field__input" type="text" inputmode="decimal" formControlName="amount" [attr.aria-invalid]="expenseForm.controls.amount.touched && expenseForm.controls.amount.invalid" aria-describedby="expense-amount-help" /><p id="expense-amount-help" class="field__hint">Введіть додатну суму, наприклад 125,50.</p></div>
       <div class="field"><label class="field__label" for="expense-description">Опис (необов’язково)</label><input id="expense-description" class="field__input" maxlength="500" formControlName="description" [attr.aria-invalid]="expenseForm.controls.description.touched && expenseForm.controls.description.invalid" /></div>
       @if (expenseForm.touched && expenseForm.invalid) { <p class="field__error" role="alert">Перевірте додатну суму та опис до 500 символів.</p> }
-      <div class="form-actions"><button class="button button--primary" type="submit" [disabled]="saving() || loading() || !!loadError() || conflict()">{{ saving() ? 'Зберігаємо…' : editing() ? 'Зберегти виправлення' : 'Додати витрату' }}</button>@if (editing()) { <button class="button button--secondary" type="button" [disabled]="saving()" (click)="cancelEdit()">Скасувати</button> }</div>
+      <div class="form-actions"><button class="button button--primary" type="submit" [disabled]="saving() || expensesLoading() || !!expensesError() || conflict()">{{ saving() ? 'Зберігаємо…' : editing() ? 'Зберегти виправлення' : 'Додати витрату' }}</button>@if (editing()) { <button class="button button--secondary" type="button" [disabled]="saving()" (click)="cancelEdit()">Скасувати</button> }</div>
     </form>
   </section>
+  @if (expensesLoading()) { <p class="report-state" role="status">Завантажуємо витрати…</p> }
+  @if (expensesError()) { <div class="auth-alert report-state" role="alert">{{ expensesError() }} <button class="text-button" type="button" (click)="load()">Спробувати ще раз</button></div> }
   @if (expenses(); as expenseData) {
     <section class="workspace-panel" aria-labelledby="expenses-title">
       <div class="panel-heading"><div><p class="panel-eyebrow">ОБРАНИЙ МІСЯЦЬ</p><h2 id="expenses-title">Список витрат</h2></div></div>

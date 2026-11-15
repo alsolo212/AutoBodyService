@@ -32,7 +32,7 @@ test('administrative order handles a real version conflict and both completion f
   });
   await page.goto(`/admin/appointments/${created[0]}`);
   await expect(page.getByRole('heading', { name: 'Тестова Перша' })).toBeVisible();
-  await expect(page.getByText('UTC+03:00').first()).toBeVisible();
+  await expect(page.locator('section[aria-labelledby="customer-heading"] time')).toContainText('UTC+03:00');
   await page.getByRole('button', { name: 'Узгодити план' }).click();
   await page.getByLabel('Узгоджена вартість, ₴').fill('1200');
   await page.getByLabel('Плановий початок за Києвом').fill('2099-09-11T10:00');

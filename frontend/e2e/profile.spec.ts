@@ -9,6 +9,8 @@ for (const role of ['User', 'Admin', 'SuperAdmin']) {
     let updated: unknown;
     await page.route('**/api/auth/session', route => route.fulfill({ json: account([role]) }));
     await page.route('**/api/auth/antiforgery', route => route.fulfill({ status: 204 }));
+    // The mocked session must have matching notification access; a real 401 revokes it.
+    await page.route('**/api/notifications', route => route.fulfill({ json: [] }));
     await page.route('**/api/profile', route => {
       if (route.request().method() === 'PATCH') { updated = route.request().postDataJSON(); return route.fulfill({ status: 204 }); }
       return route.fulfill({ json: { name: 'Тест', phone: '+380000000000' } });

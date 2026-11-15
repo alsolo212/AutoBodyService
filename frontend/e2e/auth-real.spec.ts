@@ -35,7 +35,7 @@ test.describe('real authentication', () => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: /Турбота про авто/ })).toBeVisible();
     const homeBrand = await page.locator('.site-header .brand').boundingBox();
-    await page.getByRole('link', { name: /Особистий кабінет/ }).click();
+    await page.locator('.site-header').getByRole('link', { name: 'Увійти', exact: true }).click();
     await expect(page).toHaveURL(/\/login$/);
     await page.getByRole('link', { name: 'Зареєструватися' }).click();
     await expect(page).toHaveURL(/\/register$/);

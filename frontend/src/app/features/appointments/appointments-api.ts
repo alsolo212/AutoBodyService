@@ -24,5 +24,5 @@ export class AppointmentsApi {
     return this.http.get<AppointmentSummary[]>('/api/appointments/my', category === 'all' ? {} : { params: { category } });
   }
   cancel(id: string) { return this.http.get<void>('/api/auth/antiforgery').pipe(switchMap(() => this.http.post<void>(`/api/appointments/${encodeURIComponent(id)}/cancel`, {}))); }
-  details(id: string) { return this.http.get<AppointmentDetails>(`/api/appointments/${encodeURIComponent(id)}`); }
+  details(id: string) { return this.http.get<AppointmentDetails>(`/api/appointments/my/${encodeURIComponent(id)}`); }
 }

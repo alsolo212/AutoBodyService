@@ -65,6 +65,7 @@ public sealed class AppointmentQueriesPostgresTests(PostgresIdentityFixture fixt
         var paths = (await Read(response)).GetProperty("paths");
         Assert.True(paths.GetProperty("/api/appointments/my").TryGetProperty("get", out _));
         Assert.True(paths.GetProperty("/api/appointments/{id}").TryGetProperty("get", out _));
+        Assert.True(paths.GetProperty("/api/appointments/my/{id}").TryGetProperty("get", out _));
     }
 
     [PostgresFact]
@@ -137,14 +138,44 @@ public sealed class AppointmentQueriesPostgresTests(PostgresIdentityFixture fixt
     }
 
     [PostgresFact]
+    public async Task PersonalDetailsRequireOwnershipForEveryRoleWhileAdminDetailsRemainAvailable()
+    {
+        var owner = await CreateUser(ApplicationRoles.User, "Customer");
+        var foreignId = await AddAppointment(owner.Id, AppointmentStatus.AwaitingInspection);
+        foreach (var role in new[] { ApplicationRoles.User, ApplicationRoles.Admin, ApplicationRoles.SuperAdmin })
+        {
+            var actor = await CreateUser(role, role);
+            var ownId = await AddAppointment(actor.Id, AppointmentStatus.AwaitingInspection);
+            using var client = Client(); await SignIn(client, actor.Phone);
+            var own = await Read(await client.GetAsync($"/api/appointments/my/{ownId}?userId={owner.Id}"));
+            Assert.Equal(ownId, own.GetProperty("id").GetGuid());
+            Assert.Equal(Vin, own.GetProperty("vin").GetString());
+            Assert.False(own.TryGetProperty("customerPhone", out _));
+            using var forbidden = await client.GetAsync($"/api/appointments/my/{foreignId}?userId={owner.Id}");
+            Assert.Equal(HttpStatusCode.NotFound, forbidden.StatusCode);
+            var body = await forbidden.Content.ReadAsStringAsync();
+            Assert.DoesNotContain(Vin, body); Assert.DoesNotContain("Опис проблеми", body);
+            Assert.DoesNotContain(owner.Phone, body); Assert.DoesNotContain("Customer", body);
+            using var administrative = await client.GetAsync($"/api/appointments/{foreignId}");
+            if (role == ApplicationRoles.User) Assert.Equal(HttpStatusCode.NotFound, administrative.StatusCode);
+            else
+            {
+                var detail = await Read(administrative);
+                Assert.Equal(foreignId, detail.GetProperty("id").GetGuid());
+                Assert.Equal(owner.Phone, detail.GetProperty("customerPhone").GetString());
+            }
+        }
+    }
+
+    [PostgresFact]
     public async Task EndpointsRequireAuthenticationAndRejectTemporaryPasswordSessions()
     {
         var user = await CreateUser(ApplicationRoles.User, "Temporary", temporary: true); var id = await AddAppointment(user.Id, AppointmentStatus.AwaitingInspection);
         using var client = Client();
-        foreach (var path in new[] { "/api/appointments/my", "/api/appointments/" + id })
+        foreach (var path in new[] { "/api/appointments/my", "/api/appointments/my/" + id, "/api/appointments/" + id })
             Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync(path)).StatusCode);
         await SignIn(client, user.Phone);
-        foreach (var path in new[] { "/api/appointments/my", "/api/appointments/" + id })
+        foreach (var path in new[] { "/api/appointments/my", "/api/appointments/my/" + id, "/api/appointments/" + id })
             Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(path)).StatusCode);
     }
 }

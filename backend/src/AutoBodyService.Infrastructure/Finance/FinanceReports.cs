@@ -1,4 +1,6 @@
 using System.Data;
+using System.Globalization;
+using System.Numerics;
 using AutoBodyService.Application.Audit;
 using AutoBodyService.Application.Finance;
 using AutoBodyService.Domain.Appointments;
@@ -28,9 +30,14 @@ public sealed class FinanceReports(ApplicationDbContext db, IAdminAuditWriter au
                        where appointment.Status == AppointmentStatus.Completed && completed >= start && completed < end
                        select new { appointment.Id, appointment.Make, appointment.Model, plan.AgreedPrice, Completed = completed!.Value };
         var count = await eligible.CountAsync(ct);
-        var revenue = await eligible.SumAsync(x => (decimal?)x.AgreedPrice, ct) ?? 0m;
-        var costs = await db.MonthlyExpenses.Where(x => x.RecordedYear == year && x.RecordedMonth == month)
-            .SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
+        // PostgreSQL numeric without declared precision has a much wider range than CLR decimal. Read its aggregate as text so
+        // conversion to CLR decimal cannot silently round or overflow in the driver.
+        var revenueText = await eligible.GroupBy(_ => 1).Select(g => g.Sum(x => x.AgreedPrice).ToString()).SingleOrDefaultAsync(ct);
+        var costsText = await db.MonthlyExpenses.Where(x => x.RecordedYear == year && x.RecordedMonth == month)
+            .GroupBy(_ => 1).Select(g => g.Sum(x => x.Amount).ToString()).SingleOrDefaultAsync(ct);
+        var revenue = ParseExactTotal(revenueText);
+        var costs = ParseExactTotal(costsText);
+        var result = SubtractExactly(revenue, costs);
         var filtered = eligible;
         if (filter.FromDate is { } from) { var bound = KyivMidnight(from); filtered = filtered.Where(x => x.Completed >= bound); }
         if (filter.ToDate is { } to) { var bound = KyivMidnight(to.AddDays(1)); filtered = filtered.Where(x => x.Completed < bound); }
@@ -43,7 +50,7 @@ public sealed class FinanceReports(ApplicationDbContext db, IAdminAuditWriter au
         var rows = await ordered.ThenBy(x => x.Id).Skip((page - 1) * pageSize).Take(pageSize)
             .Select(x => new CompletedOrder(x.Id, x.Make, x.Model, x.Completed, x.AgreedPrice)).ToListAsync(ct);
         await transaction.CommitAsync(ct);
-        return new(year, month, count, revenue, costs, revenue - costs, filteredCount, page, pageSize, rows);
+        return new(year, month, count, revenue, costs, result, filteredCount, page, pageSize, rows);
     }
 
     public async Task<ExpensePage> ExpensesAsync(int year, int month, string sort, bool descending, int page, int pageSize, CancellationToken ct)
@@ -95,6 +102,45 @@ public sealed class FinanceReports(ApplicationDbContext db, IAdminAuditWriter au
             return (ExpenseUpdateResult.Success, Details(expense));
         }
         catch (DbUpdateConcurrencyException) { return (ExpenseUpdateResult.Conflict, null); }
+    }
+
+    // Preserve every decimal digit. CLR decimal arithmetic can round a difference
+    // even when both operands are individually representable.
+    private static decimal ParseExactTotal(string? text)
+    {
+        if (text is null) return 0m;
+        var negative = text.StartsWith('-');
+        var unsigned = negative ? text[1..] : text;
+        var dot = unsigned.IndexOf('.');
+        var scale = dot < 0 ? 0 : unsigned.Length - dot - 1;
+        var digits = dot < 0 ? unsigned : unsigned.Remove(dot, 1);
+        var coefficient = BigInteger.Parse(digits, NumberStyles.None, CultureInfo.InvariantCulture);
+        return FromExactParts(negative ? -coefficient : coefficient, scale);
+    }
+
+    private static decimal SubtractExactly(decimal left, decimal right)
+    {
+        static (BigInteger Value, int Scale) Parts(decimal value)
+        {
+            var bits = decimal.GetBits(value);
+            var coefficient = (BigInteger)(uint)bits[0] | ((BigInteger)(uint)bits[1] << 32) | ((BigInteger)(uint)bits[2] << 64);
+            return ((bits[3] & int.MinValue) == 0 ? coefficient : -coefficient, (bits[3] >> 16) & 0xff);
+        }
+        var (a, aScale) = Parts(left); var (b, bScale) = Parts(right);
+        var scale = Math.Max(aScale, bScale);
+        return FromExactParts(a * BigInteger.Pow(10, scale - aScale) - b * BigInteger.Pow(10, scale - bScale), scale);
+    }
+
+    private static decimal FromExactParts(BigInteger signed, int scale)
+    {
+        var negative = signed.Sign < 0;
+        var coefficient = BigInteger.Abs(signed);
+        while (scale > 0 && coefficient % 10 == 0) { coefficient /= 10; scale--; }
+        if (scale > 28 || coefficient > (BigInteger)decimal.MaxValue) throw new OverflowException("Financial total is not exactly representable.");
+        var lo = unchecked((int)(uint)(coefficient & uint.MaxValue));
+        var mid = unchecked((int)(uint)((coefficient >> 32) & uint.MaxValue));
+        var hi = unchecked((int)(uint)((coefficient >> 64) & uint.MaxValue));
+        return new decimal(lo, mid, hi, negative, (byte)scale);
     }
 
     private ExpenseItem Details(MonthlyExpense x) => new(x.Id, x.Amount, x.Description, x.RecordedAtUtc, x.RecordedYear,

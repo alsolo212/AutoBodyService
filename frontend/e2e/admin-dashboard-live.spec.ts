@@ -73,7 +73,7 @@ test('common dashboard reflects real orders and manual contacts for Admin and Su
     await expect(page).toHaveURL(new RegExp(`/admin/${path}$`));
     if (path === 'employees') await expect(page.getByRole('heading', { name: 'Список працівників' })).toBeVisible();
     else if (path === 'assignments') await expect(page.getByRole('heading', { name: 'Усі замовлення в роботі' })).toBeVisible();
-    else await expect(page.getByText('Розділ у підготовці')).toBeVisible();
+    else { await expect(page.getByRole('heading', { name: 'Список послуг' })).toBeVisible(); await expect(page.getByLabel('Назва послуги')).toBeVisible(); }
     await expect(page.getByText('Перейти до вмісту')).toHaveAttribute('href', `/admin/${path}#workspace-main`);
     expect(dashboardRequests).toBe(beforePlaceholder);
   }

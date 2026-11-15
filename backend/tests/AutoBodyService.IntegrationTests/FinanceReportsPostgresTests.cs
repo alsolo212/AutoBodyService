@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using AutoBodyService.Application.Audit;
 using AutoBodyService.Application.InspectionSchedule;
@@ -271,6 +272,89 @@ public sealed class FinanceReportsPostgresTests : IDisposable
         Assert.Equal(new[] { ids[1], ids[2] }, page.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetGuid()));
         var byDate = await Json(await client.GetAsync("/api/admin/reports/expenses?year=2076&month=6&sort=date&direction=desc&pageSize=1"));
         Assert.Equal(ids[2], byDate.GetProperty("items")[0].GetProperty("id").GetGuid());
+    }
+
+    [PostgresFact]
+    public async Task OverpreciseExpenseInputsAreRejectedInsteadOfRoundedOnCreateAndCorrection()
+    {
+        clock.SetUtcNow(new DateTimeOffset(2085, 6, 10, 10, 0, 0, TimeSpan.Zero));
+        var super = await CreateUser("SuperAdmin"); using var client = await Login(super);
+        static StringContent JsonBody(string json) => new(json, Encoding.UTF8, "application/json");
+        foreach (var amount in new[] { "0.12345678901234567890123456789", "7922816251426433759354395033.51", "1e-29" })
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync("/api/admin/reports/expenses", JsonBody($"{{\"amount\":{amount}}}"))).StatusCode);
+        using var created = await client.PostAsync("/api/admin/reports/expenses", JsonBody("{\"amount\":0.1234567890123456789012345678}"));
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var item = await created.Content.ReadFromJsonAsync<JsonElement>(); var id = item.GetProperty("id").GetGuid(); var version = item.GetProperty("version").GetUInt32();
+        foreach (var amount in new[] { "0.12345678901234567890123456789", "7922816251426433759354395033.51" })
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PatchAsync($"/api/admin/reports/expenses/{id}", JsonBody($"{{\"version\":{version},\"amount\":{amount}}}"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsync("/api/admin/reports/expenses", JsonBody("{\"amount\":1e-28}"))).StatusCode);
+        var report = await Json(await client.GetAsync("/api/admin/reports/finance?year=2085&month=6"));
+        Assert.Equal("0.1234567890123456789012345679", report.GetProperty("expensesExact").GetString());
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var saved = await db.MonthlyExpenses.SingleAsync(e => e.Id == id);
+        Assert.Equal(0.1234567890123456789012345678m, saved.Amount);
+        Assert.Equal(1, await db.AdminAuditEvents.CountAsync(e => e.ObjectId == id.ToString()));
+    }
+
+    [PostgresFact]
+    public async Task ConcurrentMaximumExpensesReturnControlledErrorAndRemainCorrectableWithAudit()
+    {
+        clock.SetUtcNow(new DateTimeOffset(2080, 1, 15, 10, 0, 0, TimeSpan.Zero));
+        var firstAdmin = await CreateUser("SuperAdmin"); var secondAdmin = await CreateUser("SuperAdmin");
+        var owner = await CreateUser("User"); var completed = await Seed(owner.Id, clock.GetUtcNow(), 10.25m);
+        using var first = await Login(firstAdmin); using var second = await Login(secondAdmin);
+        var created = await Task.WhenAll(first.PostAsJsonAsync("/api/admin/reports/expenses", new { amount = decimal.MaxValue }),
+            second.PostAsJsonAsync("/api/admin/reports/expenses", new { amount = decimal.MaxValue }));
+        Assert.All(created, response => Assert.Equal(HttpStatusCode.Created, response.StatusCode));
+        var items = await Task.WhenAll(created.Select(response => response.Content.ReadFromJsonAsync<JsonElement>()));
+        var reportUrl = "/api/admin/reports/finance?year=2080&month=1";
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await first.GetAsync(reportUrl)).StatusCode);
+        var list = await Json(await first.GetAsync("/api/admin/reports/expenses?year=2080&month=1&pageSize=100"));
+        Assert.Equal(2, list.GetProperty("total").GetInt32());
+        clock.Advance(TimeSpan.FromDays(40)); using var later = await Login(firstAdmin);
+        var firstId = items[0].GetProperty("id").GetGuid(); var version = items[0].GetProperty("version").GetUInt32();
+        var competing = await Task.WhenAll(later.PatchAsJsonAsync($"/api/admin/reports/expenses/{firstId}", new { version, amount = 12.34m }),
+            later.PatchAsJsonAsync($"/api/admin/reports/expenses/{firstId}", new { version, amount = 12.34m }));
+        Assert.Single(competing, r => r.StatusCode == HttpStatusCode.OK);
+        Assert.Single(competing, r => r.StatusCode == HttpStatusCode.Conflict);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await later.GetAsync(reportUrl)).StatusCode);
+        var secondId = items[1].GetProperty("id").GetGuid();
+        var corrected = await Json(await later.PatchAsJsonAsync($"/api/admin/reports/expenses/{secondId}", new { version = items[1].GetProperty("version").GetUInt32(), amount = 23.45m }));
+        Assert.Equal(2080, corrected.GetProperty("recordedYear").GetInt32()); Assert.Equal(1, corrected.GetProperty("recordedMonth").GetInt32());
+        Assert.Equal(items[1].GetProperty("recordedAtUtc").GetDateTimeOffset(), corrected.GetProperty("recordedAtUtc").GetDateTimeOffset());
+        var report = await Json(await later.GetAsync(reportUrl));
+        Assert.Equal(35.79m, Number(report, "expenses")); Assert.Equal(10.25m, Number(report, "revenue")); Assert.Equal(-25.54m, Number(report, "result"));
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var order = await db.Appointments.AsNoTracking().Include(a => a.RepairPlan).SingleAsync(a => a.Id == completed);
+        Assert.Equal(AppointmentStatus.Completed, order.Status); Assert.Equal(10.25m, order.RepairPlan!.AgreedPrice);
+        var audits = await db.AdminAuditEvents.Where(e => e.ObjectType == "MonthlyExpense" && (e.ObjectId == firstId.ToString() || e.ObjectId == secondId.ToString())).ToListAsync();
+        Assert.Equal(4, audits.Count); Assert.Equal(2, audits.Count(e => e.Action == "ExpenseCorrected"));
+        Assert.All(audits.Where(e => e.Action == "ExpenseCorrected"), e => {
+            using var details = JsonDocument.Parse(e.Details);
+            Assert.Equal(decimal.MaxValue, details.RootElement.GetProperty("before").GetProperty("amount").GetDecimal());
+        });
+    }
+
+    [PostgresFact]
+    public async Task RevenueExpenseAndDifferenceNeverRoundOrOverflowSilently()
+    {
+        var super = await CreateUser("SuperAdmin"); var owner = await CreateUser("User"); using var client = await Login(super);
+        var maxAt = new DateTimeOffset(2082, 3, 10, 10, 0, 0, TimeSpan.Zero);
+        await Seed(owner.Id, maxAt, decimal.MaxValue);
+        var exact = await Json(await client.GetAsync("/api/admin/reports/finance?year=2082&month=3"));
+        Assert.Equal(decimal.MaxValue, Number(exact, "revenue"));
+        await Seed(owner.Id, maxAt.AddDays(1), 0.1m);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await client.GetAsync("/api/admin/reports/finance?year=2082&month=3")).StatusCode);
+        clock.SetUtcNow(new DateTimeOffset(2083, 4, 10, 10, 0, 0, TimeSpan.Zero));
+        await Seed(owner.Id, clock.GetUtcNow(), decimal.MaxValue);
+        using var later = await Login(super);
+        Assert.Equal(HttpStatusCode.Created, (await later.PostAsJsonAsync("/api/admin/reports/expenses", new { amount = 0.1m })).StatusCode);
+        // MaxValue - 0.1 would round silently under ordinary decimal subtraction.
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await later.GetAsync("/api/admin/reports/finance?year=2083&month=4")).StatusCode);
+        clock.SetUtcNow(new DateTimeOffset(2084, 5, 10, 10, 0, 0, TimeSpan.Zero)); using var last = await Login(super);
+        Assert.Equal(HttpStatusCode.Created, (await last.PostAsJsonAsync("/api/admin/reports/expenses", new { amount = decimal.MaxValue })).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await last.PostAsJsonAsync("/api/admin/reports/expenses", new { amount = 0.1m })).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await last.GetAsync("/api/admin/reports/finance?year=2084&month=5")).StatusCode);
     }
 
     [PostgresFact]

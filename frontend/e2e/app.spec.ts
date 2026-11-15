@@ -5,7 +5,7 @@ test('loads the public shell and directs guests to sign in', async ({ page }) =>
   await page.goto('/');
   await expect(page).toHaveTitle('AutoBodyService');
   await expect(page.getByRole('heading', { name: /Турбота про авто/ })).toBeVisible();
-  await page.getByRole('link', { name: /Особистий кабінет/ }).click();
+  await page.locator('.site-header').getByRole('link', { name: 'Увійти', exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole('heading', { name: 'Вітаємо знову.' })).toBeVisible();
 });

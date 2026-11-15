@@ -46,7 +46,7 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   expect((await created).status()).toBe(201);
   await expect(page).toHaveURL(/\/account\/book\/success$/);
   await expect(page.getByRole('heading', { name: 'Запис підтверджено' })).toBeVisible();
-  await expect(page.getByText(/09:30/)).toBeVisible();
+  await expect(page.locator('main .profile-intro')).toContainText('09:30');
   await expect(page.getByRole('link', { name: process.env['E2E_TEST_CONTACT_PHONE']! })).toBeVisible();
   await page.getByRole('link', { name: 'Переглянути ціни' }).click();
   await expect(page).toHaveURL(/#prices$/); await expect(page.locator('#prices')).toBeVisible();
@@ -146,7 +146,7 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await page.getByRole('button', { name: 'Скасувати запис' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   const cancellation = page.waitForResponse(r => /\/api\/appointments\/[^/]+\/cancel$/.test(r.url()) && r.request().method() === 'POST');
-  const updated = page.waitForResponse(r => /\/api\/appointments\/[^/]+$/.test(r.url()) && r.request().method() === 'GET');
+  const updated = page.waitForResponse(r => /\/api\/appointments\/my\/[^/]+$/.test(r.url()) && r.request().method() === 'GET');
   await page.getByRole('button', { name: 'Підтвердити', exact: true }).click();
   expect((await cancellation).status()).toBe(204); expect((await updated).status()).toBe(200);
   await expect(page.getByText('Запис скасовано.')).toBeVisible();
@@ -165,6 +165,6 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await page.getByRole('button', { name: 'Підтвердити запис' }).click();
   expect((await rebooked).status()).toBe(201);
   await expect(page).toHaveURL(/\/account\/book\/success$/);
-  await expect(page.getByText(/09:00/)).toBeVisible();
+  await expect(page.locator('main .profile-intro')).toContainText('09:00');
 
 });
