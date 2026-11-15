@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { UiState } from '../../shared/ui-state/ui-state';
 import { ApiStatus } from '../../core/api-status/api-status';
@@ -11,10 +11,11 @@ import { PricesEditor } from '../../features/admin/prices/prices-editor';
 import { NotificationBell } from '../../shared/notification-bell/notification-bell';
 import { NotificationInbox } from '../../features/notifications/notification-inbox/notification-inbox';
 import { Users } from '../../features/admin/users/users';
+import { Reports } from '../../features/admin/reports/reports';
 
 @Component({
   selector: 'app-workspace-shell',
-  imports: [RouterLink, UiState, ApiStatus, Dashboard, Employees, AssignmentBoard, PricesEditor, NotificationBell, NotificationInbox, Users],
+  imports: [RouterLink, UiState, ApiStatus, Dashboard, Employees, AssignmentBoard, PricesEditor, NotificationBell, NotificationInbox, Users, Reports],
   template: `
     <a class="skip-link" [attr.href]="isAdmin ? '/' + routePath + '#workspace-main' : '/account/appointments#workspace-main'">Перейти до вмісту</a>
     <div class="workspace">
@@ -37,7 +38,7 @@ import { Users } from '../../features/admin/users/users';
               @for (item of primaryItems; track item) { <li>@if (isAdmin && item === 'Огляд') { <a class="sidebar__item" [class.sidebar__item--active]="!section" [attr.aria-current]="!section ? 'page' : null" routerLink="/admin">{{ item }}</a> } @else if (isAdmin && item === 'Календар оглядів') { <a class="sidebar__item" routerLink="/admin/inspection-calendar">{{ item }}</a> } @else if (isAdmin && item === 'Замовлення') { <a class="sidebar__item" routerLink="/admin/appointments">{{ item }}</a> } @else if (isAdmin && item === 'Розподіл робіт') { <a class="sidebar__item" routerLink="/admin/assignments">{{ item }}</a> } @else if (!isAdmin && item === 'Запис на огляд') { <a class="sidebar__item" routerLink="/account/book">{{ item }}</a> } @else { <span class="sidebar__item" [class.sidebar__item--active]="$first" [attr.aria-current]="$first ? 'page' : null">{{ item }}</span> }</li> }
             </ul>
             <p class="sidebar__label">{{ isAdmin ? 'КЕРУВАННЯ' : 'ОСОБИСТЕ' }}</p>
-            <ul>@for (item of secondaryItems; track item) { <li>@if (isAdmin && item === 'Працівники') { <a class="sidebar__item" routerLink="/admin/employees">{{ item }}</a> } @else if (isAdmin && item === 'Послуги та ціни') { <a class="sidebar__item" routerLink="/admin/prices">{{ item }}</a> } @else if (isAdmin && item === 'Користувачі') { <a class="sidebar__item" [class.sidebar__item--active]="section === 'Користувачі'" [attr.aria-current]="section === 'Користувачі' ? 'page' : null" routerLink="/admin/users">{{ item }}</a> } @else if (item === 'Сповіщення') { <a class="sidebar__item" [class.sidebar__item--active]="section === 'Сповіщення'" [attr.aria-current]="section === 'Сповіщення' ? 'page' : null" [routerLink]="isAdmin ? '/admin/notifications' : '/account/notifications'">{{ item }}</a> } @else if (item === 'Мій профіль') { <a class="sidebar__item" [routerLink]="isAdmin ? '/admin/profile' : '/account/profile'">{{ item }}</a> } @else { <span class="sidebar__item">{{ item }}</span> }</li> }</ul>
+            <ul>@for (item of secondaryItems(); track item) { <li>@if (isAdmin && item === 'Працівники') { <a class="sidebar__item" routerLink="/admin/employees">{{ item }}</a> } @else if (isAdmin && item === 'Послуги та ціни') { <a class="sidebar__item" routerLink="/admin/prices">{{ item }}</a> } @else if (isAdmin && item === 'Користувачі') { <a class="sidebar__item" [class.sidebar__item--active]="section === 'Користувачі'" [attr.aria-current]="section === 'Користувачі' ? 'page' : null" routerLink="/admin/users">{{ item }}</a> } @else if (isAdmin && item === 'Звіти') { <a class="sidebar__item" [class.sidebar__item--active]="section === 'Звіти'" [attr.aria-current]="section === 'Звіти' ? 'page' : null" routerLink="/admin/reports">Контроль та звітність</a> } @else if (item === 'Сповіщення') { <a class="sidebar__item" [class.sidebar__item--active]="section === 'Сповіщення'" [attr.aria-current]="section === 'Сповіщення' ? 'page' : null" [routerLink]="isAdmin ? '/admin/notifications' : '/account/notifications'">{{ item }}</a> } @else if (item === 'Мій профіль') { <a class="sidebar__item" [routerLink]="isAdmin ? '/admin/profile' : '/account/profile'">{{ item }}</a> } @else { <span class="sidebar__item">{{ item }}</span> }</li> }</ul>
           </nav>
           <div class="sidebar__note"><span>УВАГА ДО ДЕТАЛЕЙ</span><p>Усе важливе про автомобіль — в одному місці.</p></div>
         </aside>
@@ -57,6 +58,8 @@ import { Users } from '../../features/admin/users/users';
               <app-employees />
             } @else if (isAdmin && section === 'Користувачі') {
               <app-users />
+            } @else if (isAdmin && section === 'Звіти' && isSuperAdmin()) {
+              @defer (on immediate) { <app-reports /> } @placeholder { <p role="status">Завантажуємо звіти…</p> }
             } @else {
               <div class="workspace-heading"><div><p class="eyebrow"><span class="eyebrow__line"></span> {{ isAdmin ? 'ПАНЕЛЬ КЕРУВАННЯ' : 'ОСОБИСТИЙ КАБІНЕТ' }}</p><h1>{{ isAdmin ? section : 'Мої записи' }}</h1><p>{{ isAdmin ? 'Цей розділ з’явиться на одному з наступних етапів.' : 'Тут ви зможете переглядати свої записи та перебіг ремонту.' }}</p></div><span class="status-pill">У ПІДГОТОВЦІ</span></div>
               <section class="workspace-panel" aria-labelledby="workspace-panel-title"><div class="panel-heading"><div><p class="panel-eyebrow">AUTO / BODY</p><h2 id="workspace-panel-title">{{ isAdmin ? section : 'Записи на огляд' }}</h2></div></div>
@@ -84,11 +87,12 @@ export class WorkspaceShell {
     });
   }
   readonly isStaff = () => this.auth.session()?.roles.some(role => role === 'Admin' || role === 'SuperAdmin') ?? false;
+  readonly isSuperAdmin = () => this.auth.session()?.roles.includes('SuperAdmin') ?? false;
   private readonly route = inject(ActivatedRoute);
   readonly isAdmin = this.route.snapshot.data['area'] === 'admin';
   readonly routePath = this.route.snapshot.routeConfig?.path ?? 'admin';
   readonly section = this.route.snapshot.data['section'] as string | undefined;
   readonly menuOpen = signal(false);
   readonly primaryItems = this.isAdmin ? ['Огляд', 'Замовлення', 'Розподіл робіт', 'Календар оглядів'] : ['Мої записи', 'Запис на огляд'];
-  readonly secondaryItems = this.isAdmin ? ['Працівники', 'Послуги та ціни', 'Користувачі', 'Сповіщення', 'Мій профіль'] : ['Сповіщення', 'Мій профіль'];
+  readonly secondaryItems = computed(() => this.isAdmin ? ['Працівники', 'Послуги та ціни', 'Користувачі', ...(this.isSuperAdmin() ? ['Звіти'] : []), 'Сповіщення', 'Мій профіль'] : ['Сповіщення', 'Мій профіль']);
 }

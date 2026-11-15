@@ -1,0 +1,76 @@
+<div class="workspace-heading"><div><p class="eyebrow"><span class="eyebrow__line"></span> ПАНЕЛЬ КЕРУВАННЯ</p><h1>Контроль та звітність</h1><p>Оперативна статистика завершених ремонтів і загальних витрат.</p></div></div>
+<div class="report-tabs" role="tablist" aria-label="Розділи звітності">
+  <button class="report-tab report-tab--active" role="tab" type="button" aria-selected="true" aria-controls="finance-panel" id="finance-tab">Фінансова статистика</button>
+  <button class="report-tab" role="tab" type="button" aria-selected="false" disabled>Журнал адміністративних дій <span>незабаром</span></button>
+</div>
+<section id="finance-panel" role="tabpanel" aria-labelledby="finance-tab">
+  <section class="workspace-panel period-panel" aria-labelledby="period-title">
+    <div class="panel-heading"><div><p class="panel-eyebrow">ПЕРІОД ЗВІТУ</p><h2 id="period-title">Оберіть місяць</h2></div></div>
+    <form class="period-form" [formGroup]="periodForm" (ngSubmit)="applyPeriod()">
+      <div class="field"><label class="field__label" for="report-month">Місяць</label><select id="report-month" class="field__input" formControlName="month">@for (month of months; track month; let i = $index) { <option [ngValue]="i + 1">{{ month }}</option> }</select></div>
+      <div class="field"><label class="field__label" for="report-year">Рік</label><input id="report-year" class="field__input" type="number" min="2" max="9998" step="1" formControlName="year" [attr.aria-invalid]="periodForm.controls.year.touched && periodForm.controls.year.invalid" /></div>
+      <button class="button button--primary" type="submit" [disabled]="saving()">Показати</button>
+    </form>
+    @if (periodForm.touched && periodForm.invalid) { <p class="field__error" role="alert">Вкажіть коректний місяць та рік.</p> }
+  </section>
+  @if (loading()) { <p class="report-state" role="status">Завантажуємо фінансові дані…</p> }
+  @if (loadError()) { <div class="auth-alert report-state" role="alert">{{ loadError() }} <button class="text-button" type="button" (click)="load()">Спробувати ще раз</button></div> }
+  @if (report(); as data) {
+    <section aria-label="Показники місяця" class="summary-grid">
+      <article class="summary-card"><p>Завершено замовлень</p><strong>{{ data.completedCount }}</strong><span>за фактом видачі</span></article>
+      <article class="summary-card"><p>Виручка</p><strong>{{ money(data.revenueExact) }}</strong><span>оплата і видача підтверджені</span></article>
+      <article class="summary-card"><p>Загальні витрати</p><strong>{{ money(data.expensesExact) }}</strong><span>за обраний місяць</span></article>
+      <article class="summary-card summary-card--result"><p>Фінансовий результат</p><strong>{{ money(data.resultExact) }}</strong><span>виручка мінус витрати</span></article>
+    </section>
+    <p class="report-note">Це оперативна статистика, а не офіційний розрахунок чистого прибутку.</p>
+  }
+    <section class="workspace-panel" aria-labelledby="completed-title">
+      <div class="panel-heading"><div><p class="panel-eyebrow">ОПЛАЧЕНО ТА ВИДАНО</p><h2 id="completed-title">Завершені замовлення</h2></div></div>
+      <form class="filters" [formGroup]="filterForm" (ngSubmit)="applyFilters()">
+        <div class="field"><label class="field__label" for="order-from">З дати</label><input id="order-from" class="field__input" type="date" formControlName="fromDate" /></div>
+        <div class="field"><label class="field__label" for="order-to">До дати</label><input id="order-to" class="field__input" type="date" formControlName="toDate" /></div>
+        <div class="field"><label class="field__label" for="order-min">Сума від, ₴</label><input id="order-min" class="field__input" inputmode="decimal" formControlName="minAmount" /></div>
+        <div class="field"><label class="field__label" for="order-max">Сума до, ₴</label><input id="order-max" class="field__input" inputmode="decimal" formControlName="maxAmount" /></div>
+        <div class="field"><label class="field__label" for="order-sort">Сортувати за</label><select id="order-sort" class="field__input" formControlName="sort"><option value="date">Датою завершення</option><option value="amount">Сумою</option></select></div>
+        <div class="field"><label class="field__label" for="order-direction">Порядок</label><select id="order-direction" class="field__input" formControlName="direction"><option value="desc">За спаданням</option><option value="asc">За зростанням</option></select></div>
+        <button class="button button--secondary" type="submit" [disabled]="saving()">Застосувати фільтри</button>
+      </form>
+      @if (filterForm.touched && filterForm.invalid) { <p class="field__error" role="alert">Вкажіть коректні невід’ємні суми.</p> }
+      <p class="report-note">Дати вказуються в межах вибраного місяця за київським часом. Показники вище охоплюють увесь місяць.</p>
+      @if (report(); as data) {
+      @if (!data.orders.length) { <p class="empty">Завершених замовлень за цими умовами немає.</p> }
+      @else { <div class="table-wrap" tabindex="0" role="region" aria-label="Таблиця завершених замовлень"><table><thead><tr><th scope="col">Замовлення</th><th scope="col">Завершено</th><th scope="col">Сума</th></tr></thead><tbody>
+        @for (order of data.orders; track order.id) { <tr><td data-label="Замовлення"><a [routerLink]="['/admin/appointments', order.id]">{{ order.make }} {{ order.model }}</a></td><td data-label="Завершено">{{ date(order.completedAtUtc) }}</td><td data-label="Сума">{{ money(order.amountExact) }}</td></tr> }
+      </tbody></table></div> }
+      <div class="pagination" aria-label="Сторінки замовлень"><span>Знайдено: {{ data.filteredCount }}</span><button class="button button--secondary" type="button" (click)="changeOrderPage(-1)" [disabled]="data.page <= 1 || saving()">Попередня</button><span>Сторінка {{ data.page }}</span><button class="button button--secondary" type="button" (click)="changeOrderPage(1)" [disabled]="data.page * data.pageSize >= data.filteredCount || saving()">Наступна</button></div>
+      }
+    </section>
+  <section class="workspace-panel" aria-labelledby="expense-form-title">
+    <div class="panel-heading"><div><p class="panel-eyebrow">ЗАГАЛЬНІ ВИТРАТИ</p><h2 id="expense-form-title">{{ editing() ? 'Виправити витрату' : 'Додати витрату' }}</h2></div></div>
+    @if (editing(); as expense) { <p class="report-note">Ця витрата залишиться за {{ months[expense.recordedMonth - 1].toLowerCase() }} {{ expense.recordedYear }} року.</p> }
+    @else { <p class="report-note">Нову витрату сервер запише в поточний місяць за київським часом, незалежно від місяця перегляду.</p> }
+    @if (actionError()) { <div class="auth-alert" role="alert">{{ actionError() }}</div> }
+    @if (notice()) { <p class="success" role="status">{{ notice() }}</p> }
+    <form class="expense-form" [formGroup]="expenseForm" (ngSubmit)="save()" novalidate>
+      <div class="field"><label class="field__label" for="expense-amount">Сума, ₴</label><input id="expense-amount" class="field__input" type="text" inputmode="decimal" formControlName="amount" [attr.aria-invalid]="expenseForm.controls.amount.touched && expenseForm.controls.amount.invalid" aria-describedby="expense-amount-help" /><p id="expense-amount-help" class="field__hint">Введіть додатну суму, наприклад 125,50.</p></div>
+      <div class="field"><label class="field__label" for="expense-description">Опис (необов’язково)</label><input id="expense-description" class="field__input" maxlength="500" formControlName="description" [attr.aria-invalid]="expenseForm.controls.description.touched && expenseForm.controls.description.invalid" /></div>
+      @if (expenseForm.touched && expenseForm.invalid) { <p class="field__error" role="alert">Перевірте додатну суму та опис до 500 символів.</p> }
+      <div class="form-actions"><button class="button button--primary" type="submit" [disabled]="saving() || loading() || !!loadError() || conflict()">{{ saving() ? 'Зберігаємо…' : editing() ? 'Зберегти виправлення' : 'Додати витрату' }}</button>@if (editing()) { <button class="button button--secondary" type="button" [disabled]="saving()" (click)="cancelEdit()">Скасувати</button> }</div>
+    </form>
+  </section>
+  @if (expenses(); as expenseData) {
+    <section class="workspace-panel" aria-labelledby="expenses-title">
+      <div class="panel-heading"><div><p class="panel-eyebrow">ОБРАНИЙ МІСЯЦЬ</p><h2 id="expenses-title">Список витрат</h2></div></div>
+      <form class="sort-form" [formGroup]="expenseSortForm" (ngSubmit)="applyExpenseSort()">
+        <div class="field"><label class="field__label" for="expense-sort">Сортувати витрати за</label><select id="expense-sort" class="field__input" formControlName="sort"><option value="date">Датою</option><option value="amount">Сумою</option></select></div>
+        <div class="field"><label class="field__label" for="expense-direction">Порядок витрат</label><select id="expense-direction" class="field__input" formControlName="direction"><option value="desc">За спаданням</option><option value="asc">За зростанням</option></select></div>
+        <button class="button button--secondary" type="submit" [disabled]="saving()">Сортувати</button>
+      </form>
+      @if (!expenseData.items.length) { <p class="empty">За цей місяць витрат немає.</p> }
+      @else { <div class="table-wrap" tabindex="0" role="region" aria-label="Таблиця витрат"><table><thead><tr><th scope="col">Дата запису</th><th scope="col">Опис</th><th scope="col">Сума</th><th scope="col">Дія</th></tr></thead><tbody>
+        @for (expense of expenseData.items; track expense.id) { <tr><td data-label="Дата запису">{{ date(expense.recordedAtUtc) }}</td><td data-label="Опис">{{ expense.description || '—' }}</td><td data-label="Сума">{{ money(expense.amountExact) }}</td><td data-label="Дія"><button class="text-button" type="button" [disabled]="saving()" [attr.aria-label]="'Виправити витрату від ' + date(expense.recordedAtUtc) + ', ' + money(expense.amountExact)" (click)="edit(expense)">Виправити</button></td></tr> }
+      </tbody></table></div> }
+      <div class="pagination" aria-label="Сторінки витрат"><span>Записів: {{ expenseData.total }}</span><button class="button button--secondary" type="button" (click)="changeExpensePage(-1)" [disabled]="expenseData.page <= 1 || saving()">Попередня</button><span>Сторінка {{ expenseData.page }}</span><button class="button button--secondary" type="button" (click)="changeExpensePage(1)" [disabled]="expenseData.page * expenseData.pageSize >= expenseData.total || saving()">Наступна</button></div>
+    </section>
+  }
+</section>

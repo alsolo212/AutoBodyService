@@ -12,6 +12,8 @@ export const authGuard: CanActivateFn = route => {
       if (session.mustChangePassword) return router.parseUrl('/account/change-temporary-password');
       if (route.data['area'] === 'admin' && !session.roles.some(role => role === 'Admin' || role === 'SuperAdmin'))
         return router.parseUrl('/account/appointments');
+      if (route.data['role'] === 'SuperAdmin' && !session.roles.includes('SuperAdmin'))
+        return router.parseUrl('/admin');
       return true;
     }),
     catchError(() => of(router.createUrlTree(['/login'], { queryParams: { session: 'unavailable' } }))),

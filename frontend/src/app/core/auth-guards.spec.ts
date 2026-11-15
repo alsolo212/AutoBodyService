@@ -58,4 +58,15 @@ describe('admin authGuard', () => {
     session.next(account('User'));
     expect(TestBed.inject(Router).serializeUrl(await result as UrlTree)).toBe('/account/appointments');
   });
+  for (const [role, expected] of [['Admin', '/admin'], ['User', '/account/appointments']] as const) {
+    it(`denies ${role} the SuperAdmin reports route`, async () => {
+      const result = firstValueFrom(TestBed.runInInjectionContext(() => authGuard({ data: { area: 'admin', role: 'SuperAdmin' } } as never, {} as never)) as Observable<GuardResult>);
+      session.next(account(role));
+      expect(TestBed.inject(Router).serializeUrl(await result as UrlTree)).toBe(expected);
+    });
+  }
+  it('allows SuperAdmin to the reports route', async () => {
+    const result = firstValueFrom(TestBed.runInInjectionContext(() => authGuard({ data: { area: 'admin', role: 'SuperAdmin' } } as never, {} as never)) as Observable<GuardResult>);
+    session.next(account('SuperAdmin')); expect(await result).toBe(true);
+  });
 });

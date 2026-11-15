@@ -101,6 +101,8 @@ The SuperAdmin-only finance API exposes `GET /api/admin/reports/finance?year=YYY
 
 `POST /api/admin/reports/expenses` accepts a positive `amount` and optional `description`; the server determines the UTC recording instant and Kyiv month. `PATCH /api/admin/reports/expenses/{id}` requires the current `version` and accepts only `amount` and/or `description` (including null to clear it); a stale version returns `409`. Both mutations require antiforgery. Expense and audit changes share a transaction. Audit stores old/new amounts and description-presence/change flags, not the free-text description, which could contain private information.
 
+SuperAdmin can use the financial-statistics tab at `/admin/reports` to select a month, filter and sort completed orders, and add or correct general expenses. New expenses always use the server's current Kyiv month even when a historical month is displayed; corrections retain their original month. The administrative audit tab is reserved for a later stage.
+
 Logout stores a hash of the session identifier until the cookie's expiry plus a sliding window; expired revocations are cleaned up on a later logout. A database migration is required before starting this version. Cookies issued before session identifiers were introduced will require users to sign in again after deployment. Protect and persist Data Protection keys as described above.
 
 ## Public service contacts
