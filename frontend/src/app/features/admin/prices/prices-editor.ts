@@ -6,18 +6,9 @@ import { finalize, switchMap } from 'rxjs';
 
 interface PriceItem { id: string; name: string; description: string; priceExact: string; isFrom: boolean; sortOrder: number; isPublished: boolean; isArchived: boolean; version: number; }
 
-// Decimal is kept as text until it is inserted as a validated JSON number.
-export function decimalLiteral(value: string): string | null {
-  const input = value.trim().replace(',', '.');
-  if (!/^\d+(?:\.\d+)?$/.test(input) || input.length > 100) return null;
-  let [whole, fraction = ''] = input.split('.');
-  whole = whole.replace(/^0+(?=\d)/, '');
-  fraction = fraction.replace(/0+$/, '');
-  if (fraction.length > 28) return null;
-  const digits = (whole + fraction).replace(/^0+/, '') || '0';
-  if (BigInt(digits) > 79228162514264337593543950335n) return null;
-  return whole + (fraction ? '.' + fraction : '');
-}
+import { decimalLiteral } from '../../../shared/money/money';
+export { decimalLiteral } from '../../../shared/money/money';
+
 const textValidator: ValidatorFn = control => {
   const value = String(control.value ?? '');
   return value.trim() && !/\p{Cc}/u.test(value) ? null : { invalidText: true };

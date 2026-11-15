@@ -3,12 +3,15 @@ import { DOCUMENT } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, ElementRef, Injector, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { NonNullableFormBuilder, ReactiveFormsModule, ValidatorFn, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Observable, Subject, catchError, finalize, of, switchMap, tap } from 'rxjs';
 import { AppointmentStatus, price, statusLabel } from '../../appointments/appointments-api';
 import { AdminAppointment, AdminAppointmentApi, ContactReason, TransitionChange } from './admin-appointment-api';
+import { decimalLiteral } from '../../../shared/money/money';
 import { kyivInput, kyivLocalToUtc, kyivWithOffset } from './kyiv-date';
+
+const exactPrice: ValidatorFn = control => decimalLiteral(String(control.value ?? '')) === null ? { invalidAmount: true } : null;
 
 const contactLabels: Record<ContactReason, string> = {
   NewAppointment: 'Новий запис', ScheduleConflictOrReschedule: 'Конфлікт або перенесення огляду',
@@ -38,7 +41,7 @@ export class AppointmentDetailsAdmin {
   readonly copyMessage = signal('');
   readonly copyLocation = signal<'phone' | 'text'>('phone');
   readonly planForm = this.fb.group({
-    price: this.fb.control<number | null>(null, [Validators.required, Validators.min(0)]),
+    price: ['', exactPrice],
     start: ['', Validators.required], startOffset: ['', Validators.required],
     finish: ['', Validators.required], finishOffset: ['', Validators.required], inspectionPerformed: [false],
   });
@@ -103,7 +106,9 @@ export class AppointmentDetailsAdmin {
     this.planForm.markAllAsTouched(); this.planError.set('');
     const data = this.planForm.getRawValue();
     const start = kyivLocalToUtc(data.start, data.startOffset), finish = kyivLocalToUtc(data.finish, data.finishOffset);
-    if (this.planForm.invalid || data.price === null || !Number.isFinite(data.price) || !start || !finish || Date.parse(finish) < Date.parse(start)) {
+    const amount = decimalLiteral(data.price);
+    if (amount === null) { this.planError.set('Вкажіть невід’ємну вартість, яку можна точно зберегти. Перевірте кількість цифр.'); return; }
+    if (this.planForm.invalid || !start || !finish || Date.parse(finish) < Date.parse(start)) {
       this.planError.set('Перевірте вартість, дати та зміщення UTC. Завершення не може бути раніше початку.'); return;
     }
     if (item.status === 'AwaitingInspection' && !data.inspectionPerformed) { this.planError.set('Підтвердіть, що огляд проведено.'); return; }
@@ -114,7 +119,7 @@ export class AppointmentDetailsAdmin {
       const normalized = value.length === 16 ? `${value}:00` : value;
       return existing.local === normalized && existing.offset === offset ? original : converted;
     };
-    this.run(this.api.plan(this.id, { version: item.version, price: data.price,
+    this.run(this.api.plan(this.id, { version: item.version, price: amount,
       plannedStartUtc: unchanged(data.start, data.startOffset, old?.plannedStartUtc, start),
       estimatedFinishUtc: unchanged(data.finish, data.finishOffset, old?.estimatedFinishUtc, finish),
       inspectionPerformed: data.inspectionPerformed }), 'Узгоджені дані збережено.');
@@ -194,6 +199,6 @@ export class AppointmentDetailsAdmin {
   private fillPlan(item: AdminAppointment) {
     const start = item.repairPlan ? kyivInput(item.repairPlan.plannedStartUtc) : { local: '', offset: '' };
     const finish = item.repairPlan ? kyivInput(item.repairPlan.estimatedFinishUtc) : { local: '', offset: '' };
-    this.planForm.reset({ price: item.repairPlan?.agreedPrice ?? null, start: start.local, startOffset: start.offset, finish: finish.local, finishOffset: finish.offset, inspectionPerformed: false });
+    this.planForm.reset({ price: item.repairPlan?.agreedPriceExact ?? '', start: start.local, startOffset: start.offset, finish: finish.local, finishOffset: finish.offset, inspectionPerformed: false });
   }
 }

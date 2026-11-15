@@ -1,3 +1,5 @@
+using AutoBodyService.Api.Validation;
+using System.Text.Json;
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using System.Text.Json.Serialization;
@@ -50,7 +52,9 @@ public sealed class AdminAppointmentsController(IAdminAppointmentCommands comman
     {
         var actor = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (actor is null) return Unauthorized();
-        var command = new RepairPlanCommand(request.Price!.Value, request.PlannedStartUtc!.Value, request.EstimatedFinishUtc!.Value, request.InspectionPerformed == true);
+        if (!ExactDecimal.TryNonnegative(request.Price, out var price))
+            return BadRequest(new ProblemDetails { Status = 400, Title = "Вкажіть точну невід’ємну вартість ремонту." });
+        var command = new RepairPlanCommand(price, request.PlannedStartUtc!.Value, request.EstimatedFinishUtc!.Value, request.InspectionPerformed == true);
         return Result(await commands.PutPlanAsync(id, request.Version!.Value, actor, command, cancellationToken));
     }
 
@@ -92,7 +96,7 @@ public sealed record ManualContactRequest
 public sealed record RepairPlanRequest
 {
     [Required] public required uint? Version { get; init; }
-    [Required] public required decimal? Price { get; init; }
+    public JsonElement Price { get; init; }
     [Required] public required DateTimeOffset? PlannedStartUtc { get; init; }
     [Required] public required DateTimeOffset? EstimatedFinishUtc { get; init; }
     public bool? InspectionPerformed { get; init; }

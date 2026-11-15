@@ -9,7 +9,10 @@ public enum AppointmentCategory { Active, Completed, Cancelled }
 public sealed record AppointmentSummary(Guid Id, string Make, string Model, string MaskedVin,
     DateTimeOffset InspectionStartUtc, AppointmentStatus Status, AgreedRepairDetails? RepairPlan);
 /// <summary>Price and dates agreed after inspection.</summary>
-public sealed record AgreedRepairDetails(decimal AgreedPrice, string Currency, DateTimeOffset PlannedStartUtc, DateTimeOffset EstimatedFinishUtc);
+public sealed record AgreedRepairDetails(decimal AgreedPrice, string Currency, DateTimeOffset PlannedStartUtc, DateTimeOffset EstimatedFinishUtc)
+{
+    public string AgreedPriceExact => AgreedPrice.ToString(System.Globalization.CultureInfo.InvariantCulture);
+}
 /// <summary>Participant identity intended for the customer, without assignment internals.</summary>
 public sealed record AppointmentParticipant(string Name, string Specialization);
 /// <summary>Customer-visible status transition.</summary>

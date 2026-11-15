@@ -76,6 +76,69 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
         client.PostAsJsonAsync(Url(id) + "/cancel", new { version, confirmed, reason });
 
     [PostgresFact]
+    public async Task ExactRepairPriceRoundTripsAndUnrepresentableInputIsAtomic()
+    {
+        var owner = await User("User"); var admin = await User("Admin"); var id = await Add(owner.Id);
+        using var actor = await Login(admin.Phone); using var customer = await Login(owner.Phone);
+        async Task<HttpResponseMessage> Save(uint version, string literal)
+        {
+            var body = $"{{\"version\":{version},\"price\":{literal},\"plannedStartUtc\":\"2050-02-01T10:00:00Z\",\"estimatedFinishUtc\":\"2050-02-02T10:00:00Z\",\"inspectionPerformed\":true}}";
+            return await actor.PutAsync(Url(id) + "/repair-plan", new StringContent(body, System.Text.Encoding.UTF8, "application/json"));
+        }
+        foreach (var literal in new[] { "0", "0.01", "1", "123.45", "999999.99", "9007199254740993.01", "79228162514264337593543950335", "0.0000000000000000000000000001", "1e-28", "1e2", "1.00000000000000000000000000000", "7922816251426433759354395033.5" })
+        {
+            var version = await Version(actor, id);
+            Assert.Equal(HttpStatusCode.NoContent, (await Save(version, literal)).StatusCode);
+            var expected = decimal.Parse(literal, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture);
+            var detail = await Details(actor, id);
+            Assert.Equal(expected, detail.GetProperty("repairPlan").GetProperty("agreedPrice").GetDecimal());
+            Assert.Equal(expected, decimal.Parse(detail.GetProperty("repairPlan").GetProperty("agreedPriceExact").GetString()!, System.Globalization.CultureInfo.InvariantCulture));
+            await using var scope = factory.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Assert.Equal(expected, (await db.Set<RepairPlan>().AsNoTracking().SingleAsync(x => x.AppointmentId == id)).AgreedPrice);
+        }
+        var before = await Details(actor, id); var beforeVersion = before.GetProperty("version").GetUInt32();
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var auditCount = await db.AdminAuditEvents.CountAsync(x => x.ObjectId == id.ToString());
+            var historyCount = await db.AppointmentStatusEvents.CountAsync(x => x.AppointmentId == id);
+            foreach (var invalid in new[] { "0.12345678901234567890123456789", "79228162514264337593543950336", "0.00000000000000000000000000001", "1e-29", "1e29", "-1", "null", "\"1.2\"" })
+                Assert.Equal(HttpStatusCode.BadRequest, (await Save(beforeVersion, invalid)).StatusCode);
+            Assert.Equal(auditCount, await db.AdminAuditEvents.CountAsync(x => x.ObjectId == id.ToString()));
+            Assert.Equal(historyCount, await db.AppointmentStatusEvents.CountAsync(x => x.AppointmentId == id));
+            Assert.Equal(7922816251426433759354395033.5m, (await db.Set<RepairPlan>().AsNoTracking().SingleAsync(x => x.AppointmentId == id)).AgreedPrice);
+        }
+        Assert.Equal(beforeVersion, await Version(actor, id));
+        var own = await (await customer.GetAsync($"/api/appointments/my/{id}")).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("7922816251426433759354395033.5", own.GetProperty("repairPlan").GetProperty("agreedPriceExact").GetString());
+        var list = await (await customer.GetAsync("/api/appointments/my")).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Contains(list.EnumerateArray(), x => x.GetProperty("id").GetGuid() == id && x.GetProperty("repairPlan").GetProperty("agreedPriceExact").GetString() == "7922816251426433759354395033.5");
+        var board = await (await actor.GetAsync("/api/admin/appointments?status=AwaitingInspection&search=" + Uri.EscapeDataString(owner.Phone))).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Contains(board.GetProperty("items").EnumerateArray(), x => x.GetProperty("id").GetGuid() == id && x.GetProperty("repairPlan").GetProperty("agreedPriceExact").GetString() == "7922816251426433759354395033.5");
+    }
+
+    [PostgresFact]
+    public async Task ExactPriceConcurrentCorrectionsHaveOneWinnerAndOneConflict()
+    {
+        var owner = await User("User"); var admin = await User("Admin"); var otherAdmin = await User("Admin"); var id = await Add(owner.Id);
+        using var first = await Login(admin.Phone); using var second = await Login(otherAdmin.Phone);
+        Assert.Equal(HttpStatusCode.NoContent, (await first.PutAsJsonAsync(Url(id) + "/repair-plan", Plan(await Version(first, id), price: 123.45m))).StatusCode);
+        var version = await Version(first, id);
+        var results = await Task.WhenAll(first.PutAsJsonAsync(Url(id) + "/repair-plan", Plan(version, price: 9007199254740993.01m)),
+            second.PutAsJsonAsync(Url(id) + "/repair-plan", Plan(version, price: 9007199254740993.02m)));
+        Assert.Equal(1, results.Count(x => x.StatusCode == HttpStatusCode.NoContent));
+        Assert.Equal(1, results.Count(x => x.StatusCode == HttpStatusCode.Conflict));
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var price = (await db.Set<RepairPlan>().SingleAsync(x => x.AppointmentId == id)).AgreedPrice;
+        Assert.Equal(results[0].StatusCode == HttpStatusCode.NoContent ? 9007199254740993.01m : 9007199254740993.02m, price);
+        var audits = await db.AdminAuditEvents.Where(x => x.ObjectId == id.ToString() && x.Action == "RepairPlanChanged").OrderBy(x => x.OccurredAtUtc).ToListAsync();
+        Assert.Equal(2, audits.Count);
+        Assert.Equal(admin.Id, audits[0].ActorId);
+        Assert.Equal(results[0].StatusCode == HttpStatusCode.NoContent ? admin.Id : otherAdmin.Id, audits[1].ActorId);
+    }
+
+    [PostgresFact]
     public async Task RealApiPersistsGuardedLifecycleAuditAndPaymentHandover()
     {
         var owner = await User("User"); var admin = await User("Admin"); var id = await Add(owner.Id);

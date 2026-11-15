@@ -14,7 +14,7 @@ const base: AdminAppointment = {
   history: [{ fromStatus: null, toStatus: 'AwaitingInspection', changedAtUtc: '2026-01-01T10:00:00Z', actorName: 'Клієнт', reason: null }],
   repairPlan: null, participants: null, assignments: null, manualContacts: [], paymentConfirmation: null,
 };
-const plan = { agreedPrice: 1250.5, currency: 'UAH', plannedStartUtc: '2026-10-25T00:30:00Z', estimatedFinishUtc: '2026-10-25T01:30:00Z' };
+const plan = { agreedPriceExact: '1250.5', currency: 'UAH', plannedStartUtc: '2026-10-25T00:30:00Z', estimatedFinishUtc: '2026-10-25T01:30:00Z' };
 
 describe('Kyiv date conversion', () => {
   it('distinguishes both autumn instants and rejects spring gaps and wrong offsets', () => {
@@ -88,16 +88,31 @@ describe('administrative appointment details', () => {
 
   it('validates Kyiv times and inspection before saving a plan with the version', () => {
     const fixture = create(); const component = fixture.componentInstance; component.editPlan(); fixture.detectChanges();
-    component.planForm.setValue({ price: 0, start: '2026-03-29T03:30', startOffset: '+02:00', finish: '2026-03-29T05:00', finishOffset: '+03:00', inspectionPerformed: true });
+    component.planForm.setValue({ price: '0', start: '2026-03-29T03:30', startOffset: '+02:00', finish: '2026-03-29T05:00', finishOffset: '+03:00', inspectionPerformed: true });
     component.savePlan(); expect(component.planError()).toContain('зміщення UTC'); http.expectNone('/api/auth/antiforgery');
     component.planForm.patchValue({ start: '2026-10-25T03:30', startOffset: '+03:00', finish: '2026-10-25T03:30', finishOffset: '+02:00', inspectionPerformed: false });
     component.savePlan(); expect(component.planError()).toContain('огляд'); http.expectNone('/api/auth/antiforgery');
     component.planForm.controls.inspectionPerformed.setValue(true); component.savePlan(); token();
     const request = http.expectOne('/api/admin/appointments/order-1/repair-plan');
     expect(request.request.method).toBe('PUT');
-    expect(request.request.body).toEqual({ version: 41, price: 0, plannedStartUtc: '2026-10-25T00:30:00.000Z', estimatedFinishUtc: '2026-10-25T01:30:00.000Z', inspectionPerformed: true });
+    expect(JSON.parse(request.request.body)).toEqual({ version: 41, price: 0, plannedStartUtc: '2026-10-25T00:30:00.000Z', estimatedFinishUtc: '2026-10-25T01:30:00.000Z', inspectionPerformed: true });
     request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, repairPlan: plan, version: 42 }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Узгоджені дані збережено');
+  });
+
+  it('sends the exact decimal literal and rejects values outside decimal precision', () => {
+    const fixture = create(); const component = fixture.componentInstance;
+    component.editPlan();
+    component.planForm.setValue({ price: '9007199254740993,01', start: '2026-10-25T03:30', startOffset: '+03:00', finish: '2026-10-25T03:30', finishOffset: '+02:00', inspectionPerformed: true });
+    component.savePlan(); token();
+    const request = http.expectOne('/api/admin/appointments/order-1/repair-plan');
+    expect(request.request.body).toContain('"price":9007199254740993.01');
+    request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, repairPlan: { ...plan, agreedPriceExact: '9007199254740993.01' }, version: 42 }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('9 007 199 254 740 993,01 ₴');
+    component.editPlan();
+    expect(component.planForm.controls.price.value).toBe('9007199254740993.01');
+    component.planForm.controls.price.setValue('0.12345678901234567890123456789');
+    component.savePlan(); expect(component.planError()).toContain('точно зберегти'); http.expectNone('/api/auth/antiforgery');
   });
 
   it('uses only the next transition and requires both completion facts', () => {
@@ -113,14 +128,14 @@ describe('administrative appointment details', () => {
 
   it('reloads on conflict without replaying the action or overwriting the plan draft', () => {
     const fixture = create({ ...base, status: 'Scheduled', repairPlan: plan }); const component = fixture.componentInstance;
-    component.editPlan(); component.planForm.controls.price.setValue(4567); component.savePlan(); token();
+    component.editPlan(); component.planForm.controls.price.setValue('4567'); component.savePlan(); token();
     const pending = http.expectOne('/api/admin/appointments/order-1/repair-plan');
-    expect(pending.request.body.plannedStartUtc).toBe(plan.plannedStartUtc);
-    expect(pending.request.body.estimatedFinishUtc).toBe(plan.estimatedFinishUtc);
+    expect(JSON.parse(pending.request.body).plannedStartUtc).toBe(plan.plannedStartUtc);
+    expect(JSON.parse(pending.request.body).estimatedFinishUtc).toBe(plan.estimatedFinishUtc);
     pending.flush(null, { status: 409, statusText: 'Conflict' });
     expect(component.loading()).toBe(true);
     http.expectOne('/api/appointments/order-1').flush({ ...base, status: 'InProgress', repairPlan: plan, version: 42 }); fixture.detectChanges();
-    expect(component.planForm.controls.price.value).toBe(4567);
+    expect(component.planForm.controls.price.value).toBe('4567');
     expect(component.item()?.version).toBe(42);
     expect(fixture.nativeElement.textContent).toContain('Актуальні дані завантажено');
     http.expectNone('/api/admin/appointments/order-1/repair-plan');

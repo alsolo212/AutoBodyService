@@ -9,7 +9,7 @@ import { CancelAppointment } from './cancel-appointment/cancel-appointment';
 import { By } from '@angular/platform-browser';
 
 const summary = { id: 'one', make: 'Марка', model: 'Модель', maskedVin: '*************4352', inspectionStartUtc: '2026-07-01T08:00:00Z', status: 'AwaitingInspection', repairPlan: null };
-const plan = { agreedPrice: 1250.5, currency: 'UAH', plannedStartUtc: '2026-07-01T08:00:00Z', estimatedFinishUtc: '2026-12-01T08:00:00Z' };
+const plan = { agreedPriceExact: '1250.5', currency: 'UAH', plannedStartUtc: '2026-07-01T08:00:00Z', estimatedFinishUtc: '2026-12-01T08:00:00Z' };
 const detail = { ...summary, vin: '1HGCM82633A004352', problemDescription: 'Опис проблеми', history: [{ fromStatus: null, toStatus: 'AwaitingInspection', changedAtUtc: '2026-12-01T08:00:00Z', actorName: 'СЕКРЕТ', reason: 'ВНУТРІШНЄ' }], repairPlan: plan, participants: [{ name: 'Майстер', specialization: 'Маляр', assignedAtUtc: 'ВНУТРІШНЄ' }], customerPhone: 'СЕКРЕТ' };
 
 describe('personal appointments pages', () => {

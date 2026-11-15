@@ -39,7 +39,7 @@ describe('administrative board', () => {
   }
 
   it('loads six separate server pages and displays plan and terminal read-only cards', () => {
-    const ready = { ...card('Scheduled'), repairPlan: { agreedPrice: 200, currency: 'UAH', plannedStartUtc: '2026-01-01T10:00:00Z', estimatedFinishUtc: '2026-01-02T10:00:00Z' } };
+    const ready = { ...card('Scheduled'), repairPlan: { agreedPriceExact: '200', currency: 'UAH', plannedStartUtc: '2026-01-01T10:00:00Z', estimatedFinishUtc: '2026-01-02T10:00:00Z' } };
     const fixture = create([ready, card('Completed'), card('Cancelled')]);
     expect(fixture.componentInstance.columns().map(c => c.status)).toEqual(statuses);
     const text = fixture.nativeElement.textContent as string;

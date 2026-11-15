@@ -139,6 +139,8 @@ public sealed class FinanceReportsPostgresTests : IDisposable
         Assert.Equal(2, filtered.GetProperty("completedCount").GetInt32()); Assert.Equal(0.30m, Number(filtered, "revenue"));
         Assert.Equal(1, filtered.GetProperty("filteredCount").GetInt32());
         Assert.Equal(second, filtered.GetProperty("orders")[0].GetProperty("id").GetGuid());
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/admin/reports/finance?year=2044&month=3&minAmount=0.12345678901234567890123456789")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/admin/reports/finance?year=2044&month=3&maxAmount=79228162514264337593543950336")).StatusCode);
         var autumn = await Json(await client.GetAsync("/api/admin/reports/finance?year=2044&month=10"));
         Assert.Equal(2, autumn.GetProperty("completedCount").GetInt32()); Assert.Equal(17m, Number(autumn, "revenue"));
     }

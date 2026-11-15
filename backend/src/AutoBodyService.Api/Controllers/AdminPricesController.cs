@@ -1,3 +1,4 @@
+using AutoBodyService.Api.Validation;
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using System.Text.Json;
@@ -32,10 +33,10 @@ public sealed class AdminPricesController(IPriceCatalog prices) : ControllerBase
     [HttpPost]
     public async Task<ActionResult<AdminPriceItem>> Create(CreatePriceRequest request, CancellationToken cancellationToken)
     {
-        if (!PriceListItem.ValidName(request.Name) || !PriceListItem.ValidDescription(request.Description) || request.Price < 0) return Invalid();
+        if (!PriceListItem.ValidName(request.Name) || !PriceListItem.ValidDescription(request.Description) || !ExactDecimal.TryNonnegative(request.Price, out var price)) return Invalid();
         var actorId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (actorId is null) return Unauthorized();
-        var item = await prices.CreateAsync(request.Name!, request.Description, request.Price!.Value, request.IsFrom!.Value,
+        var item = await prices.CreateAsync(request.Name!, request.Description, price, request.IsFrom!.Value,
             request.SortOrder!.Value, request.IsPublished!.Value, actorId, cancellationToken);
         return CreatedAtAction(nameof(Get), new { id = item.Id }, item);
     }
@@ -76,7 +77,7 @@ public sealed class AdminPricesController(IPriceCatalog prices) : ControllerBase
     {
         result = null;
         if (value.ValueKind == JsonValueKind.Undefined) return true;
-        if (value.ValueKind != JsonValueKind.Number || !value.TryGetDecimal(out var number) || number < 0) return false;
+        if (!ExactDecimal.TryNonnegative(value, out var number)) return false;
         result = number; return true;
     }
     private static bool Integer(JsonElement value, out int? result)
@@ -102,7 +103,7 @@ public sealed record CreatePriceRequest
 {
     [Required] public string? Name { get; init; }
     public string? Description { get; init; }
-    [Required] public decimal? Price { get; init; }
+    public JsonElement Price { get; init; }
     [Required] public bool? IsFrom { get; init; }
     [Required] public int? SortOrder { get; init; }
     [Required] public bool? IsPublished { get; init; }

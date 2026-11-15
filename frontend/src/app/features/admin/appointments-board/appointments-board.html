@@ -35,7 +35,7 @@
                     <div class="card-top"><span class="client">{{ card.customerName }}</span>@if (next(card.status)) { <span class="drag-handle" cdkDragHandle aria-hidden="true" title="Перетягніть на наступний етап">⠿</span> }</div>
                     <h3><a [routerLink]="['/admin/appointments', card.id]">{{ card.make }} {{ card.model }}</a></h3>
                     <p class="vin">VIN {{ card.vin }}</p><p class="meta">Огляд: <time [attr.datetime]="card.inspectionStartUtc">{{ format(card.inspectionStartUtc) }}</time></p>
-                    @if (card.repairPlan; as plan) { <p class="plan">{{ price(plan.agreedPrice, plan.currency) }}<br /><span>{{ format(plan.plannedStartUtc) }} — {{ format(plan.estimatedFinishUtc) }}</span></p> }
+                    @if (card.repairPlan; as plan) { <p class="plan">{{ price(plan.agreedPriceExact, plan.currency) }}<br /><span>{{ format(plan.plannedStartUtc) }} — {{ format(plan.estimatedFinishUtc) }}</span></p> }
                     @else { <p class="meta">План ще не узгоджено</p> }
                     @if (next(card.status); as target) { <button class="button button--secondary card-action" type="button" [disabled]="saving() || loading()" (click)="advance(card)">Перевести: {{ statusLabel(target) }}</button> }
                     @if (canCancel(card.status)) { <details class="card-menu"><summary [attr.aria-label]="'Дії: ' + card.make + ' ' + card.model">⋯</summary><button type="button" [disabled]="saving() || loading()" (click)="cancel(card)">Скасувати</button></details> }

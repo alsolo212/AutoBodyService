@@ -78,6 +78,24 @@ public sealed class PriceCatalogPostgresTests(PostgresIdentityFixture fixture) :
     }
 
     [PostgresFact]
+    public async Task CreateAndPatchRejectUnrepresentablePriceWithoutChangingExistingItem()
+    {
+        var admin = await User("Admin"); using var actor = await Login(admin.Phone);
+        using var create = await actor.PostAsync(AdminPath, new StringContent("{\"name\":\"Synthetic\",\"price\":0.12345678901234567890123456789,\"isFrom\":false,\"sortOrder\":0,\"isPublished\":false}", System.Text.Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.BadRequest, create.StatusCode);
+        var item = await Add(actor, "Exact", 9007199254740993.01m, 0, true);
+        var id = item.GetProperty("id").GetGuid(); var version = item.GetProperty("version").GetUInt32();
+        using var patch = await actor.PatchAsync($"{AdminPath}/{id}", new StringContent($"{{\"version\":{version},\"price\":0.12345678901234567890123456789}}", System.Text.Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.BadRequest, patch.StatusCode);
+        var after = await Read(await actor.GetAsync($"{AdminPath}/{id}"));
+        Assert.Equal("9007199254740993.01", after.GetProperty("priceExact").GetString());
+        Assert.Equal(version, after.GetProperty("version").GetUInt32());
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Equal(9007199254740993.01m, (await db.PriceListItems.AsNoTracking().SingleAsync(x => x.Id == id)).Price);
+        Assert.Equal(1, await db.AdminAuditEvents.CountAsync(x => x.ObjectId == id.ToString()));
+    }
+
+    [PostgresFact]
     public async Task PublicPricesAreOrderedExactAndRespectPublicationAndArchive()
     {
         var admin = await User("Admin"); var super = await User("SuperAdmin");

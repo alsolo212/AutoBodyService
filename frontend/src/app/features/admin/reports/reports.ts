@@ -6,7 +6,7 @@ import { Router, RouterLink } from '@angular/router';
 import { Subscription, finalize } from 'rxjs';
 import { AuthService, AuthSession } from '../../../core/auth';
 import { kyivTime } from '../../../shared/time/kyiv-time';
-import { decimalLiteral } from '../prices/prices-editor';
+import { decimalLiteral, formatUah } from '../../../shared/money/money';
 import { Expense, ExpensePage, FinanceReport, ReportsApi } from './reports-api';
 import { AuditLog } from './audit-log';
 
@@ -17,12 +17,7 @@ function currentKyivPeriod(): { year: number; month: number } {
   const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Kyiv', year: 'numeric', month: 'numeric' }).formatToParts(new Date());
   return { year: Number(parts.find(x => x.type === 'year')!.value), month: Number(parts.find(x => x.type === 'month')!.value) };
 }
-export function formatUah(value: string): string {
-  const negative = value.startsWith('-');
-  const [whole, fraction = ''] = (negative ? value.slice(1) : value).split('.');
-  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
-  return `${negative ? '−' : ''}${grouped},${fraction.padEnd(2, '0')} ₴`;
-}
+export { formatUah } from '../../../shared/money/money';
 const optionalDecimal: ValidatorFn = control => !String(control.value).trim() || decimalLiteral(String(control.value)) !== null ? null : { decimal: true };
 const positiveDecimal: ValidatorFn = control => {
   const value = decimalLiteral(String(control.value));

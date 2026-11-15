@@ -1,4 +1,4 @@
-import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, switchMap } from 'rxjs';
 import { AppointmentDetails, AppointmentStatus, RepairPlan, StatusHistory } from '../../appointments/appointments-api';
@@ -12,7 +12,7 @@ export interface AdminAppointment extends Omit<AppointmentDetails, 'history'> {
   paymentConfirmation: PaymentConfirmation | null; manualContacts: ManualContact[];
   assignments: { id: string; employeeId: string; name: string; specialization: string; assignedById: string; assignedByName: string; assignedAtUtc: string; releasedAtUtc: string | null; releasedById: string | null; releasedByName: string | null }[] | null;
 }
-export interface RepairPlanChange { version: number; price: number; plannedStartUtc: string; estimatedFinishUtc: string; inspectionPerformed: boolean; }
+export interface RepairPlanChange { version: number; price: string; plannedStartUtc: string; estimatedFinishUtc: string; inspectionPerformed: boolean; }
 export interface TransitionChange { version: number; target: AppointmentStatus; inspectionPerformed?: boolean; paymentReceived?: boolean; vehicleHandedOver?: boolean; }
 export interface AdminBoardCard { id: string; customerName: string; vin: string; make: string; model: string; inspectionStartUtc: string; inspectionStartLocal: string; status: AppointmentStatus; repairPlan: RepairPlan | null; version: number; }
 export interface AdminBoardPage { items: AdminBoardCard[]; page: number; pageSize: number; total: number; }
@@ -40,7 +40,12 @@ export class AdminAppointmentApi {
       return item;
     }));
   }
-  plan(id: string, body: RepairPlanChange) { return this.token().pipe(switchMap(() => this.http.put<void>(`${this.path(id)}/repair-plan`, body))); }
+  plan(id: string, body: RepairPlanChange) {
+    // The validated decimal literal is sent unchanged, avoiding JavaScript number conversion.
+    const { price, ...fields } = body;
+    const json = JSON.stringify(fields).slice(0, -1) + ',"price":' + price + '}';
+    return this.token().pipe(switchMap(() => this.http.put<void>(`${this.path(id)}/repair-plan`, json, { headers: new HttpHeaders({ 'Content-Type': 'application/json' }) })));
+  }
   transition(id: string, body: TransitionChange) { return this.token().pipe(switchMap(() => this.http.post<void>(`${this.path(id)}/transition`, body))); }
   cancel(id: string, version: number, reason: string) { return this.token().pipe(switchMap(() => this.http.post<void>(`${this.path(id)}/cancel`, { version, confirmed: true, reason }))); }
   contact(id: string, reason: ContactReason) { return this.token().pipe(switchMap(() => this.http.post<void>(`${this.path(id)}/manual-contact`, { reason }))); }
