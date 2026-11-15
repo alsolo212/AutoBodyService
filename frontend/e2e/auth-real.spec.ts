@@ -26,6 +26,7 @@ test.describe('real authentication', () => {
     await expect(page.locator('#contacts').getByRole('link', { name: phone })).toHaveAttribute('href', `tel:${phone}`);
     await page.goto('/forgot-password');
     await expect(page.getByRole('link', { name: phone })).toHaveAttribute('href', `tel:${phone}`);
+    await expect(page.locator('form')).toHaveCount(0);
     await page.setViewportSize({ width: 320, height: 720 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
   });

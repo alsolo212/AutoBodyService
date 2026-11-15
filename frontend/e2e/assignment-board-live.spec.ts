@@ -126,6 +126,16 @@ test('board copies an order to two workers, releases one and preserves customer 
     await expect(page.getByRole('heading', { name: 'Усі замовлення в роботі' })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await customer.goto(`/account/appointments/${orders[0]}`);
+    await expect(customer.locator('.status')).toContainText('У роботі');
+    const repairPlan = customer.locator('section').filter({ has: customer.getByRole('heading', { name: 'Узгоджені вартість і терміни' }) });
+    await expect(repairPlan.locator('dd').nth(0)).toHaveText('100,00 ₴');
+    await expect(repairPlan.locator('dd').nth(1)).toContainText('10:00');
+    await expect(repairPlan.locator('dd').nth(2)).toContainText('10:00');
+    await expect(repairPlan).not.toContainText('поки недоступні');
+    const statusHistory = customer.locator('section').filter({ has: customer.getByRole('heading', { name: 'Історія статусів' }) });
+    await expect(statusHistory).toContainText('Очікує огляду');
+    await expect(statusHistory).toContainText('Заплановано');
+    await expect(statusHistory).toContainText('У роботі');
     const participants = customer.locator('section').filter({ has: customer.getByRole('heading', { name: 'Працівники' }) });
     await expect(participants).toContainText('Майстер А'); await expect(participants).toContainText('Маляр'); await expect(participants).toContainText('Майстер Б');
     await expect(participants).not.toContainText('E2E test'); await expect(participants.locator('time')).toHaveCount(0);

@@ -34,7 +34,22 @@ test('personal order details enforce ownership for User, Admin and SuperAdmin wh
     expect(promotion).toBe(204);
     await login(admin.page, '0000000082', 'Example-password-123!'); await expect(admin.page).toHaveURL(/\/admin$/);
     const customerId = await createOwn(customer.page, 0, 'Клієнтська');
-    const adminId = await createOwn(admin.page, 0, 'Адмінська');
+    await admin.page.goto('/account/book');
+    await admin.page.getByLabel('Дата', { exact: true }).fill('2099-01-15');
+    await admin.page.getByLabel('09:30', { exact: true }).check();
+    await admin.page.getByRole('button', { name: 'Далі' }).click();
+    await admin.page.getByLabel('VIN').fill('1HGCM82633A123456');
+    await admin.page.getByLabel('Марка').fill('Адмінська');
+    await admin.page.getByLabel('Модель').fill('Авто');
+    await admin.page.getByRole('button', { name: 'Далі' }).click();
+    await admin.page.getByLabel('Що потрібно оглянути?').fill('Тестовий опис власника');
+    await admin.page.getByRole('button', { name: 'Далі' }).click();
+    const created = admin.page.waitForResponse(r => r.url().endsWith('/api/appointments') && r.request().method() === 'POST');
+    await admin.page.getByRole('button', { name: 'Підтвердити запис' }).click();
+    const response = await created;
+    expect(response.status()).toBe(201);
+    const adminId = (await response.json()).id as string;
+    await expect(admin.page).toHaveURL(/\/account\/book\/success$/);
     const superId = await createOwn(page, 0, 'Суперська');
     for (const [client, ownId, otherId, make] of [
       [customer.page, customerId, adminId, 'Клієнтська'], [admin.page, adminId, customerId, 'Адмінська'], [page, superId, customerId, 'Суперська'],

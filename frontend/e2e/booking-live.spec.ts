@@ -33,7 +33,9 @@ test('booking uses the real API, preserves details on conflict and confirms anot
     return (await fetch('/api/appointments', { method: 'POST', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token }, body: JSON.stringify({ inspectionStartUtc: slots.slots[0].startUtc, vin: '1HGCM82633A004352', make: 'Test', model: 'Model', problemDescription: 'Issue' }) })).status;
   });
   expect(taken).toBe(201);
+  const conflict = page.waitForResponse(r => r.url().endsWith('/api/appointments') && r.request().method() === 'POST');
   await page.getByRole('button', { name: 'Підтвердити запис' }).click();
+  expect((await conflict).status()).toBe(409);
   await expect(page.getByRole('alert').filter({ hasText: 'Цей час уже недоступний' })).toBeVisible();
   await page.getByLabel('09:30', { exact: true }).check();
   await page.getByRole('button', { name: 'Далі' }).click();

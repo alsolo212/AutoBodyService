@@ -57,6 +57,15 @@ test('Admin resets a User, cannot manage Admin and shows the temporary secret on
     await expect.poll(() => connection.state).not.toBe('Connected');
     expect((await request.get(`${baseURL}/api/auth/session`, { headers: { Cookie: oldCookie } })).status()).toBe(401);
     await login(customer.page, '0000000062', temporary);
+    await expect(customer.page).toHaveURL(/\/account\/change-temporary-password$/);
+    for (const path of ['/account/book', '/account/appointments', '/account/profile', '/account/notifications']) {
+      await customer.page.goto(path);
+      await expect(customer.page).toHaveURL(/\/account\/change-temporary-password$/);
+    }
+    const restricted = await customer.page.evaluate(async () => Promise.all(
+      ['/api/profile', '/api/appointments/my', '/api/notifications'].map(async url => (await fetch(url)).status),
+    ));
+    expect(restricted).toEqual([403, 403, 403]);
     await changeTemporaryPassword(customer.page, temporary);
     await expect(customer.page).toHaveURL(/\/account\/appointments$/);
     const notices = await customer.page.evaluate(async () => (await fetch('/api/notifications')).json());
