@@ -240,6 +240,7 @@ public sealed class AdminUsersPostgresTests(PostgresIdentityFixture fixture) : I
     private sealed class FailingAudit : IAdminAuditWriter
     {
         public void RecordAccountAction(string actorId, string targetId, string action, bool? value) => throw new InvalidOperationException("Audit unavailable");
+        public void RecordExpenseChange(string actorId, Guid expenseId, decimal? beforeAmount, decimal afterAmount, bool beforeHasDescription, bool afterHasDescription, bool descriptionChanged) => throw new InvalidOperationException("Audit unavailable");
         public void RecordWeeklyScheduleChange(string actorId, IReadOnlyList<WeeklyInterval> before, IReadOnlyList<WeeklyInterval> after) => throw new NotSupportedException();
         public void RecordDateExceptionChange(string actorId, DateOnly date, InspectionException? before, InspectionException? after) => throw new NotSupportedException();
         public void RecordAppointmentStatusChange(string actorId, Guid appointmentId, AppointmentStatus from, AppointmentStatus to) => throw new NotSupportedException();

@@ -13,4 +13,6 @@ public interface IAdminAuditWriter
     void RecordPriceItemChange(string actorId, Guid priceItemId, bool created);
     void RecordManualContact(string actorId, Guid appointmentId, ManualContactReason reason);
     void RecordAccountAction(string actorId, string targetId, string action, bool? value);
+    void RecordExpenseChange(string actorId, Guid expenseId, decimal? beforeAmount, decimal afterAmount,
+        bool beforeHasDescription, bool afterHasDescription, bool descriptionChanged);
 }

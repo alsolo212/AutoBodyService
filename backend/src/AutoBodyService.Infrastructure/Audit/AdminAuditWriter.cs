@@ -49,6 +49,17 @@ public sealed class AdminAuditWriter(ApplicationDbContext db, TimeProvider clock
         Add(actorId, action, "ApplicationUser", targetId, new { value });
     }
 
+    public void RecordExpenseChange(string actorId, Guid expenseId, decimal? beforeAmount, decimal afterAmount,
+        bool beforeHasDescription, bool afterHasDescription, bool descriptionChanged)
+    {
+        ArgumentOutOfRangeException.ThrowIfEqual(expenseId, Guid.Empty);
+        if (afterAmount <= 0 || beforeAmount <= 0) throw new ArgumentOutOfRangeException(nameof(afterAmount));
+        // Free text can contain private data; retain safe before/after metadata only.
+        Add(actorId, beforeAmount is null ? "ExpenseCreated" : "ExpenseCorrected", "MonthlyExpense", expenseId.ToString("D"),
+            new { before = beforeAmount is null ? null : new { amount = beforeAmount, hasDescription = beforeHasDescription },
+                after = new { amount = afterAmount, hasDescription = afterHasDescription }, descriptionChanged });
+    }
+
     // Reasons are free text and may contain private data; never copy them into audit details.
     private static object? SafeException(InspectionException? value) => value is null ? null : new
     {

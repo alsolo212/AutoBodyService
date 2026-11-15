@@ -314,6 +314,57 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AutoBodyService.Domain.Finance.MonthlyExpense", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("CreatedById")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RecordedMonth")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RecordedYear")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("RecordedYear", "RecordedMonth", "RecordedAtUtc");
+
+                    b.ToTable("MonthlyExpenses", t =>
+                        {
+                            t.HasCheckConstraint("CK_MonthlyExpense_Amount", "\"Amount\" > 0 AND \"Amount\" <> 'NaN'::numeric AND \"Amount\" <> 'Infinity'::numeric");
+
+                            t.HasCheckConstraint("CK_MonthlyExpense_Period", "\"RecordedYear\" BETWEEN 1 AND 9999 AND \"RecordedMonth\" BETWEEN 1 AND 12");
+
+                            t.HasCheckConstraint("CK_MonthlyExpense_UpdatedAt", "\"UpdatedAtUtc\" IS NULL OR \"UpdatedAtUtc\" >= \"RecordedAtUtc\"");
+                        });
+                });
+
             modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionDateInterval", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1006,6 +1057,15 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("ReleasedById")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.Finance.MonthlyExpense", b =>
+                {
+                    b.HasOne("AutoBodyService.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AutoBodyService.Domain.InspectionSchedule.InspectionDateInterval", b =>

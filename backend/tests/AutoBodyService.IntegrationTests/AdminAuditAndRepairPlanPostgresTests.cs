@@ -176,6 +176,7 @@ public sealed class AdminAuditAndRepairPlanPostgresTests(PostgresIdentityFixture
         public void RecordPriceItemChange(string actorId, Guid priceItemId, bool created) => throw new InvalidOperationException("Audit unavailable");
         public void RecordManualContact(string actorId, Guid appointmentId, ManualContactReason reason) => throw new InvalidOperationException("Audit unavailable");
         public void RecordAccountAction(string actorId, string targetId, string action, bool? value) => throw new InvalidOperationException("Audit unavailable");
+        public void RecordExpenseChange(string actorId, Guid expenseId, decimal? beforeAmount, decimal afterAmount, bool beforeHasDescription, bool afterHasDescription, bool descriptionChanged) => throw new InvalidOperationException("Audit unavailable");
     }
 
     private sealed class WeeklyScheduleComparer : IEqualityComparer<WeeklySchedule>

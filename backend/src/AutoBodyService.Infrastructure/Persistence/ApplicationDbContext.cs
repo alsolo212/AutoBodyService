@@ -6,6 +6,7 @@ using AutoBodyService.Domain.Appointments;
 using AutoBodyService.Domain.Employees;
 using AutoBodyService.Domain.Assignments;
 using AutoBodyService.Domain.Prices;
+using AutoBodyService.Domain.Finance;
 using WeeklyScheduleEntity = AutoBodyService.Domain.InspectionSchedule.InspectionSchedule;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -29,6 +30,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<PaymentHandoverConfirmation> PaymentHandoverConfirmations => Set<PaymentHandoverConfirmation>();
     public DbSet<ManualContactEvent> ManualContactEvents => Set<ManualContactEvent>();
     public DbSet<AdminAuditEvent> AdminAuditEvents => Set<AdminAuditEvent>();
+    public DbSet<MonthlyExpense> MonthlyExpenses => Set<MonthlyExpense>();
     public DbSet<InspectionDateOverride> InspectionDateOverrides => Set<InspectionDateOverride>();
 
     public DbSet<RevokedSession> RevokedSessions => Set<RevokedSession>();
@@ -208,6 +210,22 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasIndex(x => x.OccurredAtUtc);
             entity.HasIndex(x => new { x.Action, x.OccurredAtUtc });
             entity.HasIndex(x => new { x.ActorId, x.OccurredAtUtc });
+        });
+        builder.Entity<MonthlyExpense>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Amount).HasColumnType("numeric");
+            entity.Property(x => x.Description).HasMaxLength(500);
+            entity.Property(x => x.CreatedById).IsRequired();
+            entity.Property<uint>("Version").IsRowVersion();
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.RecordedYear, x.RecordedMonth, x.RecordedAtUtc });
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_MonthlyExpense_Amount", "\"Amount\" > 0 AND \"Amount\" <> 'NaN'::numeric AND \"Amount\" <> 'Infinity'::numeric");
+                t.HasCheckConstraint("CK_MonthlyExpense_Period", "\"RecordedYear\" BETWEEN 1 AND 9999 AND \"RecordedMonth\" BETWEEN 1 AND 12");
+                t.HasCheckConstraint("CK_MonthlyExpense_UpdatedAt", "\"UpdatedAtUtc\" IS NULL OR \"UpdatedAtUtc\" >= \"RecordedAtUtc\"");
+            });
         });
         builder.Entity<PaymentHandoverConfirmation>(entity =>
         {

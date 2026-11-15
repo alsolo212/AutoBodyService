@@ -16,6 +16,8 @@ using AutoBodyService.Infrastructure.InspectionSchedule;
 using AutoBodyService.Application.Authentication;
 using AutoBodyService.Application.Profiles;
 using AutoBodyService.Application.Users;
+using AutoBodyService.Application.Finance;
+using AutoBodyService.Infrastructure.Finance;
 using AutoBodyService.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authentication;
 using System.Security.Claims;
@@ -101,6 +103,7 @@ public static class DependencyInjection
         services.AddScoped<IRegistrationService, RegistrationService>();
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IAdminUsers, AdminUsers>();
+        services.AddScoped<IFinanceReports, FinanceReports>();
         services.AddScoped<INotificationHistory, NotificationHistory>();
         services.AddScoped<ReminderProcessor>();
         services.AddHostedService<ReminderBackgroundService>();

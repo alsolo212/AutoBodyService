@@ -265,3 +265,23 @@ Content-Type: application/json
 RequestVerificationToken: {{xsrfToken}}
 
 { "version": "{{userVersion}}", "isBlocked": true }
+
+### Completion-based report (SuperAdmin). Dates are inclusive Kyiv calendar dates.
+GET {{baseUrl}}/api/admin/reports/finance?year=2026&month=10&sort=date&direction=desc&page=1&pageSize=25
+
+### General expenses for a Kyiv month (SuperAdmin).
+GET {{baseUrl}}/api/admin/reports/expenses?year=2026&month=10&sort=amount&direction=asc
+
+### Record an expense; the server assigns its month.
+POST {{baseUrl}}/api/admin/reports/expenses
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{ "amount": 125.50, "description": "Матеріали" }
+
+### Correct an expense using its latest version.
+PATCH {{baseUrl}}/api/admin/reports/expenses/{{expenseId}}
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{ "version": {{expenseVersion}}, "amount": 130.50 }
