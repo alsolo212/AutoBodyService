@@ -33,7 +33,13 @@ internal static class AuditDetails
         foreach (var key in keys)
         {
             if (!element.TryGetProperty(key, out var value)) continue;
-            if (TryValue(key, value, action, out var safe)) result[key] = safe;
+            if (TryValue(key, value, action, out var safe))
+            {
+                result[key] = safe;
+                // JSON numbers can lose precision in JavaScript; retain a canonical decimal representation.
+                if (key == "amount" && safe is decimal amount)
+                    result["amountExact"] = amount.ToString(CultureInfo.InvariantCulture);
+            }
         }
         return result;
     }

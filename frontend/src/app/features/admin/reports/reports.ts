@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, DestroyRef, effect, inject, signal } from '@angular/core';
+import { Component, DestroyRef, effect, inject, Injectable, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, ValidatorFn, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -8,6 +8,7 @@ import { AuthService, AuthSession } from '../../../core/auth';
 import { kyivTime } from '../../../shared/time/kyiv-time';
 import { decimalLiteral } from '../prices/prices-editor';
 import { Expense, ExpensePage, FinanceReport, ReportsApi } from './reports-api';
+import { AuditLog } from './audit-log';
 
 function actorKey(session: AuthSession | null): string | null {
   return session ? `${session.phone}|${[...session.roles].sort().join(',')}|${session.mustChangePassword}` : null;
@@ -30,15 +31,37 @@ const positiveDecimal: ValidatorFn = control => {
 const descriptionValidator: ValidatorFn = control => /\p{Cc}/u.test(String(control.value ?? '')) ? { invalid: true } : null;
 const integerValidator: ValidatorFn = control => Number.isInteger(control.value) ? null : { integer: true };
 
-@Component({ selector: 'app-reports', imports: [ReactiveFormsModule, RouterLink], templateUrl: './reports.html', styleUrl: './reports.scss' })
+@Injectable({ providedIn: 'root' })
+export class ReportsContext {
+  key: string | null = null;
+  period = currentKyivPeriod();
+  tab: 'finance' | 'audit' = 'finance';
+  constructor() {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('reports-view') ?? 'null');
+      if (saved && Number.isInteger(saved.year) && saved.year >= 2 && saved.year <= 9998 &&
+          Number.isInteger(saved.month) && saved.month >= 1 && saved.month <= 12 && (saved.tab === 'finance' || saved.tab === 'audit')) {
+        this.period = { year: saved.year, month: saved.month }; this.tab = saved.tab;
+      }
+    } catch { /* Browser storage is optional. */ }
+  }
+  save() {
+    try { sessionStorage.setItem('reports-view', JSON.stringify({ ...this.period, tab: this.tab })); } catch { /* Keep the in-memory view. */ }
+  }
+}
+
+@Component({ selector: 'app-reports', imports: [ReactiveFormsModule, RouterLink, AuditLog], templateUrl: './reports.html', styleUrl: './reports.scss' })
 export class Reports {
   private readonly api = inject(ReportsApi);
+  private readonly context = inject(ReportsContext);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly fb = inject(NonNullableFormBuilder);
-  private readonly initial = currentKyivPeriod();
   private key = actorKey(this.auth.session());
+  private readonly initial = (!this.context.key || this.context.key === this.key) && this.key ? this.context.period : currentKyivPeriod();
+  readonly activeTab = signal<'finance' | 'audit'>((!this.context.key || this.context.key === this.key) && this.key ? this.context.tab : 'finance');
+  readonly visitedAudit = signal(this.activeTab() === 'audit');
   private request?: Subscription;
   readonly period = signal(this.initial);
   readonly periodForm = this.fb.group({ year: [this.initial.year, [Validators.required, Validators.min(2), Validators.max(9998), integerValidator]], month: [this.initial.month, [Validators.required, Validators.min(1), Validators.max(12), integerValidator]] });
@@ -58,10 +81,11 @@ export class Reports {
   readonly date = (value: string) => kyivTime(value, true);
 
   constructor() {
+    this.context.key = this.key; this.context.period = this.initial; this.context.tab = this.activeTab();
     effect(() => {
       const session = this.auth.session(); const key = actorKey(session);
       if (key === this.key) return;
-      this.key = key; this.request?.unsubscribe(); this.report.set(null); this.expenses.set(null); this.editing.set(null);
+      this.key = key; this.context.key = key; this.context.period = currentKyivPeriod(); this.context.tab = 'finance'; this.context.save(); this.request?.unsubscribe(); this.report.set(null); this.expenses.set(null); this.editing.set(null);
       this.expenseForm.reset(); this.notice.set(''); this.actionError.set('');
       if (!session) { void this.router.navigateByUrl('/login'); return; }
       if (session.mustChangePassword) { void this.router.navigateByUrl('/account/change-temporary-password'); return; }
@@ -71,12 +95,24 @@ export class Reports {
     this.destroyRef.onDestroy(() => this.request?.unsubscribe());
     if (this.auth.session()?.roles.includes('SuperAdmin')) this.load();
   }
+  selectTab(tab: 'finance' | 'audit', moveFocus = false) {
+    this.activeTab.set(tab); this.context.tab = tab; this.context.save();
+    if (tab === 'audit') this.visitedAudit.set(true);
+    if (moveFocus) document.getElementById(`${tab}-tab`)?.focus();
+  }
+  tabKey(event: KeyboardEvent) {
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      event.preventDefault(); this.selectTab(this.activeTab() === 'finance' ? 'audit' : 'finance', true);
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault(); this.selectTab(event.key === 'Home' ? 'finance' : 'audit', true);
+    }
+  }
   applyPeriod() {
     if (this.saving()) return;
     this.periodForm.markAllAsTouched();
     const { year, month } = this.periodForm.getRawValue();
     if (this.periodForm.invalid || !Number.isInteger(year) || !Number.isInteger(month)) return;
-    this.period.set({ year, month }); this.orderPage = this.expensePage = 1;
+    this.period.set({ year, month }); this.context.period = { year, month }; this.context.save(); this.orderPage = this.expensePage = 1;
     this.filterForm.patchValue({ fromDate: '', toDate: '' }); this.filters = { ...this.filters, fromDate: '', toDate: '' };
     this.editing.set(null); this.conflict.set(false); this.expenseForm.reset(); this.actionError.set(''); this.notice.set('');
     this.load();

@@ -16,6 +16,7 @@ const expenses: ExpensePage = { year: 2026, month: 9, total: 1, page: 1, pageSiz
 describe('Reports', () => {
   let http: HttpTestingController; let auth: AuthService;
   beforeEach(() => {
+    sessionStorage.removeItem('reports-view');
     TestBed.configureTestingModule({ imports: [Reports], providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()] });
     http = TestBed.inject(HttpTestingController); auth = TestBed.inject(AuthService); auth.session.set(session);
     vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
@@ -25,6 +26,20 @@ describe('Reports', () => {
   function expensesRequest() { return http.expectOne(req => req.url === '/api/admin/reports/expenses'); }
   function flushData(r = report, e = expenses) { reportRequest().flush(r); expensesRequest().flush(e); }
   function create() { const fixture = TestBed.createComponent(Reports); fixture.detectChanges(); flushData(); fixture.detectChanges(); return fixture; }
+  it('preserves tab and month while switching and returning to reports', () => {
+    const fixture = create(); const component = fixture.componentInstance;
+    component.periodForm.setValue({ year: 2020, month: 9 }); component.applyPeriod(); flushData();
+    component.selectTab('audit'); fixture.detectChanges();
+    http.expectOne(req => req.url === '/api/admin/audit-log').flush({ total: 0, page: 1, pageSize: 10, items: [] });
+    component.selectTab('finance'); fixture.detectChanges();
+    expect(component.period()).toEqual({ year: 2020, month: 9 });
+    component.selectTab('audit'); fixture.destroy();
+    const restored = TestBed.createComponent(Reports); restored.detectChanges();
+    const reportQuery = reportRequest(); expect(reportQuery.request.params.get('year')).toBe('2020'); expect(reportQuery.request.params.get('month')).toBe('9');
+    reportQuery.flush(report); expensesRequest().flush(expenses);
+    http.expectOne(req => req.url === '/api/admin/audit-log').flush({ total: 0, page: 1, pageSize: 10, items: [] });
+    expect(restored.componentInstance.activeTab()).toBe('audit');
+  });
   it('formats precise UAH values without converting to floating point', () => {
     expect(formatUah('0')).toBe('0,00 ₴'); expect(formatUah('-10.25')).toBe('−10,25 ₴');
     expect(formatUah('9007199254740993.125')).toBe('9\u00a0007\u00a0199\u00a0254\u00a0740\u00a0993,125 ₴');

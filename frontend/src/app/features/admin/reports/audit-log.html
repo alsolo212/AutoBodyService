@@ -1,0 +1,30 @@
+<section class="workspace-panel" aria-labelledby="audit-title">
+  <div class="panel-heading"><div><p class="panel-eyebrow">ІСТОРІЯ ПОДІЙ</p><h2 id="audit-title">Журнал адміністративних дій</h2></div></div>
+  <p class="audit-note">Журнал доступний лише для перегляду. Дати фільтра та час подій наведено в UTC.</p>
+  <form class="audit-filters" [formGroup]="form" (ngSubmit)="apply()">
+    <div class="field"><label class="field__label" for="audit-from">З дати (UTC)</label><input class="field__input" id="audit-from" type="date" formControlName="fromDate" /></div>
+    <div class="field"><label class="field__label" for="audit-to">До дати включно (UTC)</label><input class="field__input" id="audit-to" type="date" formControlName="toDate" /></div>
+    <div class="field"><label class="field__label" for="audit-action">Тип дії</label><select class="field__input" id="audit-action" formControlName="action"><option value="">Усі дії</option>@for (choice of choices; track choice.value) { <option [value]="choice.value">{{ choice.label }}</option> }</select></div>
+    <div class="field"><label class="field__label" for="audit-actor">Ідентифікатор виконавця</label><input class="field__input" id="audit-actor" type="text" maxlength="450" formControlName="actorId" /></div>
+    <div class="field"><label class="field__label" for="audit-direction">Порядок часу</label><select class="field__input" id="audit-direction" formControlName="direction"><option value="desc">Спочатку нові</option><option value="asc">Спочатку давні</option></select></div>
+    <button class="button button--secondary" type="submit">Застосувати</button>
+  </form>
+  @if (validation()) { <p class="field__error" role="alert">{{ validation() }}</p> }
+  @if (loading()) { <p class="audit-note" role="status">Завантажуємо журнал…</p> }
+  @if (error()) { <div class="auth-alert" role="alert">{{ error() }} <button class="audit-retry" type="button" (click)="load()">Спробувати ще раз</button></div> }
+  @if (result(); as data) {
+    @if (!data.items.length) { <p class="audit-note">За цими умовами подій немає.</p> }
+    @else {
+      <div class="audit-table-wrap" tabindex="0" role="region" aria-label="Таблиця адміністративних дій"><table><thead><tr><th scope="col">Дата й час</th><th scope="col">Виконавець</th><th scope="col">Дія</th><th scope="col">Об’єкт</th><th scope="col">Відомості</th></tr></thead><tbody>
+        @for (entry of data.items; track entry.id) { <tr>
+          <td data-label="Дата й час"><time [attr.datetime]="entry.occurredAtUtc">{{ time(entry.occurredAtUtc) }}</time></td>
+          <td data-label="Виконавець"><span class="audit-id">{{ entry.actorId }}</span></td>
+          <td data-label="Дія">{{ actionLabel(entry.action) }}</td>
+          <td data-label="Об’єкт">{{ objectLabel(entry.objectType) }}<br /><span class="audit-id">{{ entry.objectId }}</span></td>
+          <td data-label="Відомості"><ul>@for (detail of details(entry); track $index) { <li>{{ detail }}</li> }</ul></td>
+        </tr> }
+      </tbody></table></div>
+    }
+    <div class="audit-pages" aria-label="Сторінки журналу"><span>Знайдено: {{ data.total }}</span><button class="button button--secondary" type="button" (click)="changePage(-1)" [disabled]="data.page <= 1">Попередня</button><span>Сторінка {{ data.page }}</span><button class="button button--secondary" type="button" (click)="changePage(1)" [disabled]="data.page * data.pageSize >= data.total">Наступна</button></div>
+  }
+</section>

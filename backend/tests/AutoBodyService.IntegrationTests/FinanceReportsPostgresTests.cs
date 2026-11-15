@@ -184,6 +184,7 @@ public sealed class FinanceReportsPostgresTests : IDisposable
         Assert.Equal(12.34m, corrections[0].GetProperty("details").GetProperty("after").GetProperty("amount").GetDecimal());
         Assert.Equal(12.34m, corrections[1].GetProperty("details").GetProperty("before").GetProperty("amount").GetDecimal());
         Assert.Equal(15.67m, corrections[1].GetProperty("details").GetProperty("after").GetProperty("amount").GetDecimal());
+        Assert.Equal("12.34", corrections[0].GetProperty("details").GetProperty("after").GetProperty("amountExact").GetString());
         Assert.DoesNotContain("Test supplies", history.ToString());
         Assert.DoesNotContain("Adjusted", history.ToString());
     }

@@ -60,6 +60,23 @@ public sealed class AdminAuditLogPostgresTests(PostgresIdentityFixture fixture) 
     }
 
     [PostgresFact]
+    public async Task ExpenseHistoryExposesExactDecimalWithoutJavaScriptRounding()
+    {
+        var supervisor = await User("SuperAdmin"); using var client = await Login(supervisor);
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var writer = new AdminAuditWriter(db, TimeProvider.System);
+            await using var transaction = await db.Database.BeginTransactionAsync();
+            writer.RecordExpenseChange(supervisor.Id, Guid.NewGuid(), null, 9007199254740993.125m, false, true, true);
+            await db.SaveChangesAsync(); await transaction.CommitAsync();
+        }
+        var page = await client.GetFromJsonAsync<JsonElement>($"{Path}?actorId={supervisor.Id}&action=ExpenseCreated");
+        var entry = Assert.Single(page.GetProperty("items").EnumerateArray());
+        Assert.Equal("9007199254740993.125", entry.GetProperty("details").GetProperty("after").GetProperty("amountExact").GetString());
+    }
+
+    [PostgresFact]
     public async Task HistoryFiltersUtcActionActorAndOrdersStablePagesWithoutExposingUnknownFields()
     {
         var supervisor = await User("SuperAdmin"); var actor = await User("Admin"); var other = await User("Admin");

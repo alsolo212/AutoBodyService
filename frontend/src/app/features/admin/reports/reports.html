@@ -1,9 +1,9 @@
-<div class="workspace-heading"><div><p class="eyebrow"><span class="eyebrow__line"></span> ПАНЕЛЬ КЕРУВАННЯ</p><h1>Контроль та звітність</h1><p>Оперативна статистика завершених ремонтів і загальних витрат.</p></div></div>
-<div class="report-tabs" role="tablist" aria-label="Розділи звітності">
-  <button class="report-tab report-tab--active" role="tab" type="button" aria-selected="true" aria-controls="finance-panel" id="finance-tab">Фінансова статистика</button>
-  <button class="report-tab" role="tab" type="button" aria-selected="false" disabled>Журнал адміністративних дій <span>незабаром</span></button>
+<div class="workspace-heading"><div><p class="eyebrow"><span class="eyebrow__line"></span> ПАНЕЛЬ КЕРУВАННЯ</p><h1>Контроль та звітність</h1><p>Статистика завершених ремонтів, загальні витрати та історія адміністративних дій.</p></div></div>
+<div class="report-tabs" role="tablist" aria-label="Розділи звітності" (keydown)="tabKey($event)">
+  <button class="report-tab" [class.report-tab--active]="activeTab() === 'finance'" role="tab" type="button" [attr.aria-selected]="activeTab() === 'finance'" [attr.tabindex]="activeTab() === 'finance' ? 0 : -1" aria-controls="finance-panel" id="finance-tab" (click)="selectTab('finance')">Фінансова статистика</button>
+  <button class="report-tab" [class.report-tab--active]="activeTab() === 'audit'" role="tab" type="button" [attr.aria-selected]="activeTab() === 'audit'" [attr.tabindex]="activeTab() === 'audit' ? 0 : -1" aria-controls="audit-panel" id="audit-tab" (click)="selectTab('audit')">Журнал адміністративних дій</button>
 </div>
-<section id="finance-panel" role="tabpanel" aria-labelledby="finance-tab">
+<section id="finance-panel" role="tabpanel" aria-labelledby="finance-tab" [hidden]="activeTab() !== 'finance'">
   <section class="workspace-panel period-panel" aria-labelledby="period-title">
     <div class="panel-heading"><div><p class="panel-eyebrow">ПЕРІОД ЗВІТУ</p><h2 id="period-title">Оберіть місяць</h2></div></div>
     <form class="period-form" [formGroup]="periodForm" (ngSubmit)="applyPeriod()">
@@ -74,3 +74,5 @@
     </section>
   }
 </section>
+
+<section id="audit-panel" role="tabpanel" aria-labelledby="audit-tab" [hidden]="activeTab() !== 'audit'">@if (visitedAudit()) { <app-audit-log /> }</section>

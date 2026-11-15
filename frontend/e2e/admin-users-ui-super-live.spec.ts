@@ -55,6 +55,19 @@ test('SuperAdmin manages an Admin while old windows, cookies and Hub sessions ar
     await card.getByRole('button', { name: 'Розблокувати: Адміністратор тест' }).click(); await confirm(page);
     await expect(card).toContainText('Активний');
     expect((await request.get(`${baseURL}/api/auth/session`, { headers: { Cookie: oldCookie } })).status()).toBe(401);
+    const audit = await page.evaluate(async () => {
+      const target = (await (await fetch('/api/admin/users?search=0000000063')).json())[0];
+      const history = await (await fetch('/api/admin/audit-log?pageSize=100')).json();
+      return history.items.filter((entry: { objectId: string }) => entry.objectId === target.id);
+    });
+    for (const action of ['AccountPasswordReset', 'AccountAdminChanged', 'AccountBlockedChanged'])
+      expect(audit.some((entry: { action: string }) => entry.action === action)).toBe(true);
+    expect(JSON.stringify(audit)).not.toContain(temporary);
+    await login(target.page, '0000000063', 'Another-password-123!'); await expect(target.page).toHaveURL(/\/admin$/);
+    const securityNotices = await target.page.evaluate(async () => (await fetch('/api/notifications')).json());
+    for (const action of ['AccountPasswordReset', 'AccountAdminChanged', 'AccountBlockedChanged'])
+      expect(securityNotices.some((notice: { type: string }) => notice.type === action)).toBe(true);
+    expect(JSON.stringify(securityNotices)).not.toContain(temporary);
     await page.setViewportSize({ width: 375, height: 812 });
     await expect(page.getByLabel('Ім’я або номер телефону')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
