@@ -55,6 +55,13 @@ test('common dashboard reflects real orders and manual contacts for Admin and Su
   await expect(dashboard.locator('section[aria-labelledby="cancel-title"]')).toContainText('Dashboard4');
   await expect(dashboard).toContainText('UTC+03:00');
   await expect(dashboard).not.toContainText('1 299');
+  const container = process.env['PROFILE_VERIFY_CONTAINER'] ?? '';
+  if (!/^autobody-ui-verify-[a-f0-9]+$/.test(container)) throw new Error('Expected the disposable E2E database container');
+  const label = execFileSync('docker', ['inspect', '-f', '{{ index .Config.Labels "autobody.auth-e2e.disposable" }}', container], { encoding: 'utf8' }).trim();
+  if (label !== 'true' || !/^[a-f0-9-]{36}$/i.test(ids[0])) throw new Error('Expected disposable database and appointment ID');
+  const contactState = () => JSON.parse(execFileSync('docker', ['exec', container, 'psql', '-U', 'auth_test', '-d', 'auth_test', '-v', 'ON_ERROR_STOP=1', '-At', '-c',
+    `SELECT json_build_object('unread', (SELECT count(*) FROM "Notifications" WHERE "AppointmentId" = '${ids[0]}' AND "Type" = 'AdminAppointmentCreated' AND "ReadAtUtc" IS NULL), 'contacts', (SELECT count(*) FROM "ManualContactEvents" WHERE "AppointmentId" = '${ids[0]}' AND "Reason" = 0))`], { encoding: 'utf8' }));
+  expect(contactState()).toEqual({ unread: 1, contacts: 0 });
   const task = dashboard.locator('.contact-entry').filter({ hasText: 'Dashboard0' }).filter({ hasText: 'Нова заявка' });
   await expect(task).toBeVisible();
   const refresh = page.waitForResponse(response => response.url().endsWith('/api/admin/dashboard') && response.request().method() === 'GET');
@@ -63,6 +70,7 @@ test('common dashboard reflects real orders and manual contacts for Admin and Su
   expect((await refresh).status()).toBe(200);
   await expect(page.getByRole('heading', { name: 'Ручний зв’язок' })).toBeVisible();
   await expect(task).toHaveCount(0);
+  expect(contactState()).toEqual({ unread: 1, contacts: 1 });
   expect(dashboardRequests).toBe(2);
   const details = await page.evaluate(async id => (await (await fetch(`/api/appointments/${id}`)).json()).manualContacts, ids[0]);
   expect(details.some((event: { reason: string; actorName: string; recordedAtUtc: string }) => event.reason === 'NewAppointment' && event.actorName === 'E2E test' && !!event.recordedAtUtc)).toBe(true);
@@ -92,10 +100,6 @@ test('common dashboard reflects real orders and manual contacts for Admin and Su
     await user.goto('/admin'); await expect(user).toHaveURL(/\/account\/appointments$/);
   } finally { await userContext.close(); }
 
-  const container = process.env['PROFILE_VERIFY_CONTAINER'] ?? '';
-  if (!/^autobody-ui-verify-[a-f0-9]+$/.test(container)) throw new Error('Expected the disposable E2E database container');
-  const label = execFileSync('docker', ['inspect', '-f', '{{ index .Config.Labels "autobody.auth-e2e.disposable" }}', container], { encoding: 'utf8' }).trim();
-  if (label !== 'true') throw new Error('The E2E database is not marked disposable');
   const sql = `INSERT INTO "AspNetUserRoles" ("UserId", "RoleId") SELECT "Id", 'role-admin' FROM "AspNetUsers" WHERE "PhoneNormalized" = '+380000000098'`;
   const promoted = execFileSync('docker', ['exec', container, 'psql', '-U', 'auth_test', '-d', 'auth_test', '-v', 'ON_ERROR_STOP=1', '-c', sql], { encoding: 'utf8' });
   expect(promoted).toContain('INSERT 0 1');

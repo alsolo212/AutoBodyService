@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 import { changeTemporaryPassword, confirm, cookie, find, hub, login, register } from './admin-users-helpers';
 
 test('Admin resets a User, cannot manage Admin and shows the temporary secret once', async ({ page, browser, baseURL, request }) => {
@@ -31,6 +32,24 @@ test('Admin resets a User, cannot manage Admin and shows the temporary secret on
       return { role: role.status, block: block.status, reset: reset.status };
     }, assigned);
     expect(forbidden).toEqual({ role: 403, block: 403, reset: 404 });
+    const target = await operator.page.evaluate(async () => (await (await fetch('/api/admin/users?search=0000000062')).json())[0] as { id: string; version: string });
+    const userForbidden = await customer.page.evaluate(async account => {
+      await fetch('/api/auth/antiforgery');
+      const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
+      const headers = { 'Content-Type': 'application/json', RequestVerificationToken: token };
+      const reset = await fetch(`/api/admin/users/${account.id}/reset-password`, { method: 'POST', headers, body: JSON.stringify({ version: account.version }) });
+      const role = await fetch(`/api/admin/users/${account.id}/roles`, { method: 'PUT', headers, body: JSON.stringify({ version: account.version, isAdmin: true }) });
+      const block = await fetch(`/api/admin/users/${account.id}/block`, { method: 'PATCH', headers, body: JSON.stringify({ version: account.version, isBlocked: true }) });
+      return [reset.status, role.status, block.status];
+    }, target);
+    expect(userForbidden).toEqual([403, 403, 403]);
+    const container = process.env['PROFILE_VERIFY_CONTAINER'] ?? '';
+    if (!/^autobody-ui-verify-[a-f0-9]+$/.test(container) || !/^[a-f0-9-]{36}$/i.test(target.id)) throw new Error('Expected disposable database and account ID');
+    const label = execFileSync('docker', ['inspect', '-f', '{{ index .Config.Labels "autobody.auth-e2e.disposable" }}', container], { encoding: 'utf8' }).trim();
+    if (label !== 'true') throw new Error('Database is not marked disposable');
+    const unchanged = execFileSync('docker', ['exec', container, 'psql', '-U', 'auth_test', '-d', 'auth_test', '-v', 'ON_ERROR_STOP=1', '-At', '-c',
+      `SELECT count(*) FROM "AspNetUsers" u WHERE u."Id" = '${target.id}' AND NOT u."IsBlocked" AND NOT u."MustChangePassword" AND (SELECT count(*) FROM "AspNetUserRoles" r WHERE r."UserId" = u."Id" AND r."RoleId" = 'role-user') = 1 AND (SELECT count(*) FROM "AspNetUserRoles" r WHERE r."UserId" = u."Id") = 1 AND NOT EXISTS (SELECT 1 FROM "AdminAuditEvents" a WHERE a."ObjectId" = u."Id")`], { encoding: 'utf8' }).trim();
+    expect(unchanged).toBe('1');
     const oldCookie = await cookie(customer.context, baseURL!); const connection = await hub(customer.context, baseURL!);
     await operator.page.goto('/admin/users');
     await find(operator.page, '0000000062');
