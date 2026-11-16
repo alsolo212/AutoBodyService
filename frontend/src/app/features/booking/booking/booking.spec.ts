@@ -41,6 +41,21 @@ describe('Booking', () => {
     request.flush({ id: 'id', inspectionStartUtc: slot, status: 'AwaitingInspection' });
     expect(navigate).toHaveBeenCalledWith(['/account/book/success'], { state: { inspectionStartUtc: slot } });
   });
+  it('blocks duplicate submissions while pending and permits retry after a network failure', () => {
+    const { component } = setup();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    fill(component); component.submit(); component.submit();
+    expect(component.submitting()).toBe(true);
+    http.expectOne('/api/auth/antiforgery').flush(null);
+    const pending = http.expectOne('/api/appointments');
+    component.submit(); http.expectNone('/api/appointments');
+    pending.error(new ProgressEvent('error'));
+    expect(component.submitting()).toBe(false);
+    expect(component.submitError()).toContain('Перевірте з’єднання');
+    component.submit(); http.expectOne('/api/auth/antiforgery').flush(null);
+    http.expectOne('/api/appointments').flush({ id: 'id', inspectionStartUtc: slot, status: 'AwaitingInspection' });
+    expect(navigate).toHaveBeenCalledOnce();
+  });
   it('preserves vehicle details after a conflict and reloads availability for another choice', () => {
     const { component } = setup(); fill(component); component.submit(); http.expectOne('/api/auth/antiforgery').flush(null);
     http.expectOne('/api/appointments').flush({}, { status: 409, statusText: 'Conflict' });

@@ -1,4 +1,5 @@
 .detail-heading, .section-heading { display: flex; justify-content: space-between; align-items: start; gap: 1rem; }
+.detail-heading > div { min-width: 0; overflow-wrap: anywhere; }
 .section-heading p { margin: .5rem 0 0; color: var(--muted); font-size: .88rem; line-height: 1.5; }
 .status { display: inline-block; margin: .3rem 0 0; padding: .45rem .7rem; background: #e4eddb; border-radius: 2rem; color: #405c3a; font-size: .8rem; font-weight: 700; }
 .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 1.5rem; margin: 1.4rem 0 0; }
@@ -18,7 +19,7 @@ legend { padding: 0 .25rem; font-weight: 700; font-size: .86rem; }
 .copy-text p { margin: 0 0 .75rem; line-height: 1.6; font-size: .88rem; }
 .profile-panel h3 { margin: 1.6rem 0 .75rem; font-size: 1rem; }
 .history { display: grid; gap: .8rem; margin: 1rem 0 0; padding: 0; list-style: none; }
-.history li { display: grid; gap: .25rem; padding-left: .9rem; border-left: 2px solid #c8daa9; line-height: 1.45; font-size: .88rem; }
+.history li { display: grid; grid-template-columns: minmax(0, 1fr); gap: .25rem; min-width: 0; padding-left: .9rem; border-left: 2px solid #c8daa9; line-height: 1.45; font-size: .88rem; overflow-wrap: anywhere; }
 .history time, .history span { color: var(--muted); }
 .actions { position: relative; flex: none; }
 .actions summary { display: grid; place-items: center; width: 3rem; height: 3rem; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; cursor: pointer; list-style: none; font-size: 1.4rem; }

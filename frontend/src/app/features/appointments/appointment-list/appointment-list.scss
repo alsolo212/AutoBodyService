@@ -1,5 +1,6 @@
 .list-heading, .card-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .list-heading { margin-top: 2rem; }.list-heading h2, .card h2 { margin: 0; font-size: 1.2rem; }
+.card-heading h2 { min-width: 0; overflow-wrap: anywhere; }
 .filters { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.25rem; }
 .filter { min-height: 2.75rem; border: 1px solid #cbd4cb; border-radius: 2rem; background: white; color: var(--ink); padding: .55rem 1rem; font-weight: 700; font-size: .85rem; }
 .filter--selected { background: #dcebc9; border-color: #7d9c65; }.cards { display: grid; gap: 1rem; margin-top: 1.5rem; }.card { margin: 0; min-width: 0; }

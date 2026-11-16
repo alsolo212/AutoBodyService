@@ -1,6 +1,6 @@
 .search-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 1rem; }
 .search-form > .button { margin-top: 1.45rem; }
-.user-list { display: grid; gap: .75rem; list-style: none; padding: 0; margin: 0; }
+.user-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; list-style: none; padding: 0; margin: 0; }
 .user-card { display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; border: 1px solid var(--line); border-radius: .5rem; padding: 1.1rem; }
 .user-info { min-width: 0; overflow-wrap: anywhere; }
 .user-info h3 { font-size: 1rem; margin: 0 0 .35rem; }
