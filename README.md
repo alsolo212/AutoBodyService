@@ -1,67 +1,80 @@
 # AutoBodyService
 
-## .NET SDK
+AutoBodyService runs as one Angular SPA, one ASP.NET Core API and one PostgreSQL database. The supported local setup uses the existing Compose service for PostgreSQL; the API and Angular run on the host. Compose does **not** start or order the host processes. Wait for PostgreSQL to be healthy, apply migrations and initialize the first administrator before starting the API, then start Angular.
 
-The repository selects .NET SDK 10.0.403 or a later stable patch in the same feature band. Before running any .NET command, activate the project-local SDK and runtimes in each new bash or zsh session (including a new Codex session). From the repository root:
+Commands below assume a Unix-like host, a bash or zsh shell and the repository root unless stated otherwise.
+
+## Prerequisites
+
+- .NET SDK **10.0.403 or a later stable patch in the 10.0.4xx feature band**, plus .NET and ASP.NET Core runtimes **10.0.14 or later within 10.0**. `global.json` selects the SDK. The repository's activation script requires the SDK and runtimes in the ignored `.dotnet` directory. Install them locally with the [official .NET install script](https://learn.microsoft.com/dotnet/core/tools/dotnet-install-script), without changing the system installation.
+- Node.js **24.21.0** as pinned in `.nvmrc`, npm, and the lockfile-installed Angular 22 dependencies. The installed Angular build package accepts Node `^22.22.3`, `^24.15.0` or `>=26.0.0`; the pinned Node version is the tested choice.
+- Docker Engine with Compose, PostgreSQL image **18.6**, OpenSSL with `-addext`, curl, Python 3 and a Playwright Chromium installation for the live browser tests. Docker must be running.
+- `dotnet-ef` 10.0.x on `PATH`, preferably the patch matching the EF Core packages (10.0.14). For an isolated local tool installation, from the repository root:
 
 ```sh
 source scripts/activate-dotnet.sh
-dotnet --info
+dotnet tool install --tool-path .dotnet/tools dotnet-ef --version 10.0.14
+export PATH="$PWD/.dotnet/tools:$PATH"
+dotnet ef --version
 ```
 
-The activation checks the local SDK and both runtimes, sets `DOTNET_ROOT` and `PATH`, and clears conflicting architecture-specific `DOTNET_ROOT_*` values in the current shell. It fails if the local installation is missing or too old. Install SDK 10.0.403 in the ignored `.dotnet` directory using the [official .NET install script](https://learn.microsoft.com/dotnet/core/tools/dotnet-install-script) if needed. `global.json` selects an SDK only: without activation the system host may run an application using an older system runtime. The activation does not change system-wide installations or shell startup files.
+Activate the SDK and add the tool directory to `PATH` in each new shell. The local tool installation is ignored by Git. Existing `dotnet-ef` 10.0.0 also runs the migrations but emits a version warning against the 10.0.14 runtime.
 
-## Local PostgreSQL
+## Prepare the development database
 
-Docker Desktop (or another running Docker daemon) and Docker Compose are required. The Compose project `autobodyservice-dev` creates a dedicated PostgreSQL 18 container and named volume. The database is published only on `127.0.0.1:55432` by default.
-
-Copy `.env.example` to `.env` and set `POSTGRES_PASSWORD` to a unique random value before starting. For example, generate a hexadecimal password with `openssl rand -hex 32`; restrict access to the file with `chmod 600 .env`. The file is ignored by Git. Do not use these development credentials in production.
+Create `.env` from `.env.example` **only if it does not already exist**. Edit it locally: set a unique random `POSTGRES_PASSWORD` from a secure generator, and choose a database/user/port if the example values are unsuitable. Restrict the file to its owner and never commit or reuse it in production. Keep these values as simple one-line Compose environment values.
 
 ```sh
+test ! -e .env && cp .env.example .env
+chmod 600 .env
+# Edit .env locally and set POSTGRES_PASSWORD before continuing.
 docker compose up -d --wait
 docker compose ps
 ```
 
-The PostgreSQL image uses the database name, user and password only when initializing a new empty volume. Editing `.env` later does not update credentials in an existing database. `docker compose stop` stops the service and preserves its data; do not remove the volume unless its data may be deleted.
+The existing Compose project `autobodyservice-dev` publishes PostgreSQL only on `127.0.0.1` (default port `55432`) and uses a named volume. Its `pg_isready` healthcheck proves the server accepts connections, not that application migrations or data are present. `--wait` waits for that healthcheck. The image reads `POSTGRES_DB`, `POSTGRES_USER` and `POSTGRES_PASSWORD` only when initializing an empty volume: editing `.env` later does not change an existing database or its password. `docker compose stop` preserves the database. Do not use `down -v` or remove a volume containing data that must be kept.
 
-For an API running on the host, provide the connection string through an environment variable or another secret store; never commit it. Example format (replace the placeholder locally with the same password used to initialize PostgreSQL):
+Before any migration, verify the host, port, database and user point to the **dedicated development database**, not an existing production or unrelated database. In a new shell at the repository root, activate the SDK, then enter the database password without echo. The example assumes the unmodified database/user/port from `.env.example`; change those non-secret values to match your own `.env`:
 
 ```sh
-export ConnectionStrings__AutoBodyService='Host=127.0.0.1;Port=55432;Database=autobodyservice_dev;Username=autobodyservice_dev;Password=<local-password>'
-dotnet run --project backend/src/AutoBodyService.Api
+source scripts/activate-dotnet.sh
+export PATH="$PWD/.dotnet/tools:$PATH"
+printf 'Development database password: '
+read -r -s DEV_DB_PASSWORD
+printf '\n'
+export ConnectionStrings__AutoBodyService="Host=127.0.0.1;Port=55432;Database=autobodyservice_dev;Username=autobodyservice_dev;Password=$DEV_DB_PASSWORD"
+unset DEV_DB_PASSWORD
 ```
 
-Match the host port, database and user to `.env`. Apply the migration only after verifying the target is the dedicated development database:
+Use a trusted environment or secret manager for configuration; do not put a real connection string in a tracked file, command argument, shell history or log. `ConnectionStrings__AutoBodyService` must be available to the EF command, the bootstrap command and the API process. It is inherited by child processes of this shell; unset it when no longer needed.
+
+## Migrations and first SuperAdmin
+
+The API does **not** apply migrations on startup. EF Core applies the checked-in migrations in order, using `__EFMigrationsHistory` to determine what is pending. On the verified development database, from the configured shell:
 
 ```sh
+dotnet ef migrations list --project backend/src/AutoBodyService.Infrastructure --startup-project backend/src/AutoBodyService.Api
 dotnet ef database update --project backend/src/AutoBodyService.Infrastructure --startup-project backend/src/AutoBodyService.Api
 ```
 
-This command requires `dotnet-ef` compatible with EF Core 10. The API does not apply migrations automatically. Its health endpoint reports API availability only, not database readiness.
+The latest checked-in migration is `20261115123315_MonthlyExpense`; check the repository again when upgrading. Back up an existing database and verify the target and migration plan before updating it. Do not create a new initial migration or run an automatic migration against an unknown database.
 
-## First SuperAdmin
-
-After applying the migration, an operator can initialize the first SuperAdmin through a one-time local command. It requires an empty users table, takes a database lock, creates the user and assigns the role in one transaction. The phone must already be in `+380` format followed by nine digits; the password must satisfy the configured Identity policy (at least 12 characters with upper- and lowercase letters, a digit and a non-alphanumeric character). Use a secret manager or environment variables; do not put credentials in source files, command arguments, logs, or shell history. For an interactive shell, the password can be entered without echo:
+Only on a newly migrated database with an empty users table, initialize the first SuperAdmin once. The command takes a database lock and creates the account and role in one transaction; it refuses to run if any user exists. Supply a name, a phone in `+380` plus nine digits and a unique password of at least 12 characters with upper- and lowercase letters, a digit and a non-alphanumeric character. Enter the password without echo and never place it in Git or an argument:
 
 ```sh
-read -r 'InitialSuperAdmin__Name?Administrator name: '
-read -r 'InitialSuperAdmin__Phone?Phone (+380...): '
-read -rs 'InitialSuperAdmin__Password?Password: '
-echo
+printf 'Administrator name: '; read -r InitialSuperAdmin__Name
+printf 'Phone (+380...): '; read -r InitialSuperAdmin__Phone
+printf 'Password: '; read -r -s InitialSuperAdmin__Password; printf '\n'
 export InitialSuperAdmin__Name InitialSuperAdmin__Phone InitialSuperAdmin__Password
 dotnet run --project backend/src/AutoBodyService.Api -- --initialize-superadmin
 unset InitialSuperAdmin__Name InitialSuperAdmin__Phone InitialSuperAdmin__Password
 ```
 
-The `read` syntax above is for zsh. Remove the bootstrap secrets from the secret store after successful initialization. This command does not expose an HTTP endpoint and refuses to run once any user exists. Administrative account-management flows are not implemented yet.
+The bootstrap is a local command, not a public endpoint. Transfer account credentials through an appropriate protected channel. Existing installations use the application's Admin/SuperAdmin account-management flows; do not rerun bootstrap to reset an account.
 
-See [frontend/README.md](frontend/README.md) for frontend commands.
+## Local HTTPS and start
 
-## Local HTTPS frontend and API
-
-The browser uses `https://localhost:4200` and same-origin `/api` URLs. Angular's development server forwards `/api/**` to `https://localhost:7097` and verifies the API certificate against the local certificate file. Production hosting must provide its own HTTPS reverse proxy for the same `/api` path; the Angular dev proxy is not a production server.
-
-For local development, create a dedicated self-signed localhost certificate and private key (do not overwrite an existing pair). These files are Git-ignored; keep the directory and key private. This requires OpenSSL with `-addext` support:
+Angular serves `https://localhost:4200` and forwards same-origin `/api/**` and `/hubs/**` to the API at `https://localhost:7097`. Its development proxy validates the API certificate and supports the SignalR WebSocket path. It is not a production server. Create a dedicated local certificate **only if neither file already exists**:
 
 ```sh
 mkdir -p frontend/.local-https
@@ -72,67 +85,101 @@ test ! -e frontend/.local-https/localhost.pem && test ! -e frontend/.local-https
     -days 365 -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1')
 ```
 
-The certificate is not automatically trusted by your browser. To use the UI without a certificate warning, explicitly trust this local certificate in your development machine's trust store, following your OS/browser instructions. Never distribute its private key or use it in production. The Playwright browser ignores the frontend certificate warning only in tests; the dev proxy itself validates the API certificate.
+The private key is local and ignored by Git. The browser must trust the development certificate through the OS/browser trust store; do not disable TLS validation to work around a certificate problem. Remove that trust when it is no longer needed. Neither the certificate nor key is suitable for production.
 
-Start the verified development database with `docker compose up -d --wait`. In a shell at the repository root, set `ConnectionStrings__AutoBodyService` as described above, then start the API with the local certificate:
+In the shell with the verified connection string, start the API **after** PostgreSQL, migrations and bootstrap:
 
 ```sh
 export Kestrel__Certificates__Default__Path="$PWD/frontend/.local-https/localhost.pem"
 export Kestrel__Certificates__Default__KeyPath="$PWD/frontend/.local-https/localhost.key"
+# Optional public service contact, configured locally; no real contact is stored in Git.
+# export PublicContacts__Phone='+380...'  # use an actual configured service number
+# PublicContacts__Address and PublicContacts__WorkingHours are optional public text.
 dotnet run --project backend/src/AutoBodyService.Api --launch-profile https
 ```
 
-In a second shell, run `cd frontend && npm ci && npm start`. With all three services running, `curl --cacert frontend/.local-https/localhost.pem https://localhost:4200/api/health` checks the HTTPS proxy from the repository root. Set `E2E_LIVE_API=1` when running `npm run test:e2e` from `frontend` to include the real backend request. The health response confirms API availability only; it does not check PostgreSQL.
+Configure a valid `PublicContacts__Phone` for a usable contact and access-recovery link; an empty or invalid value leaves the phone unavailable in the UI. The address and working hours are optional public text.
 
-The API accepts same-origin browser requests; no cross-origin origins are permitted. Before registration or login, call `GET /api/auth/antiforgery`. Angular reads the resulting `XSRF-TOKEN` cookie and sends it in the `RequestVerificationToken` header on unsafe requests. Obtain a fresh token after login or logout because antiforgery tokens are bound to the current identity. `POST /api/auth/register` accepts name, phone and password and creates only the `User` role; it does not sign the user in. Registration and login accept Ukrainian numbers in `+380`, `380` or local `0` form, with optional spaces, parentheses and hyphens. `POST /api/auth/login` issues a persistent, sliding seven-day cookie; `GET /api/auth/session` returns the current account, and `POST /api/auth/logout` signs out. Valid registration requests return the same `202 Accepted` response for a newly created account and an already registered phone; sign in separately. Invalid registrations receive a generic error.
+In a second shell, use the pinned Node version and start the SPA:
 
-Unsafe `/api/auth` requests are limited to 10 per minute per remote IP on each application instance. Identity also locks an account temporarily after five failed password attempts. Configure any production reverse proxy and its trusted forwarded addresses explicitly before relying on IP-based limits; never trust arbitrary forwarded headers. A distributed deployment needs a shared rate limiter for a fleet-wide limit.
+```sh
+cd frontend
+npm ci
+npm start
+```
 
-Identity validates the security stamp on each authenticated HTTP request. Changes to roles and `IsBlocked` made through `ApplicationDbContext` update the stamp with the same database save; Identity password resets update it as well. Administrative account operations use these mechanisms and reject stale versions; direct SQL or bulk updates bypass them. A `MustChangePassword` account can access session, logout, antiforgery, `POST /api/auth/change-password`, and public read-only contacts and prices. Both ordinary and temporary password changes require the current password and a new password matching the Identity policy. On success, the current cookie is refreshed and other cookies are revoked; the API clears the mandatory-change flag with the password update. `GET /api/profile` returns only the current account name and phone, and `PATCH /api/profile` accepts only a name; changing a phone requires staff assistance. SignalR revalidates the session and current account state before each realtime signal.
+Open `https://localhost:4200`. From the repository root, these check certificate validation, the Angular-to-API proxy and a database-backed public read:
 
-Production must persist and protect ASP.NET Core Data Protection keys across restarts and share them securely across instances. Without durable keys, restarting or moving between instances can invalidate cookies before seven days. HTTPS termination, same-origin routing and key storage must be configured for the deployment. Requests that reach the API without HTTPS are rejected if HTTPS redirection cannot be performed; forwarded protocol headers are not trusted by default. A TLS-terminating proxy must either use HTTPS to the API or be explicitly configured as trusted before forwarding its original scheme. Configure `AllowedHosts` and the proxy's host allowlist for the real public hostnames; the default `*` does not restrict hosts.
+```sh
+curl --fail --cacert frontend/.local-https/localhost.pem https://localhost:4200/api/health
+curl --fail --cacert frontend/.local-https/localhost.pem https://localhost:4200/api/prices
+```
 
+`/api/health` checks API availability, **not** PostgreSQL connectivity. A real sign-in and booking against the isolated test database provide a stronger end-to-end check than the `/api/prices` read. The `https` launch profile also listens on HTTP port 5260 and redirects to HTTPS; when the API has no usable HTTPS redirect target, plaintext requests are rejected.
 
-## Identity integration tests
+## Tests and diagnostics
 
-Run `bash scripts/test-identity-postgres.sh` with Docker available to create an isolated temporary PostgreSQL 18 container, apply the real migrations and run the backend suite, including Identity HTTP integration tests against the application's configured services. The script removes only its own container and uses no development database. Without this script, PostgreSQL-specific tests are reported as skipped by the regular test run.
+From the repository root, with the SDK activated and frontend dependencies/Chromium installed:
 
-The SuperAdmin-only finance API exposes `GET /api/admin/reports/finance?year=YYYY&month=M` and `GET /api/admin/reports/expenses?year=YYYY&month=M`. Both support `sort=date|amount`, `direction=asc|desc`, `page` and `pageSize` (maximum 100). The order list also accepts inclusive Kyiv calendar dates `fromDate`/`toDate` and `minAmount`/`maxAmount`; `filteredCount` describes that list while the four monthly totals remain unfiltered. Monetary values are decimal UAH and exact string representations accompany them for browser clients. An order is counted once using its actual Completed transition after both offline payment and handover confirmations, in the `Europe/Kyiv` month; this is an operational result, not official net profit.
+```sh
+dotnet build backend/AutoBodyService.slnx
+bash scripts/test-identity-postgres.sh
+(cd frontend && npm run build && npm test -- --watch=false)
+bash scripts/test-auth-e2e.sh
+```
 
-`POST /api/admin/reports/expenses` accepts a positive `amount` and optional `description`; the server determines the UTC recording instant and Kyiv month. `PATCH /api/admin/reports/expenses/{id}` requires the current `version` and accepts only `amount` and/or `description` (including null to clear it); a stale version returns `409`. Both mutations require antiforgery. Expense and audit changes share a transaction. Audit stores old/new amounts and description-presence/change flags, not the free-text description, which could contain private information.
+`bash scripts/test-identity-postgres.sh` starts its own disposable PostgreSQL 18 container, runs the complete xUnit suite with PostgreSQL integration tests and removes only that container. A plain `dotnet test backend/AutoBodyService.slnx` without the test database reports PostgreSQL-specific tests as skipped. Install Chromium once with `(cd frontend && npx playwright install chromium)`.
 
-SuperAdmin can use the financial-statistics tab at `/admin/reports` to select a month, filter and sort completed orders, and add or correct general expenses. New expenses always use the server's current Kyiv month even when a historical month is displayed; corrections retain their original month. The administrative audit tab is reserved for a later stage.
+The Playwright script creates a fresh isolated PostgreSQL database per spec, applies real migrations, bootstraps a synthetic SuperAdmin, and runs API and Angular over HTTPS. It cleans up its own containers and temporary files; it does not use the development database. Run one spec with, for example:
 
-Logout stores a hash of the session identifier until the cookie's expiry plus a sliding window; expired revocations are cleaned up on a later logout. A database migration is required before starting this version. Cookies issued before session identifiers were introduced will require users to sign in again after deployment. Protect and persist Data Protection keys as described above.
+```sh
+E2E_SPEC=frontend/e2e/booking-live.spec.ts bash scripts/test-auth-e2e.sh
+```
 
-## Public service contacts
+The test browser accepts the ephemeral frontend certificate; the Angular proxy still validates the API certificate. Ordinary `npm run test:e2e` can skip live specs without their environment flags and is not a substitute for the isolated script.
 
-Configure `PublicContacts__Phone` with the service's real Ukrainian phone number (international `+380` and nine digits). This is required to show a usable phone link for access recovery; no real number is included in the repository. `PublicContacts__Address` and `PublicContacts__WorkingHours` are optional public text. Set these environment variables in the API deployment or the equivalent `PublicContacts` configuration section. Only these three fields are exposed by `GET /api/public/contacts`; do not put private information in them. Empty or invalid phone values are returned as null and the interface explicitly indicates that the phone has not been configured.
+For diagnosis, check `docker compose ps` and `docker compose logs postgres`; inspect API and Angular console output without logging credentials or request bodies. Verify the configured host port and target database, API health, migration history, certificate SAN/trust and proxy target. A 401 means sign-in is required, 403 can indicate insufficient permissions, and 409 means stale or conflicting state that should be reloaded. Restarting the API is not a migration. `docker compose stop` retains the volume.
 
-The admin weekly inspection schedule is available at `GET/PUT /api/admin/inspection-schedule` to Admin and SuperAdmin. GET returns the current `version`, `timeZone` (`Europe/Kyiv`), and local `intervals`. PUT replaces the entire list and requires the version returned by GET and the usual antiforgery token. An empty list closes all days; no default business hours are seeded. Each interval must start and end on the same local day, use whole minutes, have positive duration divisible by 30 minutes, and not overlap another interval on that day; adjacent intervals are allowed. A stale version returns 409 and requires the client to reload. Schedule changes do not modify appointments. Booking availability and warnings about affected bookings belong to later functionality.
+## Backup and test restore
 
+Backups contain personal and business data. Store them outside the repository, restrict access, encrypt them according to the deployment's policy and protect encryption keys separately. Choose a new absolute path in a protected directory before running the following; never overwrite an existing backup:
 
-`GET /api/admin/inspection-exceptions?date=YYYY-MM-DD` returns the shared schedule version, date exception, and effective `templateSlots` (local start and UTC instant), before filtering bookings or past times. `PUT` replaces the rule for one date; `exception: null` removes it. `Weekly` uses the weekly template, `Closed` closes the entire day, and `Replace` uses the supplied date intervals. Individual `Open` or `Closed` half-hour slot rules override overlapping template slots. Intervals and slot rules cannot overlap within their respective lists, and times are local to Europe/Kyiv. Nonexistent local slots are omitted; repeated local times can yield two UTC instants. Slots crossing a daylight-saving transition are omitted. Date rules share the weekly schedule's version, so stale changes return 409.
+```sh
+printf 'New backup file (absolute path): '; read -r BACKUP_FILE
+(
+  set -eu
+  case "$BACKUP_FILE" in /*) ;; *) echo 'Use an absolute path'; exit 1;; esac
+  umask 077
+  set -C # Refuse to overwrite an existing file.
+  docker compose exec -T postgres sh -c 'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$BACKUP_FILE"
+  docker compose exec -T postgres pg_restore --list < "$BACKUP_FILE" > /dev/null
+)
+```
 
-**Booking integration is not implemented:** the API returns `bookingConflictsChecked: false` and a warning. It cannot identify affected appointments or provide client contacts; do not treat `templateSlots` as bookable availability.
+The archive listing checks readability, not recoverability. Test restoration into a **separate empty PostgreSQL 18 instance**, never the source database. The following creates a uniquely named disposable container backed by tmpfs, restores without deleting or replacing existing databases, and prints counts for comparison with the source. Use only a synthetic test backup for this exercise; a real backup needs the same security controls as the source data.
 
-`GET /api/inspection-slots?date=YYYY-MM-DD` requires an authenticated user. It returns the Kyiv calendar date, time-zone identifier, and future 30-minute slots as UTC start/end instants, excluding all non-cancelled appointments that overlap a slot. This is an advisory read, not a reservation: creating an appointment must revalidate availability transactionally and handle database conflicts. The appointment table has a partial unique index for identical non-cancelled start instants; the future booking workflow must also coordinate with schedule updates and prevent overlapping slots after schedule changes. Repair-plan persistence and appointment creation are not implemented yet.
+```sh
+RESTORE_CONTAINER="autobody-restore-$(openssl rand -hex 8)"
+RESTORE_PASSWORD="$(openssl rand -hex 32)"
+POSTGRES_PASSWORD="$RESTORE_PASSWORD" docker run -d --name "$RESTORE_CONTAINER" --label autobody.restore=disposable \
+  --tmpfs /var/lib/postgresql -e POSTGRES_USER=restore_test -e POSTGRES_DB=restore_test \
+  -e POSTGRES_PASSWORD postgres:18.6
+unset RESTORE_PASSWORD
+until docker exec "$RESTORE_CONTAINER" pg_isready -U restore_test -d restore_test; do sleep 1; done
+docker exec -i "$RESTORE_CONTAINER" pg_restore -U restore_test -d restore_test --exit-on-error --no-owner --no-acl < "$BACKUP_FILE"
+docker exec "$RESTORE_CONTAINER" psql -U restore_test -d restore_test -c \
+  'SELECT (SELECT count(*) FROM "__EFMigrationsHistory") AS migrations, (SELECT max("MigrationId") FROM "__EFMigrationsHistory") AS latest_migration, (SELECT count(*) FROM "Appointments") AS appointments;'
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c '\''SELECT (SELECT count(*) FROM "__EFMigrationsHistory") AS migrations, (SELECT max("MigrationId") FROM "__EFMigrationsHistory") AS latest_migration, (SELECT count(*) FROM "Appointments") AS appointments;'\'''
+```
 
-`POST /api/appointments` creates an inspection for the signed-in account. Submit a future UTC `inspectionStartUtc` returned by the slots API, together with `vin`, `make`, `model`, and `problemDescription`; refresh the antiforgery token first. An unavailable slot returns 409. PostgreSQL serializes creation against the schedule row and enforces unique active start times. The appointment, initial history, per-recipient creation notifications, and applicable future reminders are committed together. Notification history and appointment details are available through REST; inspection reminders are processed by the server.
+Compare counts and application-specific records on a consistent, quiesced source or a single snapshot: the source may change after the dump. Also verify the latest migration and, for real recovery, validate representative records and application access in an isolated environment. When finished, verify the container name and disposable label, then remove **only that test container** with `docker rm -f "$RESTORE_CONTAINER"`; unset `RESTORE_CONTAINER` and `BACKUP_FILE`. Never use this test cleanup for the development container or volume. Data Protection keys and other external secrets require their own protected backup and recovery procedure.
 
-### Notification integration boundaries
+## Production and data boundaries
 
-`GET /api/notifications` returns the signed-in recipient's persisted history, newest first; the optional `unread=true` or `unread=false` filter selects unread or read items. `PATCH /api/notifications/{id}/read` and `POST /api/notifications/read-all` require the application's antiforgery token. Links are returned only when the recipient currently has access to the referenced appointment. Reading does not record a manual customer contact. `/hubs/notifications` uses the Identity cookie over HTTPS WebSockets, without negotiation or query parameters. The server accepts browser Origins only for the same public host and emits a content-free `NotificationsChanged` signal only after commit and per-connection session revalidation. The client reconnects automatically and synchronizes through REST, without polling. The development proxy preserves the browser Host for this check. A production reverse proxy must preserve the public Host and provide HTTPS to the API, or use explicitly configured trusted forwarded headers; arbitrary forwarded headers must not be trusted. Realtime connections are currently local to one API process: a multi-instance deployment needs a secure cross-instance delivery design before relying on realtime signals. REST remains the source of truth.
+Public HTTPS deployment is **not supplied or verified** by this repository. The dev proxy, self-signed development certificate, `.env`, local SDK, synthetic accounts and test scripts are not production infrastructure. Use HTTPS for the public origin and preserve same-origin routing for `/api/**` and `/hubs/**`, including WebSockets and the public Host. The current API does not trust forwarded headers by default and does not configure `UseForwardedHeaders`: terminate TLS at the API or use a trusted proxy-to-API HTTPS connection. An HTTP proxy-to-API hop requires explicit application configuration for known proxies/networks and forwarding before HTTPS/security middleware; do not trust arbitrary forwarded headers. Set `AllowedHosts` and the proxy host allowlist to actual hosts.
 
-Authenticated users can open `/account/notifications`; administrators can also use `/admin/notifications`. The bell in the header shows the unread count and recent history. Both pages support the all/unread filter and marking one or all items as read. Times use Europe/Kyiv. The frontend refreshes history on a hub signal or after reconnect, without periodic HTTP polling.
+The Identity cookie is `HttpOnly`, `Secure`, `SameSite=Lax`, persistent for seven days with sliding expiration. The antiforgery cookie is `HttpOnly`, `Secure`, `SameSite=Strict`; the readable `XSRF-TOKEN` is used by Angular as the `RequestVerificationToken` header on unsafe requests. Obtain a fresh token after a change of identity. CORS grants no cross-origin browser access. Configure and protect persistent ASP.NET Core Data Protection keys across restarts and instances; their loss invalidates existing cookies. SignalR events are local to one API process, so multiple API instances need a separately designed secure cross-instance delivery mechanism. Rate limits are per process and require correctly trusted client addresses.
 
-Administrative account operations use `GET /api/admin/users` (optional `search`, at most 100 matches), `POST /api/admin/users/{id}/reset-password`, `PUT /api/admin/users/{id}/roles`, and `PATCH /api/admin/users/{id}/block`. Each mutation requires the current `version` from the search response; a stale version returns `409`. The role and block bodies use `isAdmin` and `isBlocked`, respectively. Admin can search and reset ordinary users; SuperAdmin can also manage admins. SuperAdmin accounts are never targets. The reset response is `no-store` and is the only response containing the generated temporary password. The operator must pass it to the customer outside the system.
+Keep production database credentials, bootstrap credentials, TLS keys and Data Protection keys in a protected secret store, separate from development and tests. `PublicContacts` contains intentionally public contact information only. Neither secrets, customer data, backups, nor the five local instruction/learning Markdown files belong in Git, images or a build context. The current Compose file has **no image build context**; before introducing a Docker build, explicitly exclude those files and local artifacts from its context.
 
-Account mutations stage recipient-specific, secret-free security notifications in the same transaction as the Identity change and audit, using a unique operation identifier in each `EventKey`; realtime delivery follows commit. A blocked account cannot read protected history until unblocked. No event is committed for a failed or rolled-back operation. Full administrative workflow verification remains part of K8 and K9.
-
-
-### Inspection reminders
-
-Booking persists only reminder thresholds that are still in the future: 24 hours and 2 hours for the owner and 30 minutes for administrators. Client jobs store the owner as recipient. An administrative job targets the current non-blocked Admin/SuperAdmin accounts at processing time, so changes in staff roles are respected. Recipients receive no private contact data in the reminder.
-
-The server scans every five seconds using UTC instants and shows inspection time in Europe/Kyiv with its UTC offset, including repeated local hours. An ordinary scheduling delay of up to 30 seconds is accepted. Jobs already due when a worker starts, jobs delayed beyond that limit, expired inspections, invalid order states, and ineligible recipients are explicitly marked as skipped instead of being replayed. Cancellation marks remaining jobs as skipped in the same transaction. PostgreSQL row locks and unique event keys coordinate concurrent workers; notification creation and the processed outcome commit together. SignalR is best effort after commit; the durable REST history remains available. Apply the EF migration in a verified development database before running this version; existing client reminders are backfilled with their appointment owner.
+For an update: review changes and migrations, test on an isolated restored copy, take and verify a backup, stop or coordinate application writers, apply the reviewed migrations to the verified target, deploy compatible API and SPA versions, and run HTTPS, authorization, database and SignalR smoke checks. Decide rollback and restore procedures before deployment; rolling back code alone does not reverse database migrations. Do not claim production readiness without validating the actual proxy, certificates, secrets, backup and recovery in that environment.
