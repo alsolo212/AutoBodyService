@@ -49,6 +49,18 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// HttpsRedirection can continue when no HTTPS port is configured. Never run
+// endpoints over plaintext in that case; forwarded headers are not trusted by default.
+app.Use(async (context, next) =>
+{
+    if (!context.Request.IsHttps)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+    await next();
+});
+
 app.UseCors();
 app.UseRateLimiter();
 // WebSocket requests are not protected by CORS. Require browser Origins to match

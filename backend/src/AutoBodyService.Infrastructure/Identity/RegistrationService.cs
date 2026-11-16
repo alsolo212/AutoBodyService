@@ -21,10 +21,10 @@ public sealed class RegistrationService(ApplicationDbContext db, UserManager<App
             var created = await users.CreateAsync(user, password);
             if (!created.Succeeded)
             {
-                // Do comparable password-hashing work for an already registered number.
+                // CreateAsync(user, password) already hashed the password before
+                // Identity's duplicate-name validation, as it does for a new user.
                 if (created.Errors.All(error => error.Code == users.ErrorDescriber.DuplicateUserName(phone).Code))
                 {
-                    _ = users.PasswordHasher.HashPassword(user, password);
                     return true;
                 }
                 return false;

@@ -6,6 +6,7 @@ using AutoBodyService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -14,6 +15,42 @@ namespace AutoBodyService.IntegrationTests;
 
 public sealed class LoginTimingProtectionTests
 {
+    [Fact]
+    public async Task RegistrationHashesPasswordOnceForNewAndExistingNumbers()
+    {
+        var database = "registration-timing-" + Guid.NewGuid();
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
+            services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
+            services.AddDbContext<ApplicationDbContext>(options => options.UseInMemoryDatabase(database)
+                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
+            services.RemoveAll<IPasswordHasher<ApplicationUser>>();
+            services.AddSingleton<HashProbe>();
+            services.AddScoped<IPasswordHasher<ApplicationUser>, ObservedIdentityHasher>();
+        }));
+        using (var scope = factory.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.EnsureCreatedAsync();
+        using var client = factory.CreateClient(new() { BaseAddress = new Uri("https://localhost"), HandleCookies = true });
+        using var csrf = await client.GetAsync("/api/auth/antiforgery");
+        var cookie = Assert.Single(csrf.Headers.GetValues("Set-Cookie"), value => value.StartsWith("XSRF-TOKEN="));
+        client.DefaultRequestHeaders.Add("RequestVerificationToken", Uri.UnescapeDataString(cookie.Split(';')[0]["XSRF-TOKEN=".Length..]));
+        var probe = factory.Services.GetRequiredService<HashProbe>();
+        using var initial = await client.PostAsJsonAsync("/api/auth/register", new { name = "Test", phone = "+380000000000", password = "Example-password-123!" });
+        Assert.Equal(HttpStatusCode.Accepted, initial.StatusCode);
+        var beforeNew = probe.Hashes;
+        using var created = await client.PostAsJsonAsync("/api/auth/register", new { name = "Test", phone = "+380000000001", password = "Example-password-123!" });
+        Assert.Equal(HttpStatusCode.Accepted, created.StatusCode);
+        var newHashes = probe.Hashes - beforeNew;
+        var beforeDuplicate = probe.Hashes;
+        using var duplicate = await client.PostAsJsonAsync("/api/auth/register", new { name = "Test", phone = "+380000000000", password = "Example-password-123!" });
+        Assert.Equal(HttpStatusCode.Accepted, duplicate.StatusCode);
+        var duplicateHashes = probe.Hashes - beforeDuplicate;
+        Assert.Equal(1, newHashes);
+        Assert.Equal(newHashes, duplicateHashes);
+        Assert.Equal(await created.Content.ReadAsStringAsync(), await duplicate.Content.ReadAsStringAsync());
+    }
+
     [Fact]
     public async Task UnknownAndWrongPasswordUseIdentityVerificationWithoutRehashingPerRequest()
     {

@@ -24,6 +24,33 @@ public sealed class ApiSecurityTests
         }));
 
     [Fact]
+    public async Task UnencryptedRequestsFailClosedEvenWithSpoofedForwardedProtocol()
+    {
+        using var factory = CreateFactory();
+        using var http = factory.CreateClient(new() { BaseAddress = new Uri("http://localhost"), AllowAutoRedirect = false });
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/auth/antiforgery");
+        request.Headers.Add("X-Forwarded-Proto", "https");
+        using var response = await http.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.False(response.Headers.Contains("Set-Cookie"));
+        using var login = await http.PostAsJsonAsync("/api/auth/login", new { phone = "+380000000000", password = "Example-password-123!" });
+        Assert.Equal(HttpStatusCode.Forbidden, login.StatusCode);
+        using var https = factory.CreateClient(new() { BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false });
+        Assert.Equal(HttpStatusCode.NoContent, (await https.GetAsync("/api/auth/antiforgery")).StatusCode);
+    }
+
+    [Fact]
+    public async Task HttpRedirectsWhenHttpsPortIsConfigured()
+    {
+        using var baseFactory = CreateFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder => builder.UseSetting("https_port", "443"));
+        using var http = factory.CreateClient(new() { BaseAddress = new Uri("http://localhost"), AllowAutoRedirect = false });
+        using var response = await http.GetAsync("/api/health");
+        Assert.Equal(HttpStatusCode.TemporaryRedirect, response.StatusCode);
+        Assert.Equal("https://localhost/api/health", response.Headers.Location!.ToString());
+    }
+
+    [Fact]
     public async Task AntiforgeryTokenRequiresMatchingCookieAndHeaderForLogin()
     {
         using var factory = CreateFactory();

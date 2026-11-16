@@ -3,16 +3,60 @@ using System.Net.Http.Json;
 using AutoBodyService.Infrastructure.Identity;
 using AutoBodyService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Time.Testing;
+using Microsoft.Net.Http.Headers;
 
 namespace AutoBodyService.IntegrationTests;
 
 public sealed class SessionLogoutTests
 {
+    [Fact]
+    public async Task PersistentCookieRenewsAfterActivityAndOriginalTicketExpires()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var database = "sliding-" + Guid.NewGuid();
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
+            services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
+            services.AddDbContext<ApplicationDbContext>(options => options.UseInMemoryDatabase(database));
+            services.PostConfigure<CookieAuthenticationOptions>(IdentityConstants.ApplicationScheme, options => options.TimeProvider = clock);
+        }));
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = new ApplicationUser { Name = "Test", UserName = "+380000000000", PhoneNumber = "+380000000000", PhoneNormalized = "+380000000000" };
+            Assert.True((await users.CreateAsync(user, "Example-password-123!")).Succeeded);
+            Assert.True((await users.AddToRoleAsync(user, ApplicationRoles.User)).Succeeded);
+        }
+        using var client = factory.CreateClient(new() { BaseAddress = new Uri("https://localhost"), HandleCookies = true });
+        await Token(client);
+        using var login = await client.PostAsJsonAsync("/api/auth/login", new { phone = "+380000000000", password = "Example-password-123!" });
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+        var initial = Assert.Single(login.Headers.GetValues("Set-Cookie"), value => value.StartsWith(".AspNetCore.Identity.Application="));
+        var initialExpires = SetCookieHeaderValue.Parse(initial).Expires!.Value;
+        Assert.InRange(initialExpires - clock.GetUtcNow(), TimeSpan.FromDays(7) - TimeSpan.FromSeconds(2), TimeSpan.FromDays(7));
+        clock.Advance(TimeSpan.FromDays(4));
+        using var active = await client.GetAsync("/api/auth/session");
+        Assert.Equal(HttpStatusCode.OK, active.StatusCode);
+        var renewed = Assert.Single(active.Headers.GetValues("Set-Cookie"), value => value.StartsWith(".AspNetCore.Identity.Application="));
+        var renewedExpires = SetCookieHeaderValue.Parse(renewed).Expires!.Value;
+        Assert.InRange(renewedExpires - initialExpires, TimeSpan.FromDays(4) - TimeSpan.FromSeconds(2), TimeSpan.FromDays(4) + TimeSpan.FromSeconds(2));
+        clock.Advance(TimeSpan.FromDays(4));
+        using var oldClient = factory.CreateClient(new() { BaseAddress = new Uri("https://localhost"), HandleCookies = false });
+        oldClient.DefaultRequestHeaders.Add("Cookie", initial.Split(';')[0]);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await oldClient.GetAsync("/api/auth/session")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/auth/session")).StatusCode);
+    }
+
     [Fact]
     public async Task LogoutRevokesReplayedCookieWithoutEndingAnotherSession()
     {
