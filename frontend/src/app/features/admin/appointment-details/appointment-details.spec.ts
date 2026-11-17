@@ -64,7 +64,7 @@ describe('administrative appointment details', () => {
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Призначення працівників'); expect(text).toContain('Активне'); expect(text).toContain('Завершено');
     expect(text).toContain('Призначив(ла): Адміністратор'); expect(text).toContain('Завершив(ла): не зафіксовано');
-    expect(text).toContain('Історичний'); expect(text).toContain('UTC+02:00');
+    expect(text).toContain('Історичний'); expect(text).toContain('1 січня 2026 р. о 12:00');
   });
   it('renders the administrative details, complete history and offset without inventing assignments', () => {
     const fixture = create({ ...base, status: 'Completed', repairPlan: plan,
@@ -89,7 +89,7 @@ describe('administrative appointment details', () => {
   it('validates Kyiv times and inspection before saving a plan with the version', () => {
     const fixture = create(); const component = fixture.componentInstance; component.editPlan(); fixture.detectChanges();
     component.planForm.setValue({ price: '0', start: '2026-03-29T03:30', startOffset: '+02:00', finish: '2026-03-29T05:00', finishOffset: '+03:00', inspectionPerformed: true });
-    component.savePlan(); expect(component.planError()).toContain('зміщення UTC'); http.expectNone('/api/auth/antiforgery');
+    component.savePlan(); expect(component.planError()).toContain('час за Києвом'); http.expectNone('/api/auth/antiforgery');
     component.planForm.patchValue({ start: '2026-10-25T03:30', startOffset: '+03:00', finish: '2026-10-25T03:30', finishOffset: '+02:00', inspectionPerformed: false });
     component.savePlan(); expect(component.planError()).toContain('огляд'); http.expectNone('/api/auth/antiforgery');
     component.planForm.controls.inspectionPerformed.setValue(true); component.savePlan(); token();
@@ -98,6 +98,31 @@ describe('administrative appointment details', () => {
     expect(JSON.parse(request.request.body)).toEqual({ version: 41, price: 0, plannedStartUtc: '2026-10-25T00:30:00.000Z', estimatedFinishUtc: '2026-10-25T01:30:00.000Z', inspectionPerformed: true });
     request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, repairPlan: plan, version: 42 }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Узгоджені дані збережено');
+  });
+
+  it('derives ordinary Kyiv offsets automatically and asks about repeated times only', () => {
+    const fixture = create(); const component = fixture.componentInstance; component.editPlan();
+    component.planForm.patchValue({ price: '100', start: '2026-07-01T12:00', finish: '2026-07-01T13:00', inspectionPerformed: true }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#plan-start-offset')).toBeNull();
+    component.savePlan(); token();
+    const request = http.expectOne('/api/admin/appointments/order-1/repair-plan');
+    expect(JSON.parse(request.request.body)).toMatchObject({ plannedStartUtc: '2026-07-01T09:00:00.000Z', estimatedFinishUtc: '2026-07-01T10:00:00.000Z' });
+    request.flush(null); http.expectOne('/api/appointments/order-1').flush(base); fixture.detectChanges();
+    component.editPlan(); component.planForm.patchValue({ price: '100', start: '2026-10-25T03:30', finish: '2026-10-25T05:00', inspectionPerformed: true }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#plan-start-offset')).not.toBeNull();
+    component.savePlan(); expect(component.planError()).toContain('повторного часу'); http.expectNone('/api/auth/antiforgery');
+  });
+
+  it('asks for confirmation before a direct status transition and ignores cancellation', () => {
+    const fixture = create({ ...base, status: 'Scheduled', repairPlan: plan }); const component = fixture.componentInstance;
+    const dialog = fixture.nativeElement.querySelector('dialog[aria-labelledby="detail-transition-title"]') as HTMLDialogElement;
+    dialog.showModal = vi.fn(); component.requestAdvance(); expect(dialog.showModal).toHaveBeenCalledOnce();
+    http.expectNone('/api/auth/antiforgery'); component.pendingTransition.set(null);
+    expect(component.item()?.status).toBe('Scheduled'); http.expectNone('/api/admin/appointments/order-1/transition');
+    component.requestAdvance(); component.confirmAdvance(); token();
+    const request = http.expectOne('/api/admin/appointments/order-1/transition');
+    expect(request.request.body).toMatchObject({ target: 'InProgress', version: 41 });
+    request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, status: 'InProgress', repairPlan: plan, version: 42 });
   });
 
   it('sends the exact decimal literal and rejects values outside decimal precision', () => {
@@ -158,11 +183,16 @@ describe('administrative appointment details', () => {
     const component = fixture.componentInstance;
     await component.copy(base.customerPhone, 'phone'); expect(writeText).toHaveBeenCalledWith(base.customerPhone);
     component.contactForm.controls.reason.setValue('ScheduleConflictOrReschedule');
-    await component.copy(component.contactText(), 'text'); expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('Конфлікт або перенесення'));
+    await component.copy(component.contactText(), 'text'); expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('узгодження часу огляду'));
     component.markContact(); token(); const request = http.expectOne('/api/admin/appointments/order-1/manual-contact');
     expect(request.request.body).toEqual({ reason: 'ScheduleConflictOrReschedule' }); request.flush(null);
     http.expectOne('/api/appointments/order-1').flush({ ...base, manualContacts: [{ reason: 'ScheduleConflictOrReschedule', actorName: 'Оператор', recordedAtUtc: '2026-01-01T10:00:00Z' }] });
     fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('Оператор');
+  });
+  it('suggests a relevant contact reason and text for an order in progress', () => {
+    const fixture = create({ ...base, status: 'InProgress', repairPlan: plan });
+    expect(fixture.componentInstance.contactForm.controls.reason.value).toBe('Agreement');
+    expect(fixture.componentInstance.contactText()).toContain('узгодження ремонту автомобіля Тест Авто');
   });
 
   it('handles 403, 404 and an unexpected customer projection safely', () => {

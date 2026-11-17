@@ -9,7 +9,7 @@ dd { margin: .35rem 0 0; line-height: 1.55; overflow-wrap: anywhere; }
 .problem { white-space: pre-wrap; overflow-wrap: anywhere; }
 .phone { text-decoration: underline; text-underline-offset: .15em; }
 .inline-button { padding: .4rem; border: 0; color: #3d6247; background: transparent; text-decoration: underline; font-size: .8rem; }
-.time-fields { display: grid; grid-template-columns: 1fr 11rem; gap: .75rem; }
+.time-fields { display: grid; gap: .75rem; }
 .form-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
 .check { display: flex; align-items: flex-start; gap: .6rem; line-height: 1.45; font-size: .9rem; }
 .check input { width: 1.15rem; height: 1.15rem; flex: none; accent-color: #52773f; }

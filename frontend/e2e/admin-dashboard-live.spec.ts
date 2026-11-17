@@ -53,7 +53,7 @@ test('common dashboard reflects real orders and manual contacts for Admin and Su
   await expect(dashboard.getByRole('heading', { name: 'Нові записи' })).toBeVisible();
   await expect(dashboard.getByRole('heading', { name: 'Скасування' })).toBeVisible();
   await expect(dashboard.locator('section[aria-labelledby="cancel-title"]')).toContainText('Dashboard4');
-  await expect(dashboard).toContainText('UTC+03:00');
+  await expect(dashboard).toContainText('09:00');
   await expect(dashboard).not.toContainText('1 299');
   const container = process.env['PROFILE_VERIFY_CONTAINER'] ?? '';
   if (!/^autobody-ui-verify-[a-f0-9]+$/.test(container)) throw new Error('Expected the disposable E2E database container');

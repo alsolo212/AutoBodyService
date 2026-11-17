@@ -23,7 +23,7 @@ describe('Dashboard', () => {
     const fixture = create(); const element = fixture.nativeElement as HTMLElement;
     const numbers = [...element.querySelectorAll('.summary-grid strong')].map(node => node.textContent?.trim());
     expect(numbers).toEqual(['1', '2', '3', '4']);
-    for (const text of ['Найближчі огляди', 'Нові записи', 'Скасування', 'Ручний зв’язок', 'Клієнт', 'Тест Авто', 'UTC+03:00', 'UTC+02:00']) expect(element.textContent).toContain(text);
+    for (const text of ['Найближчі огляди', 'Нові записи', 'Скасування', 'Ручний зв’язок', 'Клієнт', 'Тест Авто', '12:00', '11:00']) expect(element.textContent).toContain(text);
     for (const url of ['/admin/appointments', '/admin/appointments/one', '/admin/inspection-calendar', '/admin/assignments', '/admin/employees', '/admin/prices']) expect(element.querySelector(`a[href="${url}"]`)).not.toBeNull();
     expect(element.textContent).not.toMatch(/фінанс|прибут|витрат|аудит/i);
     http.expectNone('/api/admin/dashboard');

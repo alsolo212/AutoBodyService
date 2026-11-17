@@ -92,6 +92,8 @@ test('board uses real guarded transitions, server pages and confirmation forms',
   const pending = page.waitForRequest(r => r.url().endsWith(`/${ids[0]}/transition`));
   const moved = page.waitForResponse(r => r.url().endsWith(`/${ids[0]}/transition`));
   await drag(ids[0], 'InProgress');
+  await expect(page.getByRole('dialog')).toContainText('У роботі');
+  await page.getByRole('dialog').getByRole('button', { name: 'Змінити етап' }).click();
   await pending;
   await expect(scheduled.locator(`[data-card-id="${ids[0]}"]`)).toBeVisible();
   await expect(page.locator('[data-status="InProgress"]').locator(`[data-card-id="${ids[0]}"]`)).toHaveCount(0);
@@ -111,6 +113,7 @@ test('board uses real guarded transitions, server pages and confirmation forms',
     expect(changed).toBe(204);
     const conflict = page.waitForResponse(r => r.url().endsWith(`/${ids[1]}/transition`));
     await drag(ids[1], 'InProgress');
+    await page.getByRole('dialog').getByRole('button', { name: 'Змінити етап' }).click();
     expect((await conflict).status()).toBe(409);
     await expect(page.getByRole('alert').filter({ hasText: 'Замовлення змінилося' })).toBeVisible();
     await expect(scheduled.locator(`[data-card-id="${ids[1]}"]`)).toContainText('1 700');
@@ -120,6 +123,7 @@ test('board uses real guarded transitions, server pages and confirmation forms',
 
   const finishWork = page.waitForResponse(r => r.url().endsWith(`/${ids[0]}/transition`));
   await page.locator(`[data-card-id="${ids[0]}"]`).getByRole('button', { name: 'Перевести: Очікує оплати' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Змінити етап' }).click();
   expect((await finishWork).status()).toBe(204);
   await expect(page.locator('[data-status="AwaitingPayment"]').locator(`[data-card-id="${ids[0]}"]`)).toBeVisible();
   await page.locator(`[data-card-id="${ids[0]}"]`).getByRole('button', { name: 'Перевести: Завершено' }).click();

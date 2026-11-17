@@ -1,7 +1,8 @@
+import { kyivTime } from '../../../shared/time/kyiv-time';
+
 const zone = 'Europe/Kyiv';
 const partsFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
 const offsetFormatter = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'longOffset' });
-const displayFormatter = new Intl.DateTimeFormat('uk-UA', { timeZone: zone, day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 export function kyivInput(value: string): { local: string; offset: string } {
   const instant = new Date(value);
@@ -21,8 +22,11 @@ export function kyivLocalToUtc(local: string, offset: string): string | null {
   return actual.local === normalized && actual.offset === offset ? instant.toISOString() : null;
 }
 
+/** Possible offsets for a Kyiv wall time; none means the time does not exist. */
+export function kyivOffsets(local: string): string[] {
+  return ['+03:00', '+02:00'].filter(offset => kyivLocalToUtc(local, offset) !== null);
+}
+
 export function kyivWithOffset(value: string): string {
-  const instant = new Date(value);
-  const offset = offsetFormatter.formatToParts(instant).find(item => item.type === 'timeZoneName')?.value.replace('GMT', 'UTC') ?? 'UTC';
-  return `${displayFormatter.format(instant)} (${offset})`;
+  return kyivTime(value, true);
 }

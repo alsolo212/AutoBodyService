@@ -21,9 +21,7 @@ test('exact repair price survives UI, API, PostgreSQL and completion-based reven
   await page.getByRole('button', { name: 'Узгодити план' }).click();
   await page.getByLabel('Узгоджена вартість, ₴').fill('9007199254740993.01');
   await page.getByLabel('Плановий початок за Києвом').fill('2099-09-11T10:00');
-  await page.getByLabel('Зміщення UTC для початку').selectOption('+03:00');
   await page.getByLabel('Орієнтовне завершення за Києвом').fill('2099-09-12T10:00');
-  await page.getByLabel('Зміщення UTC для завершення').selectOption('+03:00');
   await page.locator('form').filter({ has: page.locator('#plan-price') }).getByLabel('Підтверджую, що огляд проведено').check();
   const request = page.waitForRequest(r => r.url().endsWith('/repair-plan') && r.method() === 'PUT');
   const response = page.waitForResponse(r => r.url().endsWith('/repair-plan') && r.request().method() === 'PUT');

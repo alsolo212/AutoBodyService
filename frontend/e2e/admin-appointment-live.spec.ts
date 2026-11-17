@@ -32,13 +32,11 @@ test('administrative order handles a real version conflict and both completion f
   });
   await page.goto(`/admin/appointments/${created[0]}`);
   await expect(page.getByRole('heading', { name: 'Тестова Перша' })).toBeVisible();
-  await expect(page.locator('section[aria-labelledby="customer-heading"] time')).toContainText('UTC+03:00');
+  await expect(page.locator('section[aria-labelledby="customer-heading"] time')).toContainText('09:00');
   await page.getByRole('button', { name: 'Узгодити план' }).click();
   await page.getByLabel('Узгоджена вартість, ₴').fill('1200');
   await page.getByLabel('Плановий початок за Києвом').fill('2099-09-11T10:00');
-  await page.getByLabel('Зміщення UTC для початку').selectOption('+03:00');
   await page.getByLabel('Орієнтовне завершення за Києвом').fill('2099-09-12T10:00');
-  await page.getByLabel('Зміщення UTC для завершення').selectOption('+03:00');
   await page.locator('form').filter({ has: page.locator('#plan-price') }).getByLabel('Підтверджую, що огляд проведено').check();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.locator('section').filter({ has: page.locator('#plan-price') }).screenshot({ path: testInfo.outputPath('mobile-plan.png') });
@@ -78,7 +76,9 @@ test('administrative order handles a real version conflict and both completion f
   await page.getByLabel('Підтверджую, що огляд проведено').check();
   for (const label of ['Заплановано', 'У роботі', 'Очікує оплати']) {
     const response = page.waitForResponse(r => r.url().endsWith('/transition') && r.request().method() === 'POST');
-    await page.getByRole('button', { name: `Перевести: ${label}` }).click(); expect((await response).status()).toBe(204);
+    await page.getByRole('button', { name: `Перевести: ${label}` }).click();
+    if (label !== 'Заплановано') await page.getByRole('dialog').getByRole('button', { name: 'Змінити етап' }).click();
+    expect((await response).status()).toBe(204);
     await expect(page.getByText('Статус замовлення оновлено.')).toBeVisible();
   }
   await page.getByLabel('Оплату отримано').check();

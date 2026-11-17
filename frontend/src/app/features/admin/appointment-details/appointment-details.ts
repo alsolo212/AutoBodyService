@@ -9,7 +9,8 @@ import { Observable, Subject, catchError, finalize, of, switchMap, tap } from 'r
 import { AppointmentStatus, price, statusLabel } from '../../appointments/appointments-api';
 import { AdminAppointment, AdminAppointmentApi, ContactReason, TransitionChange } from './admin-appointment-api';
 import { decimalLiteral } from '../../../shared/money/money';
-import { kyivInput, kyivLocalToUtc, kyivWithOffset } from './kyiv-date';
+import { kyivInput, kyivLocalToUtc, kyivOffsets, kyivWithOffset } from './kyiv-date';
+import { ConfirmDialog } from '../../../shared/confirm-dialog/confirm-dialog';
 
 const exactPrice: ValidatorFn = control => decimalLiteral(String(control.value ?? '')) === null ? { invalidAmount: true } : null;
 
@@ -18,7 +19,7 @@ const contactLabels: Record<ContactReason, string> = {
   Agreement: 'Узгодження ремонту', ReadyForPayment: 'Готовність до оплати та видачі',
 };
 
-@Component({ selector: 'app-admin-appointment-details', imports: [RouterLink, ReactiveFormsModule, AdminShell], templateUrl: './appointment-details.html', styleUrl: './appointment-details.scss' })
+@Component({ selector: 'app-admin-appointment-details', imports: [RouterLink, ReactiveFormsModule, AdminShell, ConfirmDialog], templateUrl: './appointment-details.html', styleUrl: './appointment-details.scss' })
 export class AppointmentDetailsAdmin {
   private readonly api = inject(AdminAppointmentApi);
   private readonly route = inject(ActivatedRoute);
@@ -28,6 +29,7 @@ export class AppointmentDetailsAdmin {
   private readonly document = inject(DOCUMENT);
   private readonly requests = new Subject<{ id: string; preserveDraft: boolean }>();
   private readonly cancelDialog = viewChild<ElementRef<HTMLDialogElement>>('cancelDialog');
+  private readonly transitionDialog = viewChild<ConfirmDialog>('transitionDialog');
   private id = '';
   private boardActionHandled = false;
   readonly item = signal<AdminAppointment | null>(null);
@@ -37,13 +39,14 @@ export class AppointmentDetailsAdmin {
   readonly actionError = signal('');
   readonly notice = signal('');
   readonly conflict = signal(false);
+  readonly pendingTransition = signal<{ id: string; version: number; target: AppointmentStatus } | null>(null);
   readonly editingPlan = signal(false);
   readonly copyMessage = signal('');
   readonly copyLocation = signal<'phone' | 'text'>('phone');
   readonly planForm = this.fb.group({
     price: ['', exactPrice],
-    start: ['', Validators.required], startOffset: ['', Validators.required],
-    finish: ['', Validators.required], finishOffset: ['', Validators.required], inspectionPerformed: [false],
+    start: ['', Validators.required], startOffset: [''],
+    finish: ['', Validators.required], finishOffset: [''], inspectionPerformed: [false],
   });
   readonly transitionForm = this.fb.group({ inspectionPerformed: [false], paymentReceived: [false], vehicleHandedOver: [false] });
   readonly cancelForm = this.fb.group({ reason: ['', [Validators.required, Validators.maxLength(500)]] });
@@ -62,20 +65,34 @@ export class AppointmentDetailsAdmin {
     }
   });
   readonly format = kyivWithOffset;
+  readonly offsets = kyivOffsets;
   readonly status = statusLabel;
   readonly price = price;
   readonly contactLabels = contactLabels;
   readonly reasons = Object.keys(contactLabels) as ContactReason[];
   readonly suggestedReason = computed<ContactReason>(() => {
     switch (this.item()?.status) {
-      case 'Scheduled': return 'Agreement';
+      case 'Scheduled': case 'InProgress': return 'Agreement';
       case 'AwaitingPayment': return 'ReadyForPayment';
       default: return 'NewAppointment';
     }
   });
-  contactText() { return `Вітаємо! Будь ласка, зв’яжіться з автосервісом щодо вашого замовлення (${contactLabels[this.contactForm.controls.reason.value]}).`; }
+  contactText() {
+    const item = this.item();
+    const car = item ? ` ${item.make} ${item.model}` : '';
+    const message: Record<ContactReason, string> = {
+      NewAppointment: `щодо запису на огляд автомобіля${car}`,
+      ScheduleConflictOrReschedule: `щодо узгодження часу огляду автомобіля${car}`,
+      Agreement: `щодо узгодження ремонту автомобіля${car}`,
+      ReadyForPayment: `щодо оплати та видачі автомобіля${car}`,
+    };
+    const reason = this.contactForm.controls.reason.value;
+    return `Вітаємо! Будь ласка, зв’яжіться з автосервісом ${message[reason]}.`;
+  }
 
   constructor() {
+    this.planForm.controls.start.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.planForm.controls.startOffset.setValue(''));
+    this.planForm.controls.finish.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.planForm.controls.finishOffset.setValue(''));
     this.requests.pipe(
       switchMap(request => {
         this.loading.set(true); this.error.set(null); this.item.set(null);
@@ -105,11 +122,14 @@ export class AppointmentDetailsAdmin {
     const item = this.item(); if (!item || this.terminal() || this.saving()) return;
     this.planForm.markAllAsTouched(); this.planError.set('');
     const data = this.planForm.getRawValue();
-    const start = kyivLocalToUtc(data.start, data.startOffset), finish = kyivLocalToUtc(data.finish, data.finishOffset);
+    const startOffsets = kyivOffsets(data.start), finishOffsets = kyivOffsets(data.finish);
+    const startOffset = startOffsets.length === 1 ? startOffsets[0] : data.startOffset;
+    const finishOffset = finishOffsets.length === 1 ? finishOffsets[0] : data.finishOffset;
+    const start = kyivLocalToUtc(data.start, startOffset), finish = kyivLocalToUtc(data.finish, finishOffset);
     const amount = decimalLiteral(data.price);
     if (amount === null) { this.planError.set('Вкажіть невід’ємну вартість, яку можна точно зберегти. Перевірте кількість цифр.'); return; }
     if (this.planForm.invalid || !start || !finish || Date.parse(finish) < Date.parse(start)) {
-      this.planError.set('Перевірте вартість, дати та зміщення UTC. Завершення не може бути раніше початку.'); return;
+      this.planError.set('Перевірте дату й час за Києвом. Для повторного часу оберіть варіант; завершення не може бути раніше початку.'); return;
     }
     if (item.status === 'AwaitingInspection' && !data.inspectionPerformed) { this.planError.set('Підтвердіть, що огляд проведено.'); return; }
     const old = item.repairPlan;
@@ -120,8 +140,8 @@ export class AppointmentDetailsAdmin {
       return existing.local === normalized && existing.offset === offset ? original : converted;
     };
     this.run(this.api.plan(this.id, { version: item.version, price: amount,
-      plannedStartUtc: unchanged(data.start, data.startOffset, old?.plannedStartUtc, start),
-      estimatedFinishUtc: unchanged(data.finish, data.finishOffset, old?.estimatedFinishUtc, finish),
+      plannedStartUtc: unchanged(data.start, startOffset, old?.plannedStartUtc, start),
+      estimatedFinishUtc: unchanged(data.finish, finishOffset, old?.estimatedFinishUtc, finish),
       inspectionPerformed: data.inspectionPerformed }), 'Узгоджені дані збережено.');
   }
   advance() {
@@ -131,6 +151,22 @@ export class AppointmentDetailsAdmin {
     if (target === 'Completed' && (!facts.paymentReceived || !facts.vehicleHandedOver)) { this.actionError.set('Підтвердіть оплату і передачу автомобіля клієнту.'); return; }
     const command: TransitionChange = { version: item.version, target, ...facts };
     this.run(this.api.transition(this.id, command), 'Статус замовлення оновлено.');
+  }
+  requestAdvance() {
+    const target = this.nextStatus(), item = this.item();
+    if (!item || !target || this.saving()) return;
+    if (target === 'InProgress' || target === 'AwaitingPayment') {
+      this.pendingTransition.set({ id: this.id, version: item.version, target });
+      this.transitionDialog()?.open();
+    }
+    else this.advance();
+  }
+  confirmAdvance() {
+    const pending = this.pendingTransition(); this.pendingTransition.set(null);
+    if (!pending || this.id !== pending.id || this.item()?.version !== pending.version || this.nextStatus() !== pending.target) {
+      this.actionError.set('Замовлення змінилося. Перевірте актуальний стан.'); return;
+    }
+    this.advance();
   }
   openCancel() { if (!this.canCancel() || this.saving()) return; this.cancelError.set(''); this.cancelDialog()?.nativeElement.showModal(); }
   closeCancel() { this.cancelDialog()?.nativeElement.close(); }
@@ -193,7 +229,7 @@ export class AppointmentDetailsAdmin {
   }
   private resetForms(item: AdminAppointment) {
     this.fillPlan(item); this.transitionForm.reset(); this.cancelForm.reset(); this.planError.set(''); this.cancelError.set('');
-    const reason: ContactReason = item.status === 'Scheduled' ? 'Agreement' : item.status === 'AwaitingPayment' ? 'ReadyForPayment' : 'NewAppointment';
+    const reason: ContactReason = item.status === 'Scheduled' || item.status === 'InProgress' ? 'Agreement' : item.status === 'AwaitingPayment' ? 'ReadyForPayment' : 'NewAppointment';
     this.contactForm.setValue({ reason });
   }
   private fillPlan(item: AdminAppointment) {

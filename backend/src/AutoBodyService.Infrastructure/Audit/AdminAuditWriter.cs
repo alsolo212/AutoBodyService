@@ -45,8 +45,11 @@ public sealed class AdminAuditWriter(ApplicationDbContext db, TimeProvider clock
             ? query.OrderByDescending(e => e.OccurredAtUtc).ThenByDescending(e => e.Id)
             : query.OrderBy(e => e.OccurredAtUtc).ThenBy(e => e.Id);
         var events = await ordered.Skip((filter.Page - 1) * filter.PageSize).Take(filter.PageSize).ToListAsync(cancellationToken);
+        var actorIds = events.Select(e => e.ActorId).Distinct().ToArray();
+        var names = await db.Users.AsNoTracking().Where(user => actorIds.Contains(user.Id))
+            .ToDictionaryAsync(user => user.Id, user => user.Name, cancellationToken);
         return new AuditPage(total, filter.Page, filter.PageSize, events.Select(e => new AuditEntry(
-            e.Id, e.OccurredAtUtc, e.ActorId, e.Action, e.ObjectType, e.ObjectId, AuditDetails.Safe(e.Action, e.Details))).ToArray());
+            e.Id, e.OccurredAtUtc, e.ActorId, e.Action, e.ObjectType, e.ObjectId, AuditDetails.Safe(e.Action, e.Details), names.GetValueOrDefault(e.ActorId))).ToArray());
     }
 
     public void RecordRepairPlanChange(string actorId, Guid appointmentId, bool priceChanged, bool datesChanged)

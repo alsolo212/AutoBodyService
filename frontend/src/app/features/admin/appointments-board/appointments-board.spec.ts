@@ -28,7 +28,9 @@ describe('administrative board', () => {
     return requests;
   }
   function create(cards: AdminBoardCard[] = [], total = 0) {
-    const fixture = TestBed.createComponent(AppointmentsBoard); fixture.detectChanges(); flushPages(cards, total); fixture.detectChanges(); return fixture;
+    const fixture = TestBed.createComponent(AppointmentsBoard); fixture.detectChanges(); flushPages(cards, total); fixture.detectChanges();
+    (fixture.nativeElement.querySelector('dialog[aria-labelledby="board-transition-title"]') as HTMLDialogElement).showModal = vi.fn();
+    return fixture;
   }
   function drop(component: AppointmentsBoard, item: AdminBoardCard, from: AppointmentStatus, to: AppointmentStatus) {
     const columns = component.columns();
@@ -43,7 +45,7 @@ describe('administrative board', () => {
     const fixture = create([ready, card('Completed'), card('Cancelled')]);
     expect(fixture.componentInstance.columns().map(c => c.status)).toEqual(statuses);
     const text = fixture.nativeElement.textContent as string;
-    for (const s of ['Очікує огляду', 'Заплановано', 'У роботі', 'Очікує оплати', 'Завершено', 'Скасовано', 'Клієнт', '1HGCM82633A123456', '₴', 'UTC+02:00']) expect(text).toContain(s);
+    for (const s of ['Очікує огляду', 'Заплановано', 'У роботі', 'Очікує оплати', 'Завершено', 'Скасовано', 'Клієнт', '1HGCM82633A123456', '₴', '12:00']) expect(text).toContain(s);
     for (const status of ['Completed', 'Cancelled']) {
       const article = fixture.nativeElement.querySelector(`[data-card-id="${status}"]`) as HTMLElement;
       expect(article.querySelector('button')).toBeNull(); expect(article.querySelector('summary')).toBeNull();
@@ -64,6 +66,7 @@ describe('administrative board', () => {
   it('sends the displayed version and keeps the original card until the server responds', () => {
     const fixture = create([card('Scheduled')]); const component = fixture.componentInstance;
     drop(component, card('Scheduled'), 'Scheduled', 'InProgress');
+    http.expectNone('/api/auth/antiforgery'); component.confirmAdvance();
     expect(component.columns().find(c => c.status === 'Scheduled')!.items).toHaveLength(1);
     expect(component.columns().find(c => c.status === 'InProgress')!.items).toHaveLength(0);
     http.expectOne('/api/auth/antiforgery').flush(null);
@@ -74,10 +77,20 @@ describe('administrative board', () => {
     expect(component.columns().find(c => c.status === 'Scheduled')!.items).toHaveLength(0);
     expect(component.columns().find(c => c.status === 'InProgress')!.items).toHaveLength(1);
   });
+  it('does not change status when confirmation is cancelled or the displayed card becomes stale', () => {
+    const fixture = create([card('Scheduled')]); const component = fixture.componentInstance;
+    component.advance(card('Scheduled')); expect(component.pendingTransition()?.target).toBe('InProgress');
+    http.expectNone('/api/auth/antiforgery'); component.pendingTransition.set(null);
+    component.confirmAdvance(); http.expectNone('/api/auth/antiforgery');
+    component.advance(card('Scheduled')); component.columns.update(columns => columns.map(column => column.status === 'Scheduled'
+      ? { ...column, items: [{ ...card('Scheduled'), version: 43 }] } : column));
+    component.confirmAdvance(); expect(component.actionMessage()).toContain('Замовлення змінилося');
+    http.expectNone('/api/auth/antiforgery'); flushPages([card('Scheduled')]);
+  });
 
   it('reloads authoritative columns after 409 without retrying the transition', () => {
     const fixture = create([card('Scheduled')]); const component = fixture.componentInstance;
-    component.advance(card('Scheduled')); http.expectOne('/api/auth/antiforgery').flush(null);
+    component.advance(card('Scheduled')); component.confirmAdvance(); http.expectOne('/api/auth/antiforgery').flush(null);
     const request = http.expectOne('/api/admin/appointments/Scheduled/transition');
     request.flush(null, { status: 409, statusText: 'Conflict' });
     expect(component.actionMessage()).toContain('Замовлення змінилося');

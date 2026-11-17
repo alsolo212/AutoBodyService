@@ -114,6 +114,7 @@ public sealed class AdminAuditLogPostgresTests(PostgresIdentityFixture fixture) 
         Assert.True(pages[0].GetProperty("occurredAtUtc").GetDateTimeOffset() <= pages[1].GetProperty("occurredAtUtc").GetDateTimeOffset());
         Assert.True(pages[1].GetProperty("occurredAtUtc").GetDateTimeOffset() < pages[2].GetProperty("occurredAtUtc").GetDateTimeOffset());
         Assert.All(pages, e => Assert.Equal(actor.Id, e.GetProperty("actorId").GetString()));
+        Assert.All(pages, e => Assert.Equal(actor.Name, e.GetProperty("actorName").GetString()));
         var filtered = await super.GetFromJsonAsync<JsonElement>(Path + $"?actorId={actor.Id}&action=RepairPlanChanged&direction=desc&pageSize=100");
         Assert.Equal(3, filtered.GetProperty("total").GetInt32());
         var items = filtered.GetProperty("items").EnumerateArray().ToArray();

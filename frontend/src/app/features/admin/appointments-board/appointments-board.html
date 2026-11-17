@@ -3,7 +3,7 @@
     <nav class="breadcrumbs" aria-label="Шлях сторінки"><a routerLink="/admin">Панель керування</a><span aria-hidden="true">/</span><span aria-current="page">Замовлення</span></nav>
     <p class="eyebrow"><span class="eyebrow__line"></span> РОБОТА ІЗ ЗАМОВЛЕННЯМИ</p>
     <h1>Замовлення</h1>
-    <p class="intro">Перетягніть картку на наступний етап або скористайтеся кнопкою на картці.</p>
+    <p class="intro">Оберіть наступний етап на картці або перетягніть її до сусідньої колонки. Зміна потребує підтвердження.</p>
     <form class="filters" [formGroup]="filterForm" (ngSubmit)="applyFilters()" aria-label="Фільтри замовлень">
       <div class="field search"><label class="field__label" for="search">Пошук клієнта або авто</label><input class="field__input" id="search" formControlName="search" maxlength="100" placeholder="Ім’я, телефон, VIN, марка" /></div>
       <div class="field"><label class="field__label" for="filter-status">Статус</label><select class="field__input" id="filter-status" formControlName="status"><option value="">Усі статуси</option>@for (status of statuses; track status) { <option [value]="status">{{ statusLabel(status) }}</option> }</select></div>
@@ -19,7 +19,8 @@
     @if (saving()) { <p role="status">Оновлюємо статус…</p> }
     @if (error()) { <div class="auth-alert" role="alert">{{ error() }} <button class="inline-button" type="button" (click)="reload()">Спробувати ще раз</button></div> }
     @if (loading()) { <p class="loading" role="status">Завантажуємо замовлення…</p> }
-    <div class="board-scroll" tabindex="0" aria-label="Дошка замовлень, прокручуйте для перегляду колонок">
+    <nav class="mobile-statuses" aria-label="Перейти до статусу">@for (status of statuses; track status) { <button type="button" (click)="scrollToStatus(status)">{{ statusLabel(status) }}</button> }</nav>
+    <div class="board-scroll" tabindex="0" aria-label="Дошка замовлень">
       <div class="board" cdkDropListGroup>
         @for (column of columns(); track column.status) {
           <section class="column" [attr.aria-labelledby]="'column-' + column.status">
@@ -44,5 +45,6 @@
         }
       </div>
     </div>
+    <app-confirm-dialog #transitionDialog dialogId="board-transition" title="Змінити етап замовлення?" [description]="pendingTransition() ? 'Автомобіль ' + pendingTransition()!.card.make + ' ' + pendingTransition()!.card.model + ': «' + statusLabel(pendingTransition()!.card.status) + '» → «' + statusLabel(pendingTransition()!.target) + '».' : ''" confirmLabel="Змінити етап" confirmStyle="primary" (confirmed)="confirmAdvance()" (closed)="pendingTransition.set(null)" />
   </div>
 </app-admin-shell>

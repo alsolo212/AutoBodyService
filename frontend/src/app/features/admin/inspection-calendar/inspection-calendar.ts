@@ -107,5 +107,5 @@ export class InspectionCalendar {
   }
   private showSaveError(error: unknown) { this.error.set(error instanceof HttpErrorResponse && error.status === 409 ? 'Графік або записи змінилися. Оновіть дані та повторіть перевірку.' : error instanceof HttpErrorResponse && error.status === 400 ? 'Некоректні або перехресні інтервали. Перевірте час і тривалість.' : 'Не вдалося перевірити або зберегти графік. Спробуйте ще раз.'); }
   formatTimeEnd(value: string) { return this.formatTime(new Date(new Date(value).getTime() + 30 * 60_000).toISOString()); }
-  formatTime(value: string) { return new Intl.DateTimeFormat('uk-UA', { timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit', timeZoneName: 'shortOffset' }).format(new Date(value)); }
+  formatTime(value: string) { return kyivTime(value); }
 }

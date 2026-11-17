@@ -4,8 +4,11 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Subscription, finalize } from 'rxjs';
 import { AuthService } from '../../../core/auth';
+import { RouterLink } from '@angular/router';
+import { kyivLocalToUtc, kyivOffsets } from '../appointment-details/kyiv-date';
+import { kyivTime } from '../../../shared/time/kyiv-time';
 
-interface AuditEntry { id: string; occurredAtUtc: string; actorId: string; action: string; objectType: string; objectId: string; details: Record<string, unknown>; }
+interface AuditEntry { id: string; occurredAtUtc: string; actorId: string; actorName?: string | null; action: string; objectType: string; objectId: string; details: Record<string, unknown>; }
 interface AuditPage { total: number; page: number; pageSize: number; items: AuditEntry[]; }
 const actions: Record<string, string> = {
   AppointmentStatusChanged: 'Зміна статусу замовлення', RepairPlanChanged: 'Зміна плану ремонту',
@@ -26,7 +29,9 @@ function dayStart(date: string, next = false): string | null {
   const instant = new Date(`${date}T00:00:00.000Z`);
   if (!Number.isFinite(instant.getTime()) || instant.toISOString().slice(0, 10) !== date) return null;
   if (next) instant.setUTCDate(instant.getUTCDate() + 1);
-  return instant.toISOString();
+  const local = `${instant.toISOString().slice(0, 10)}T00:00`;
+  const offsets = kyivOffsets(local);
+  return offsets.length === 1 ? kyivLocalToUtc(local, offsets[0]) : null;
 }
 function schedule(value: unknown): string {
   if (value === null) return 'немає';
@@ -64,7 +69,7 @@ export function auditDetails(entry: AuditEntry): string[] {
 }
 
 @Component({
-  selector: 'app-audit-log', imports: [ReactiveFormsModule], templateUrl: './audit-log.html', styleUrl: './audit-log.scss',
+  selector: 'app-audit-log', imports: [ReactiveFormsModule, RouterLink], templateUrl: './audit-log.html', styleUrl: './audit-log.scss',
 })
 export class AuditLog {
   private readonly http = inject(HttpClient);
@@ -84,7 +89,11 @@ export class AuditLog {
   readonly details = auditDetails;
   readonly actionLabel = (action: string) => actions[action] ?? action;
   readonly objectLabel = (object: string) => objects[object] ?? object;
-  readonly time = (value: string) => new Intl.DateTimeFormat('uk-UA', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(new Date(value)) + ' UTC';
+  readonly time = (value: string) => {
+    const formatted = new Intl.DateTimeFormat('uk-UA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(new Date(value));
+    const ambiguity = kyivTime(value, true).match(/ \(UTC[+-]\d\d:\d\d\)$/)?.[0] ?? '';
+    return formatted + ambiguity;
+  };
 
   constructor() {
     effect(() => {
@@ -106,6 +115,7 @@ export class AuditLog {
     this.validation.set(''); this.applied = { ...raw, actorId: raw.actorId.trim() }; this.page = 1; this.load();
   }
   changePage(delta: number) { if (!this.loading()) { this.page += delta; this.load(); } }
+  filterActor(actorId: string) { this.form.controls.actorId.setValue(actorId); this.apply(); }
   load() {
     if (!this.allowed()) return;
     this.request?.unsubscribe(); this.loading.set(true); this.error.set(''); this.result.set(null);

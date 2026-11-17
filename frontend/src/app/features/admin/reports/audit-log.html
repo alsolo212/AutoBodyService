@@ -1,9 +1,9 @@
 <section class="workspace-panel" aria-labelledby="audit-title">
   <div class="panel-heading"><div><p class="panel-eyebrow">ІСТОРІЯ ПОДІЙ</p><h2 id="audit-title">Журнал адміністративних дій</h2></div></div>
-  <p class="audit-note">Журнал доступний лише для перегляду. Дати фільтра та час подій наведено в UTC.</p>
+  <p class="audit-note">Журнал доступний лише для перегляду. Дати фільтра та час подій наведено за Києвом. Ім’я виконавця показано за поточним профілем.</p>
   <form class="audit-filters" [formGroup]="form" (ngSubmit)="apply()">
-    <div class="field"><label class="field__label" for="audit-from">З дати (UTC)</label><input class="field__input" id="audit-from" type="date" formControlName="fromDate" /></div>
-    <div class="field"><label class="field__label" for="audit-to">До дати включно (UTC)</label><input class="field__input" id="audit-to" type="date" formControlName="toDate" /></div>
+    <div class="field"><label class="field__label" for="audit-from">З дати</label><input class="field__input" id="audit-from" type="date" formControlName="fromDate" /></div>
+    <div class="field"><label class="field__label" for="audit-to">До дати включно</label><input class="field__input" id="audit-to" type="date" formControlName="toDate" /></div>
     <div class="field"><label class="field__label" for="audit-action">Тип дії</label><select class="field__input" id="audit-action" formControlName="action"><option value="">Усі дії</option>@for (choice of choices; track choice.value) { <option [value]="choice.value">{{ choice.label }}</option> }</select></div>
     <div class="field"><label class="field__label" for="audit-actor">Ідентифікатор виконавця</label><input class="field__input" id="audit-actor" type="text" maxlength="450" formControlName="actorId" /></div>
     <div class="field"><label class="field__label" for="audit-direction">Порядок часу</label><select class="field__input" id="audit-direction" formControlName="direction"><option value="desc">Спочатку нові</option><option value="asc">Спочатку давні</option></select></div>
@@ -18,9 +18,9 @@
       <div class="audit-table-wrap" tabindex="0" role="region" aria-label="Таблиця адміністративних дій"><table><thead><tr><th scope="col">Дата й час</th><th scope="col">Виконавець</th><th scope="col">Дія</th><th scope="col">Об’єкт</th><th scope="col">Відомості</th></tr></thead><tbody>
         @for (entry of data.items; track entry.id) { <tr>
           <td data-label="Дата й час"><time [attr.datetime]="entry.occurredAtUtc">{{ time(entry.occurredAtUtc) }}</time></td>
-          <td data-label="Виконавець"><span class="audit-id">{{ entry.actorId }}</span></td>
+          <td data-label="Виконавець"><div><strong>{{ entry.actorName || 'Ім’я недоступне' }}</strong><details><summary>Ідентифікатор</summary><span class="audit-id">{{ entry.actorId }}</span></details><button class="audit-retry" type="button" (click)="filterActor(entry.actorId)">Події виконавця</button></div></td>
           <td data-label="Дія">{{ actionLabel(entry.action) }}</td>
-          <td data-label="Об’єкт">{{ objectLabel(entry.objectType) }}<br /><span class="audit-id">{{ entry.objectId }}</span></td>
+          <td data-label="Об’єкт"><div>@if (entry.objectType === 'Appointment') { <a [routerLink]="['/admin/appointments', entry.objectId]">{{ objectLabel(entry.objectType) }}</a> } @else { {{ objectLabel(entry.objectType) }} }<br /><span class="audit-id">{{ entry.objectId }}</span></div></td>
           <td data-label="Відомості"><ul>@for (detail of details(entry); track $index) { <li>{{ detail }}</li> }</ul></td>
         </tr> }
       </tbody></table></div>

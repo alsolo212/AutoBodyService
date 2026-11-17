@@ -10,7 +10,7 @@ import { Component, ElementRef, input, output, viewChild } from '@angular/core';
       <ng-content />
       <div class="dialog-actions">
         <button class="button button--secondary" type="button" (click)="close()">{{ cancelLabel() }}</button>
-        <button class="button button--danger" type="button" (click)="confirm()">{{ confirmLabel() }}</button>
+        <button class="button" [class.button--danger]="confirmStyle() === 'danger'" [class.button--primary]="confirmStyle() === 'primary'" type="button" (click)="confirm()">{{ confirmLabel() }}</button>
       </div>
     </dialog>
   `,
@@ -21,6 +21,7 @@ export class ConfirmDialog {
   readonly description = input.required<string>();
   readonly cancelLabel = input('Скасувати');
   readonly confirmLabel = input('Підтвердити');
+  readonly confirmStyle = input<'danger' | 'primary'>('danger');
   readonly confirmed = output<void>();
   readonly closed = output<void>();
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');

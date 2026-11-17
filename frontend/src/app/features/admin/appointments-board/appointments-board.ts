@@ -1,7 +1,8 @@
 import { AdminShell } from '../../../layout/admin-shell/admin-shell';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, CdkDropListGroup } from '@angular/cdk/drag-drop';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
+import { Component, DestroyRef, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -9,6 +10,7 @@ import { Subject, catchError, finalize, forkJoin, map, of, switchMap } from 'rxj
 import { AppointmentStatus, price, statusLabel } from '../../appointments/appointments-api';
 import { AdminAppointmentApi, AdminBoardCard, AdminBoardFilter, AdminBoardPage } from '../appointment-details/admin-appointment-api';
 import { kyivWithOffset } from '../appointment-details/kyiv-date';
+import { ConfirmDialog } from '../../../shared/confirm-dialog/confirm-dialog';
 
 type StatusFilter = AppointmentStatus | '';
 interface Column { status: AppointmentStatus; page: number; total: number; items: AdminBoardCard[]; filtered: boolean; }
@@ -18,12 +20,14 @@ const successor: Partial<Record<AppointmentStatus, AppointmentStatus>> = {
 };
 const emptyColumns = (): Column[] => statuses.map(status => ({ status, page: 1, total: 0, items: [], filtered: false }));
 
-@Component({ selector: 'app-appointments-board', imports: [AdminShell, RouterLink, ReactiveFormsModule, CdkDropListGroup, CdkDropList, CdkDrag, CdkDragHandle],
+@Component({ selector: 'app-appointments-board', imports: [AdminShell, RouterLink, ReactiveFormsModule, CdkDropListGroup, CdkDropList, CdkDrag, CdkDragHandle, ConfirmDialog],
   templateUrl: './appointments-board.html', styleUrl: './appointments-board.scss' })
 export class AppointmentsBoard {
   private readonly api = inject(AdminAppointmentApi);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly document = inject(DOCUMENT);
+  private readonly transitionDialog = viewChild<ConfirmDialog>('transitionDialog');
   private readonly fb = inject(NonNullableFormBuilder);
   private readonly reloads = new Subject<void>();
   private filter: AdminBoardFilter = { search: '', from: '', to: '', sort: 'inspection', direction: 'asc', pageSize: 5 };
@@ -34,6 +38,7 @@ export class AppointmentsBoard {
   readonly error = signal('');
   readonly actionMessage = signal('');
   readonly success = signal('');
+  readonly pendingTransition = signal<{ card: AdminBoardCard; target: AppointmentStatus } | null>(null);
   readonly statusLabel = statusLabel;
   readonly price = price;
   readonly format = kyivWithOffset;
@@ -90,12 +95,24 @@ export class AppointmentsBoard {
     this.reload();
   }
   maxPage(column: Column) { return Math.max(1, Math.ceil(column.total / this.filter.pageSize)); }
+  scrollToStatus(status: AppointmentStatus) { this.document.getElementById(`column-${status}`)?.scrollIntoView({ block: 'start' }); }
   advance(card: AdminBoardCard, target = this.next(card.status)) {
     if (!target || target !== this.next(card.status) || this.loading() || this.saving()) return;
     this.actionMessage.set(''); this.success.set('');
     if (target === 'Scheduled' || target === 'Completed') {
       const action = target === 'Completed' ? 'complete' : card.repairPlan ? 'schedule' : 'plan';
       void this.router.navigate(['/admin/appointments', card.id], { queryParams: { action, version: card.version } }); return;
+    }
+    this.pendingTransition.set({ card, target });
+    this.transitionDialog()?.open();
+  }
+  confirmAdvance() {
+    const pending = this.pendingTransition(); this.pendingTransition.set(null);
+    if (!pending || this.loading() || this.saving()) return;
+    const { card, target } = pending;
+    const current = this.columns().find(column => column.status === card.status)?.items.find(item => item.id === card.id);
+    if (!current || current.version !== card.version || this.next(current.status) !== target) {
+      this.actionMessage.set('Замовлення змінилося. Оновіть дошку та перевірте стан.'); this.reload(); return;
     }
     this.saving.set(true);
     this.api.transition(card.id, { version: card.version, target }).pipe(
