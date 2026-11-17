@@ -21,7 +21,7 @@ describe('personal appointments pages', () => {
     const fixture = TestBed.createComponent(AppointmentList); fixture.detectChanges();
     http.expectOne('/api/health').flush({ status: 'Healthy' });
     expect(fixture.nativeElement.textContent).toContain('Завантажуємо записи');
-    http.expectOne('/api/appointments/my').flush([summary]); fixture.detectChanges();
+    http.expectOne('/api/appointments/my?category=active').flush([summary]); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Марка Модель');
     expect(fixture.nativeElement.textContent).toContain('*************4352');
     expect(fixture.nativeElement.textContent).toContain('Очікує огляду');
@@ -38,10 +38,20 @@ describe('personal appointments pages', () => {
   });
   it('refreshes the selected list after cancellation', () => {
     const fixture = TestBed.createComponent(AppointmentList); fixture.detectChanges();
-    http.expectOne('/api/health').flush({ status: 'Healthy' }); http.expectOne('/api/appointments/my').flush([summary]);
-    fixture.componentInstance.select('active'); http.expectOne('/api/appointments/my?category=active').flush([summary]);
+    http.expectOne('/api/health').flush({ status: 'Healthy' }); http.expectOne('/api/appointments/my?category=active').flush([summary]);
     fixture.componentInstance.onCancelled(); http.expectOne('/api/appointments/my?category=active').flush([]); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Запис скасовано.'); expect(fixture.nativeElement.textContent).toContain('Записів не знайдено');
+  });
+  it('starts with active records and offers categories in priority order', () => {
+    const fixture = TestBed.createComponent(AppointmentList); fixture.detectChanges();
+    http.expectOne('/api/health').flush({ status: 'Healthy' });
+    http.expectOne('/api/appointments/my?category=active').flush([summary]); fixture.detectChanges();
+    const filters = Array.from(fixture.nativeElement.querySelectorAll('.filters button')) as HTMLButtonElement[];
+    expect(filters.map(button => button.textContent?.trim())).toEqual(['Активні', 'Завершені', 'Скасовані', 'Усі']);
+    expect(filters.map(button => button.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false']);
+    filters[3].click(); http.expectOne('/api/appointments/my').flush([{ ...summary, status: 'Completed' }]); fixture.detectChanges();
+    expect(filters[3].getAttribute('aria-pressed')).toBe('true');
+    expect(fixture.nativeElement.textContent).toContain('Завершено');
   });
   it('renders details, history, participants and Kyiv dates without administrative fields', () => {
     const fixture = TestBed.createComponent(AppointmentDetail); fixture.detectChanges();

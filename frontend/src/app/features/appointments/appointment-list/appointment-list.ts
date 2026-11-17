@@ -12,15 +12,15 @@ export class AppointmentList {
   private readonly api = inject(AppointmentsApi);
   private readonly destroyRef = inject(DestroyRef);
   private readonly requests = new Subject<AppointmentCategory>();
-  readonly category = signal<AppointmentCategory>('all');
+  readonly category = signal<AppointmentCategory>('active');
   readonly items = signal<AppointmentSummary[]>([]);
   readonly loading = signal(true);
   readonly error = signal(false);
   readonly message = signal('');
   readonly statusLabel = statusLabel; readonly kyivTime = kyivTime; readonly price = price;
-  readonly filters: { value: AppointmentCategory; label: string }[] = [{ value: 'all', label: 'Усі' }, { value: 'active', label: 'Активні' }, { value: 'completed', label: 'Завершені' }, { value: 'cancelled', label: 'Скасовані' }];
+  readonly filters: { value: AppointmentCategory; label: string }[] = [{ value: 'active', label: 'Активні' }, { value: 'completed', label: 'Завершені' }, { value: 'cancelled', label: 'Скасовані' }, { value: 'all', label: 'Усі' }];
   constructor() {
-    this.requests.pipe(startWith('all' as AppointmentCategory), tap(() => { this.loading.set(true); this.error.set(false); this.items.set([]); }),
+    this.requests.pipe(startWith(this.category()), tap(() => { this.loading.set(true); this.error.set(false); this.items.set([]); }),
       switchMap(category => this.api.mine(category).pipe(catchError(() => { this.error.set(true); return of(null); }))),
       takeUntilDestroyed(this.destroyRef)).subscribe(items => { if (items) this.items.set(items); this.loading.set(false); });
   }
