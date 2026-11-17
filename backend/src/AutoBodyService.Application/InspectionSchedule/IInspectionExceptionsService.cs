@@ -11,5 +11,6 @@ public sealed record ExceptionSchedule(Guid Version, DateOnly Date, InspectionEx
 public interface IInspectionExceptionsService
 {
     Task<ExceptionSchedule> GetAsync(DateOnly date, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ExceptionSchedule>> GetRangeAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken);
     Task<ScheduleUpdateResult> UpdateAsync(Guid version, InspectionException? exception, DateOnly date, CancellationToken cancellationToken);
 }

@@ -1,20 +1,29 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { FormControl } from '@angular/forms';
 import { problemDescriptionValidator } from './problem-description-validator';
 import { Router, provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 import { Booking } from './booking';
+import { AvailabilityCalendar } from '../availability-calendar/availability-calendar';
+
+@Component({ selector: 'app-availability-calendar', template: '' })
+class CalendarStub {
+  @Input() today = '';
+  @Input() selectedDate = '';
+  @Input() revision = 0;
+  @Output() selectedDateChange = new EventEmitter<string>();
+}
 
 describe('Booking', () => {
   let http: HttpTestingController;
   const slot = '2099-01-15T08:00:00Z';
-  beforeEach(() => { TestBed.configureTestingModule({ imports: [Booking], providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()] }); http = TestBed.inject(HttpTestingController); });
+  beforeEach(() => { TestBed.configureTestingModule({ imports: [Booking], providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()] }).overrideComponent(Booking, { remove: { imports: [AvailabilityCalendar] }, add: { imports: [CalendarStub] } }); http = TestBed.inject(HttpTestingController); });
   afterEach(() => http.verify());
   function setup() {
     const fixture = TestBed.createComponent(Booking);
-    http.expectOne(r => r.url === '/api/inspection-slots').flush({ slots: [] });
     const component = fixture.componentInstance;
     component.form.controls.date.setValue('2099-01-15');
     http.expectOne(r => r.url === '/api/inspection-slots' && r.params.get('date') === '2099-01-15').flush({ slots: [{ startUtc: slot, endUtc: '2099-01-15T08:30:00Z' }] });

@@ -8,12 +8,14 @@
       @if (step() === 1) {
         <h2>Дата і час огляду</h2>
         @if (conflict()) { <p class="auth-alert" role="alert">Цей час уже недоступний. Оберіть інший слот — дані автомобіля та опис збережено.</p> }
-        <label class="field"><span class="field__label">Дата</span><input class="field__input" type="date" formControlName="date" [min]="today" required></label>
+        <app-availability-calendar [today]="today" [selectedDate]="form.controls.date.value" [revision]="calendarRevision()" (selectedDateChange)="form.controls.date.setValue($event)" />
+        <label class="field"><span class="field__label">Дата</span><input class="field__input" type="date" formControlName="date" [min]="today" max="9998-12-31" aria-describedby="date-hint" required></label>
+        <span class="field__hint" id="date-hint">Також можна ввести дату вручну.</span>
         @if (loading()) { <p aria-live="polite">Завантажуємо вільний час…</p> }
         @else if (loadError()) { <p role="alert">Не вдалося завантажити вільний час.</p><button type="button" class="button button--secondary" (click)="refresh()">Спробувати ще раз</button> }
         @else if (slots().length) {
           <fieldset><legend class="field__label">Вільний час (30 хвилин)</legend><div class="slots">@for (slot of slots(); track slot.startUtc) { <label class="slot"><input type="radio" formControlName="slot" [value]="slot.startUtc"><span>{{ format(slot.startUtc) }}</span></label> }</div></fieldset>
-        } @else { <p aria-live="polite">На цю дату вільного часу немає. Оберіть іншу дату.</p> }
+        } @else if (form.controls.date.value) { <p aria-live="polite">На цю дату вільного часу немає. Оберіть іншу дату.</p> }
         @if (form.controls.slot.touched && form.controls.slot.invalid) { <p class="field__error" role="alert">Оберіть час огляду.</p> }
       } @else if (step() === 2) {
         <h2>Дані автомобіля</h2>

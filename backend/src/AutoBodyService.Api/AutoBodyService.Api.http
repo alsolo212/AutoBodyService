@@ -295,3 +295,6 @@ GET {{baseUrl}}/api/appointments/my/00000000-0000-4000-8000-000000000001
 ### Finance report returns 422 if exact monthly totals cannot fit decimal;
 ### GET /expenses remains available to correct the original records.
 GET {{baseUrl}}/api/admin/reports/finance?year=2026&month=11
+
+### Daily availability for a Kyiv month (authenticated cookie)
+GET {{baseUrl}}/api/inspection-slots/month?year=2099&month=1

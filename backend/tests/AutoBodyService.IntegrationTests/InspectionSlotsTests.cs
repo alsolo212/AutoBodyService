@@ -22,7 +22,7 @@ public sealed class InspectionSlotsTests
     private static readonly DateTimeOffset InitialNow = new(2026, 3, 1, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task SlotsRespectBookingsCurrentTimeExceptionsAndKyivTransitions()
+    public async Task SlotsAndMonthAvailabilityRespectBookingsCurrentTimeExceptionsAndKyivTransitions()
     {
         var database = Guid.NewGuid().ToString();
         var postgres = Environment.GetEnvironmentVariable("SLOTS_TEST_POSTGRES");
@@ -68,7 +68,10 @@ public sealed class InspectionSlotsTests
         }
         using var anonymous = Client(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/inspection-slots?date=2026-11-09")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/inspection-slots/month?year=2026&month=11")).StatusCode);
         using var client = await Login(factory);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/inspection-slots/month?year=2026&month=13")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/inspection-slots/month?year=1&month=1")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/inspection-slots")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/inspection-slots?date=2026-02-30")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/inspection-slots?date=0001-01-01")).StatusCode);
@@ -96,12 +99,34 @@ public sealed class InspectionSlotsTests
         }
         Assert.Equal(3, Starts(await Read(client, "2026-11-16")).Length);
         Assert.Empty(Starts(await Read(client, "2026-11-23")));
+        var month = await (await client.GetAsync("/api/inspection-slots/month?year=2026&month=11")).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Europe/Kyiv", month.GetProperty("timeZone").GetString());
+        var days = month.GetProperty("days").EnumerateArray().ToArray();
+        Assert.Equal(30, days.Length);
+        foreach (var item in days)
+        {
+            var date = item.GetProperty("date").GetString()!;
+            Assert.Equal(Starts(await Read(client, date)).Length > 0, item.GetProperty("available").GetBoolean());
+        }
+        Assert.True(days.Single(x => x.GetProperty("date").GetString() == "2026-11-09").GetProperty("available").GetBoolean());
+        Assert.False(days.Single(x => x.GetProperty("date").GetString() == "2026-11-23").GetProperty("available").GetBoolean());
+        clock.Now = new(2026, 11, 9, 7, 0, 0, TimeSpan.Zero);
+        month = await (await client.GetAsync("/api/inspection-slots/month?year=2026&month=11")).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.False(month.GetProperty("days").EnumerateArray().Single(x => x.GetProperty("date").GetString() == "2026-11-09").GetProperty("available").GetBoolean());
+        clock.Now = InitialNow;
         var spring = await Read(client, "2026-03-29");
         Assert.Equal(new[] { "2026-03-29T01:00:00+00:00" }, Starts(spring));
         var fall = await Read(client, "2026-10-25");
         Assert.Equal(new[] { "2026-10-24T23:30:00+00:00", "2026-10-25T00:00:00+00:00", "2026-10-25T01:00:00+00:00", "2026-10-25T01:30:00+00:00", "2026-10-25T02:00:00+00:00" }, Starts(fall));
         foreach (var slot in fall.GetProperty("slots").EnumerateArray())
             Assert.Equal(TimeSpan.FromMinutes(30), slot.GetProperty("endUtc").GetDateTimeOffset() - slot.GetProperty("startUtc").GetDateTimeOffset());
+        foreach (var date in new[] { "2026-03-29", "2026-10-25" })
+        {
+            var parts = date.Split('-');
+            var transitionMonth = await (await client.GetAsync($"/api/inspection-slots/month?year={parts[0]}&month={parts[1]}")).Content.ReadFromJsonAsync<JsonElement>();
+            var transitionDay = transitionMonth.GetProperty("days").EnumerateArray().Single(x => x.GetProperty("date").GetString() == date);
+            Assert.Equal(Starts(await Read(client, date)).Length > 0, transitionDay.GetProperty("available").GetBoolean());
+        }
         Assert.Empty(Starts(await Read(client, "9998-12-31")));
     }
 

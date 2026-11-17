@@ -1,0 +1,23 @@
+<section class="calendar" aria-labelledby="calendar-title">
+  <h3 id="calendar-title">Календар доступних дат</h3>
+  <p id="calendar-help">Оберіть день. Стрілки переміщують фокус календарем, Enter або пробіл обирають доступну дату.</p>
+  <div class="calendar__legend" aria-label="Позначення днів"><span class="legend-available">Є вільний час</span><span class="legend-unavailable">Немає вільного часу</span><span class="legend-past">Минула дата</span></div>
+  <div class="calendar__heading">
+    <button type="button" class="calendar__arrow" aria-label="Попередній місяць" (click)="moveMonth(-1)" [disabled]="month() <= today.slice(0, 7)">‹</button>
+    <strong aria-live="polite">{{ monthLabel }}</strong>
+    <button type="button" class="calendar__arrow" aria-label="Наступний місяць" (click)="moveMonth(1)" [disabled]="month() >= '9998-12'">›</button>
+  </div>
+  <div class="calendar__grid" role="group" aria-labelledby="calendar-title" aria-describedby="calendar-help" [attr.aria-busy]="loading()">
+    <div class="calendar__week" aria-hidden="true">@for (weekday of weekdays; track weekday) { <span>{{ weekday }}</span> }</div>
+    <div class="calendar__days">
+      @for (blank of leadingDays; track $index) { <span class="calendar__blank" aria-hidden="true"></span> }
+      @for (day of days(); track day.date) {
+        <button type="button" class="calendar__day" [class.calendar__day--available]="day.status === 'available'" [class.calendar__day--past]="day.status === 'past'" [class.calendar__day--unavailable]="day.status === 'unavailable'" [class.calendar__day--selected]="selectedDate === day.date" [id]="'booking-day-' + day.date" [attr.aria-label]="day.label" [attr.aria-pressed]="selectedDate === day.date" [attr.aria-disabled]="day.status !== 'available'" [attr.aria-current]="today === day.date ? 'date' : null" [attr.tabindex]="focused() === day.date ? 0 : -1" (focus)="focused.set(day.date)" (click)="select(day.date)" (keydown)="onKey($event, day.date)">{{ day.number }}</button>
+      }
+    </div>
+  </div>
+  @if (searching()) { <p role="status">Шукаємо найближчу доступну дату…</p> }
+  @else if (loading()) { <p role="status">Завантажуємо доступність дат…</p> }
+  @if (error()) { <p role="alert">Не вдалося завантажити доступність дат.</p><button type="button" class="button button--secondary" (click)="retry()">Спробувати ще раз</button> }
+  @if (searchExhausted()) { <p role="status">За наступні 12 місяців вільних дат не знайдено.</p>@if (month() < '9998-12') { <button type="button" class="button button--secondary" (click)="searchMore()">Шукати далі</button> } }
+</section>

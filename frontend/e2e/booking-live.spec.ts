@@ -19,6 +19,9 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   });
   expect(scheduleStatus).toBe(204);
   await page.goto('/account/book');
+  await expect(page.getByLabel('Дата', { exact: true })).not.toHaveValue('');
+  const suggested = await page.getByLabel('Дата', { exact: true }).inputValue();
+  expect(await page.evaluate(async date => (await (await fetch(`/api/inspection-slots?date=${date}`)).json()).slots.length, suggested)).toBeGreaterThan(0);
   await page.getByLabel('Дата', { exact: true }).fill('2099-01-15');
   await page.getByLabel('09:00', { exact: true }).check();
   await page.getByRole('button', { name: 'Далі' }).click();

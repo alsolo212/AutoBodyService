@@ -27,6 +27,7 @@ public sealed class InspectionReminderPostgresTests(PostgresIdentityFixture fixt
     {
         public Task<IReadOnlyList<InspectionSlot>> GetAvailableAsync(DateOnly date, CancellationToken token) =>
             Task.FromResult<IReadOnlyList<InspectionSlot>>([new(start, start.AddMinutes(30))]);
+        public Task<IReadOnlyList<InspectionDayAvailability>> GetMonthAsync(int year, int month, CancellationToken token) => throw new NotSupportedException();
     }
     private sealed class CallbackPublisher(Func<IReadOnlyCollection<string>, Task> callback) : INotificationRealtimePublisher
     {

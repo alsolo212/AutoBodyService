@@ -6,6 +6,7 @@ import { Router } from '@angular/router';
 import { AccountHeader } from '../../appointments/account-shell/account-header';
 import { problemDescriptionValidator } from './problem-description-validator';
 import { kyivTime } from '../../../shared/time/kyiv-time';
+import { AvailabilityCalendar } from '../availability-calendar/availability-calendar';
 import { Subject, catchError, finalize, map, merge, of, startWith, switchMap, tap } from 'rxjs';
 
 interface Slot { startUtc: string; endUtc: string; }
@@ -16,7 +17,7 @@ const nonBlank = (control: AbstractControl): ValidationErrors | null =>
 const kyivDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 export const formatInspection = kyivTime;
 
-@Component({ selector: 'app-booking', imports: [ReactiveFormsModule, AccountHeader], templateUrl: './booking.html', styleUrl: './booking.scss' })
+@Component({ selector: 'app-booking', imports: [ReactiveFormsModule, AccountHeader, AvailabilityCalendar], templateUrl: './booking.html', styleUrl: './booking.scss' })
 export class Booking {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
@@ -24,7 +25,7 @@ export class Booking {
   private readonly fb = inject(FormBuilder).nonNullable;
   readonly today = kyivDate();
   readonly form = this.fb.group({
-    date: [this.today, [Validators.required]],
+    date: ['', [Validators.required]],
     slot: ['', [Validators.required]],
     vin: ['', [nonBlank, Validators.pattern(/^[A-HJ-NPR-Z0-9]{17}$/)]],
     make: ['', [nonBlank, Validators.maxLength(200)]],
@@ -38,11 +39,12 @@ export class Booking {
   readonly submitError = signal('');
   readonly submitting = signal(false);
   readonly conflict = signal(false);
+  readonly calendarRevision = signal(0);
   readonly format = formatInspection;
   private readonly refreshRequested = new Subject<void>();
 
   constructor() {
-    merge(this.form.controls.date.valueChanges.pipe(startWith(this.today)), this.refreshRequested.pipe(map(() => this.form.controls.date.value))).pipe(tap(() => this.form.controls.slot.setValue('')),
+    merge(this.form.controls.date.valueChanges.pipe(startWith('')), this.refreshRequested.pipe(map(() => this.form.controls.date.value))).pipe(tap(() => this.form.controls.slot.setValue('')),
       switchMap(date => this.fetchSlots(date)), takeUntilDestroyed(this.destroyRef)).subscribe();
   }
   private fetchSlots(date: string) {
@@ -73,7 +75,7 @@ export class Booking {
     ).subscribe({
       next: result => void this.router.navigate(['/account/book/success'], { state: { inspectionStartUtc: result.inspectionStartUtc } }),
       error: (error: HttpErrorResponse) => {
-        if (error.status === 409) { this.conflict.set(true); this.step.set(1); this.refresh(); }
+        if (error.status === 409) { this.conflict.set(true); this.step.set(1); this.calendarRevision.update(value => value + 1); this.refresh(); }
         else this.submitError.set(error.status === 400 ? 'Перевірте введені дані та спробуйте ще раз.' : 'Не вдалося створити запис. Перевірте з’єднання та спробуйте ще раз.');
       },
     });

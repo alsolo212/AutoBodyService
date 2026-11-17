@@ -12,16 +12,27 @@ public sealed class InspectionExceptionsService(ApplicationDbContext db) : IInsp
     private static readonly TimeSpan SlotLength = TimeSpan.FromMinutes(30);
 
     public async Task<ExceptionSchedule> GetAsync(DateOnly date, CancellationToken cancellationToken)
+        => (await GetRangeAsync(date, date, cancellationToken))[0];
+
+    public async Task<IReadOnlyList<ExceptionSchedule>> GetRangeAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken)
     {
-        // One query keeps the version and weekly template consistent.
         AutoBodyService.Domain.InspectionSchedule.InspectionSchedule schedule;
-        InspectionDateOverride? entry;
+        List<InspectionDateOverride> entries;
         do
         {
             schedule = await db.InspectionSchedules.AsNoTracking().Include(s => s.Hours).SingleAsync(cancellationToken);
-            entry = await db.InspectionDateOverrides.AsNoTracking().Include(x => x.Intervals).Include(x => x.Slots)
-                .SingleOrDefaultAsync(x => x.Date == date, cancellationToken);
+            entries = await db.InspectionDateOverrides.AsNoTracking().Include(x => x.Intervals).Include(x => x.Slots)
+                .Where(x => x.Date >= from && x.Date <= to).ToListAsync(cancellationToken);
         } while (schedule.Version != await db.InspectionSchedules.AsNoTracking().Select(s => s.Version).SingleAsync(cancellationToken));
+        var byDate = entries.ToDictionary(x => x.Date);
+        var result = new List<ExceptionSchedule>();
+        for (var date = from; date <= to; date = date.AddDays(1))
+            result.Add(BuildSchedule(schedule, byDate.GetValueOrDefault(date), date));
+        return result;
+    }
+
+    private static ExceptionSchedule BuildSchedule(AutoBodyService.Domain.InspectionSchedule.InspectionSchedule schedule, InspectionDateOverride? entry, DateOnly date)
+    {
         var intervals = entry?.Mode switch
         {
             DateOverrideMode.Closed => [],
