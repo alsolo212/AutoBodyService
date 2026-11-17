@@ -4,23 +4,26 @@
     <button class="button button--secondary" type="button" (click)="readAll()" [disabled]="busy() || !auth.session() || !notifications.unreadCount()">Позначити всі прочитаними</button>
   </div>
   <div class="inbox__filters" aria-label="Фільтр сповіщень">
-    <button type="button" [attr.aria-pressed]="filter() === 'all'" (click)="filter.set('all')">Усі</button>
-    <button type="button" [attr.aria-pressed]="filter() === 'unread'" (click)="filter.set('unread')">Непрочитані <span>{{ notifications.unreadCount() }}</span></button>
+    <button type="button" [attr.aria-pressed]="filter() === 'all'" (click)="setFilter('all')">Усі</button>
+    <button type="button" [attr.aria-pressed]="filter() === 'unread'" (click)="setFilter('unread')">Непрочитані <span>{{ notifications.unreadCount() }}</span></button>
   </div>
   @if (actionError()) { <p class="auth-alert" role="alert">{{ actionError() }}</p> }
   @if (!auth.session()) { <div class="inbox__state" role="alert">Сесію завершено. <a routerLink="/login">Увійти знову</a></div> }
   @else if (notifications.loading() && !notifications.loaded()) { <p class="inbox__state" role="status">Завантажуємо сповіщення…</p> }
   @else if (notifications.error()) { <div class="inbox__state" role="alert"><p>{{ notifications.error() }}</p><button class="button button--secondary" type="button" (click)="notifications.refresh()">Спробувати ще раз</button></div> }
-  @else if (!visible().length) { <p class="inbox__state">{{ filter() === 'unread' ? 'Непрочитаних сповіщень немає.' : 'Сповіщень поки немає.' }}</p> }
+  @else if (!visible().length) { <div class="inbox__state"><p>{{ filter() === 'unread' ? 'Непрочитаних сповіщень немає.' : 'Сповіщень поки немає.' }}</p><p>{{ filter() === 'unread' ? 'Нові сповіщення з’являться тут.' : 'Тут з’являться повідомлення про ваші записи та важливі події.' }}</p>@if (filter() === 'unread' && notifications.history().length) { <button type="button" (click)="setFilter('all')">Переглянути всі сповіщення</button> }</div> }
   @else {
     <ol class="inbox__list">@for (item of visible(); track item.id) {
       <li class="inbox__item" [class.inbox__item--unread]="!item.readAtUtc">
-        <div class="inbox__meta"><span>{{ item.readAtUtc ? 'Прочитано' : 'Нове' }}</span><time [attr.datetime]="item.createdAtUtc">{{ format(item.createdAtUtc, true) }} · Київ</time></div>
-        <h2>{{ item.title }}</h2><p>{{ item.message }}</p>
-        <div class="inbox__actions">
-          @if (safeLink(item.link); as link) { <a [routerLink]="link">Відкрити замовлення →</a> }
-          @if (!item.readAtUtc) { <button type="button" (click)="read(item.id)" [disabled]="busy()">Позначити прочитаним</button> }
-        </div>
+        <details (toggle)="opened($event, item)"><summary>
+          <div class="inbox__meta"><span>{{ item.readAtUtc ? 'Прочитано' : 'Нове' }}</span><time [attr.datetime]="item.createdAtUtc">{{ format(item.createdAtUtc, true) }} · Київ</time></div>
+          <h2>{{ item.title }}</h2><span class="inbox__expand">Переглянути сповіщення</span>
+        </summary><p>{{ item.message }}</p>
+          <div class="inbox__actions">
+            @if (safeLink(item.link); as link) { <a [routerLink]="link" (click)="openLink(item)" (auxclick)="openLink(item)">Відкрити замовлення →</a> }
+            @if (!item.readAtUtc) { <button type="button" (click)="read(item.id)" [disabled]="busy() || reading().has(item.id)">Позначити прочитаним</button> }
+          </div>
+        </details>
       </li>
     }</ol>
   }

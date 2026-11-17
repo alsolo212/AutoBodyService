@@ -12,6 +12,7 @@ describe('CancelAppointment', () => {
     const fixture = TestBed.createComponent(CancelAppointment);
     fixture.componentRef.setInput('id', 'order-1'); fixture.componentRef.setInput('isOwn', true);
     fixture.componentRef.setInput('status', 'AwaitingInspection'); fixture.componentRef.setInput('inspectionStartUtc', '2099-01-01T10:00:00Z');
+    fixture.componentRef.setInput('vehicle', 'Тест Авто');
     fixture.detectChanges(); return fixture;
   }
   it('shows the action only for an owned future appointment awaiting inspection', () => {
@@ -23,6 +24,8 @@ describe('CancelAppointment', () => {
   it('confirms with antiforgery, prevents duplicate requests and emits only after success', () => {
     const f = setup(); const component = f.componentInstance; const output = vi.fn(); component.cancelled.subscribe(output);
     const dialog = f.nativeElement.querySelector('dialog') as HTMLDialogElement; dialog.showModal = vi.fn(); dialog.close = vi.fn();
+    expect(dialog.textContent).toContain('Тест Авто'); expect(dialog.textContent).toContain('12:00');
+    expect(dialog.textContent).toContain('створити новий запис'); expect(dialog.textContent).toContain('Залишити запис'); expect(dialog.textContent).toContain('Так, скасувати');
     (f.nativeElement.querySelector('.actions button') as HTMLButtonElement).click(); expect(dialog.showModal).toHaveBeenCalledOnce();
     http.expectNone('/api/auth/antiforgery');
     (f.nativeElement.querySelector('.dialog-actions .button--secondary') as HTMLButtonElement).click(); http.expectNone('/api/auth/antiforgery');

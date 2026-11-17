@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize } from 'rxjs';
 import { ConfirmDialog } from '../../../shared/confirm-dialog/confirm-dialog';
 import { AppointmentStatus, AppointmentsApi } from '../appointments-api';
+import { kyivTime } from '../../../shared/time/kyiv-time';
 
 @Component({ selector: 'app-cancel-appointment', imports: [ConfirmDialog], templateUrl: './cancel-appointment.html', styleUrl: './cancel-appointment.scss' })
 export class CancelAppointment {
@@ -11,6 +12,7 @@ export class CancelAppointment {
   readonly status = input.required<AppointmentStatus>();
   readonly inspectionStartUtc = input.required<string>();
   readonly isOwn = input.required<boolean>();
+  readonly vehicle = input('');
   readonly cancelled = output<void>();
   readonly saving = signal(false);
   readonly error = signal('');
@@ -19,6 +21,11 @@ export class CancelAppointment {
   private readonly dialog = viewChild.required(ConfirmDialog);
   private readonly now = signal(Date.now());
   readonly available = computed(() => this.isOwn() && this.status() === 'AwaitingInspection' && Date.parse(this.inspectionStartUtc()) > this.now());
+  readonly description = computed(() => {
+    const vehicle = this.vehicle() ? ` для ${this.vehicle()}` : '';
+    const date = Number.isFinite(Date.parse(this.inspectionStartUtc())) ? ` на ${kyivTime(this.inspectionStartUtc(), true)} за Києвом` : '';
+    return `Запис на огляд${vehicle}${date} буде скасовано. Щоб обрати інший час, потрібно створити новий запис.`;
+  });
 
   constructor() {
     effect(onCleanup => {

@@ -30,7 +30,7 @@ describe('personal appointments pages', () => {
     c.select('active'); const cancelled = http.expectOne('/api/appointments/my?category=active');
     c.select('completed'); expect(cancelled.cancelled).toBe(true);
     http.expectOne('/api/appointments/my?category=completed').flush([]); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Записів не знайдено');
+    expect(fixture.nativeElement.textContent).toContain('Завершених записів поки немає');
     c.select('cancelled'); http.expectOne('/api/appointments/my?category=cancelled').flush(null, { status: 500, statusText: 'Error' }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Не вдалося завантажити записи');
     c.select('cancelled'); http.expectOne('/api/appointments/my?category=cancelled').flush([{ ...summary, status: 'Cancelled', repairPlan: plan }]); fixture.detectChanges();
@@ -40,7 +40,21 @@ describe('personal appointments pages', () => {
     const fixture = TestBed.createComponent(AppointmentList); fixture.detectChanges();
     http.expectOne('/api/health').flush({ status: 'Healthy' }); http.expectOne('/api/appointments/my?category=active').flush([summary]);
     fixture.componentInstance.onCancelled(); http.expectOne('/api/appointments/my?category=active').flush([]); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Запис скасовано.'); expect(fixture.nativeElement.textContent).toContain('Записів не знайдено');
+    expect(fixture.nativeElement.textContent).toContain('Запис скасовано.'); expect(fixture.nativeElement.textContent).toContain('Активних записів поки немає');
+  });
+  it('explains each empty category and clears the cancellation notice when changing filters', () => {
+    const fixture = TestBed.createComponent(AppointmentList); fixture.detectChanges();
+    http.expectOne('/api/health').flush({ status: 'Healthy' }); http.expectOne('/api/appointments/my?category=active').flush([]); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Активних записів поки немає');
+    fixture.componentInstance.onCancelled(); http.expectOne('/api/appointments/my?category=active').flush([]); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Запис скасовано.');
+    fixture.componentInstance.select('cancelled'); http.expectOne('/api/appointments/my?category=cancelled').flush([]); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Скасованих записів поки немає');
+    expect(fixture.nativeElement.textContent).not.toContain('Запис скасовано.');
+    fixture.componentInstance.select('completed'); http.expectOne('/api/appointments/my?category=completed').flush([]); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Завершених записів поки немає');
+    (fixture.nativeElement.querySelector('.empty-action') as HTMLButtonElement).click(); http.expectOne('/api/appointments/my').flush([]); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('У вас поки немає записів');
   });
   it('starts with active records and offers categories in priority order', () => {
     const fixture = TestBed.createComponent(AppointmentList); fixture.detectChanges();
@@ -72,7 +86,7 @@ describe('personal appointments pages', () => {
     fixture.componentInstance.reload(); http.expectOne('/api/appointments/my/one').flush(null, { status: 500, statusText: 'Error' }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Не вдалося завантажити запис');
     fixture.componentInstance.reload(); http.expectOne('/api/appointments/my/one').flush({ ...detail, history: [], repairPlan: null, participants: null }); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Дані про вартість і терміни поки недоступні');
+    expect(fixture.nativeElement.textContent).toContain('Вартість і терміни ще не узгоджені');
     expect(fixture.nativeElement.textContent).toContain('Історія статусів поки недоступна');
     expect(fixture.nativeElement.textContent).toContain('Дані про учасників поки недоступні');
   });

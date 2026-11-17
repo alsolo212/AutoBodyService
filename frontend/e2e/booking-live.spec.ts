@@ -96,7 +96,7 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await page.getByLabel('Повторіть пароль').fill('Example-password-123!');
   await page.getByRole('button', { name: 'Зареєструватися' }).click();
   await expect(page).toHaveURL(/\/account\/appointments$/);
-  await expect(page.getByText('Записів не знайдено')).toBeVisible();
+  await expect(page.getByText('Активних записів поки немає')).toBeVisible();
   await page.goto(adminOrder!);
   await expect(page.getByRole('heading', { name: 'Запис не знайдено' })).toBeVisible();
   await page.getByRole('link', { name: 'Мої записи' }).first().click();
@@ -137,7 +137,7 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await menu.click();
   await expect(page.getByText('*************4352', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Завершені' }).click();
-  await expect(page.getByText('Записів не знайдено')).toBeVisible();
+  await expect(page.getByText('Завершених записів поки немає')).toBeVisible();
   await page.getByRole('button', { name: 'Активні' }).click();
   await page.getByRole('link', { name: /Деталі запису/ }).click();
   await expect(page.getByText('Опис для огляду')).toBeVisible();
@@ -151,9 +151,14 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await page.getByLabel('Дії із записом').click();
   await page.getByRole('button', { name: 'Скасувати запис' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog')).toContainText('Клієнт Авто');
+  await expect(page.getByRole('dialog')).toContainText('створити новий запис');
+  await page.getByRole('dialog').getByRole('button', { name: 'Залишити запис' }).click();
+  await expect(page.locator('main p.status')).toHaveText('Очікує огляду');
+  await page.getByRole('button', { name: 'Скасувати запис' }).click();
   const cancellation = page.waitForResponse(r => /\/api\/appointments\/[^/]+\/cancel$/.test(r.url()) && r.request().method() === 'POST');
   const updated = page.waitForResponse(r => /\/api\/appointments\/my\/[^/]+$/.test(r.url()) && r.request().method() === 'GET');
-  await page.getByRole('button', { name: 'Підтвердити', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Так, скасувати' }).click();
   expect((await cancellation).status()).toBe(204); expect((await updated).status()).toBe(200);
   await expect(page.getByText('Запис скасовано.')).toBeVisible();
   await expect(page.getByText('Скасовано', { exact: true }).first()).toBeVisible();

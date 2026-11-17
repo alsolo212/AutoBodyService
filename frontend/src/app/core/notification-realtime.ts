@@ -2,7 +2,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { DestroyRef, Injectable, InjectionToken, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HubConnection, HubConnectionBuilder, HubConnectionState, HttpTransportType, LogLevel } from '@microsoft/signalr';
-import { Observable, Subject, Subscription, catchError, finalize, map, of, switchMap, tap, throwError } from 'rxjs';
+import { Observable, Subject, Subscription, catchError, finalize, map, of, shareReplay, switchMap, tap, throwError } from 'rxjs';
 import { AuthService, AuthSession } from './auth';
 
 function accountKey(session: AuthSession | null): string | null {
@@ -45,6 +45,7 @@ export class NotificationRealtime {
   private sessionCheck: Subscription | null = null;
   private account: string | null = null;
   private generation = 0;
+  private readonly pendingReads = new Map<string, Observable<void>>();
 
   constructor() {
     this.refreshRequests.pipe(switchMap(generation => {
@@ -108,11 +109,21 @@ export class NotificationRealtime {
   markRead(id: string): Observable<void> {
     const passwordRevision = this.auth.passwordChangeRevision();
     const sessionRevision = this.auth.sessionVersion();
-    return this.http.get<void>('/api/auth/antiforgery').pipe(
-      switchMap(() => this.http.patch<void>(`/api/notifications/${encodeURIComponent(id)}/read`, null)),
+    const account = accountKey(this.auth.session());
+    const key = `${sessionRevision}|${passwordRevision}|${account}|${id}`;
+    const pending = this.pendingReads.get(key);
+    if (pending) return pending;
+    const request = this.http.get<void>('/api/auth/antiforgery').pipe(
+      switchMap(() => sessionRevision === this.auth.sessionVersion() && passwordRevision === this.auth.passwordChangeRevision() && account !== null && account === accountKey(this.auth.session())
+        ? this.http.patch<void>(`/api/notifications/${encodeURIComponent(id)}/read`, null)
+        : throwError(() => new Error('Session changed before marking notification read.'))),
       tap(() => this.refresh()),
       catchError(error => this.handleActionError(error, passwordRevision, sessionRevision)),
+      finalize(() => this.pendingReads.delete(key)),
+      shareReplay({ bufferSize: 1, refCount: false }),
     );
+    this.pendingReads.set(key, request);
+    return request;
   }
 
   markAllRead(): Observable<void> {

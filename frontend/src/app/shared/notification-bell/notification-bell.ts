@@ -1,6 +1,7 @@
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
+import { finalize } from 'rxjs';
 import { RouterLink } from '@angular/router';
-import { NotificationRealtime } from '../../core/notification-realtime';
+import { NotificationItem, NotificationRealtime } from '../../core/notification-realtime';
 import { AuthService } from '../../core/auth';
 import { kyivTime } from '../time/kyiv-time';
 
@@ -17,6 +18,24 @@ export class NotificationBell {
   readonly recent = computed(() => this.notifications.history().slice(0, 5));
   readonly format = kyivTime;
   readonly safeLink = notificationLink;
+  readonly readError = signal('');
+  readonly failedId = signal<string | null>(null);
+  private readonly pending = new Set<string>();
+  opened(event: Event, item: NotificationItem) {
+    if ((event.currentTarget as HTMLDetailsElement).open && !item.readAtUtc) this.read(item.id);
+  }
+  read(id: string) {
+    if (this.pending.has(id)) return;
+    this.pending.add(id); this.readError.set(''); this.failedId.set(null);
+    this.notifications.markRead(id).pipe(finalize(() => this.pending.delete(id))).subscribe({
+      error: () => { this.failedId.set(id); this.readError.set('Не вдалося позначити сповіщення прочитаним.'); },
+    });
+  }
+  visit(item: NotificationItem, event: Event) { if (!item.readAtUtc) this.read(item.id); this.dismiss(event); }
+  dismiss(event: Event) {
+    const details = (event.currentTarget as HTMLElement).closest('details.bell') as HTMLDetailsElement | null;
+    if (details) { details.open = false; details.querySelector<HTMLElement>(':scope > summary')?.focus(); }
+  }
   close(event: Event) {
     const details = event.currentTarget as HTMLDetailsElement;
     details.open = false;

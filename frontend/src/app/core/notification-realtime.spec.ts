@@ -151,4 +151,22 @@ describe('NotificationRealtime', () => {
     const all = http.expectOne('/api/notifications/read-all'); expect(all.request.method).toBe('POST'); all.flush(null);
     http.expectOne('/api/notifications').flush([]); expect(service.history()).toEqual([]);
   });
+  it('shares concurrent reads for the same notification and permits retry after an error', async () => {
+    await signIn(); let errors = 0;
+    service.markRead('same').subscribe({ error: () => errors++ });
+    service.markRead('same').subscribe({ error: () => errors++ });
+    http.expectOne('/api/auth/antiforgery').flush(null);
+    http.expectOne('/api/notifications/same/read').flush(null, { status: 503, statusText: 'Unavailable' });
+    expect(errors).toBe(2); http.expectNone('/api/notifications');
+    service.markRead('same').subscribe(); http.expectOne('/api/auth/antiforgery').flush(null);
+    http.expectOne('/api/notifications/same/read').flush(null); http.expectOne('/api/notifications').flush([]);
+  });
+  it('does not send an old notification read after the account changes', async () => {
+    await signIn(); let failed = false;
+    service.markRead('old').subscribe({ error: () => { failed = true; } });
+    const token = http.expectOne('/api/auth/antiforgery');
+    auth.invalidateSession(); auth.session.set({ ...user, phone: '+380000000002' });
+    token.flush(null); expect(failed).toBe(true); http.expectNone('/api/notifications/old/read');
+    TestBed.tick(); http.expectOne('/api/notifications').flush([]); await Promise.resolve(); http.expectOne('/api/notifications').flush([]);
+  });
 });

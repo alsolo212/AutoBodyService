@@ -13,6 +13,14 @@
 .inbox__meta { display: flex; flex-wrap: wrap; gap: .4rem 1rem; justify-content: space-between; color: #66766c; font-size: .76rem; }
 .inbox__item--unread .inbox__meta span { color: #456a2f; font-weight: 800; }
 .inbox__item h2 { margin: .7rem 0 .35rem; font-size: 1.02rem; }
+.inbox__item summary { cursor: pointer; list-style: none; }
+.inbox__item summary::-webkit-details-marker { display: none; }
+.inbox__item summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+.inbox__expand { display: inline-block; margin-bottom: .7rem; color: #355c3d; font-size: .8rem; font-weight: 700; }
+.inbox__expand::after { content: ' ▾'; }
+.inbox__item details[open] .inbox__expand::after { content: ' ▴'; }
+.inbox__state p { line-height: 1.55; }
+.inbox__state button { border: 0; padding: 0; background: none; color: #355c3d; font-weight: 700; text-decoration: underline; }
 .inbox__item p { color: #52615a; line-height: 1.6; font-size: .88rem; margin: 0; }
 .inbox__actions { display: flex; flex-wrap: wrap; gap: .8rem 1.5rem; margin-top: .85rem; }
 .inbox__actions a, .inbox__actions button { border: 0; padding: .25rem 0; background: none; color: #355c3d; font-size: .8rem; font-weight: 700; text-decoration: underline; text-underline-offset: .2em; }

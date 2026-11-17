@@ -24,6 +24,6 @@ export class AppointmentList {
       switchMap(category => this.api.mine(category).pipe(catchError(() => { this.error.set(true); return of(null); }))),
       takeUntilDestroyed(this.destroyRef)).subscribe(items => { if (items) this.items.set(items); this.loading.set(false); });
   }
-  onCancelled() { this.message.set('Запис скасовано.'); this.select(this.category()); }
-  select(category: AppointmentCategory) { this.category.set(category); this.requests.next(category); }
+  onCancelled() { this.message.set('Запис скасовано. За потреби ви можете створити новий запис.'); this.select(this.category(), true); }
+  select(category: AppointmentCategory, keepMessage = false) { if (!keepMessage) this.message.set(''); this.category.set(category); this.requests.next(category); }
 }

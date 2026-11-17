@@ -57,7 +57,7 @@ test('role loss preserves personal inbox while hiding admin history across recon
       return { status: response.status, body: await response.json() };
     });
     expect(booking.status).toBe(201);
-    const bell = page.locator('app-notification-bell summary');
+    const bell = page.locator('app-notification-bell > details > summary');
     await expect(bell).toHaveAttribute('aria-label', /непрочитаних: 2/);
     const initial = await page.evaluate(async () => await (await fetch('/api/notifications')).json());
     const personal = initial.find((n: { type: string }) => n.type === 'AppointmentCreated');

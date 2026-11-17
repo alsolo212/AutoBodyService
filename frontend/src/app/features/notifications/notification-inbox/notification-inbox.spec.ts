@@ -1,7 +1,7 @@
 import { computed, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { NotificationRealtime } from '../../../core/notification-realtime';
 import { AuthService } from '../../../core/auth';
@@ -46,5 +46,35 @@ describe('NotificationInbox', () => {
     expect(root.querySelector('[role="alert"]')?.textContent).toContain('Не вдалося завантажити');
     (root.querySelector('[role="alert"] button') as HTMLButtonElement).click(); expect(api.refresh).toHaveBeenCalledTimes(2);
     api.error.set(''); history.set([]); fixture.detectChanges(); expect(root.textContent).toContain('Сповіщень поки немає');
+  });
+  it('marks only the opened notification and keeps it visible in the unread filter until closed', () => {
+    const fixture = TestBed.createComponent(NotificationInbox); fixture.detectChanges();
+    const component = fixture.componentInstance; component.setFilter('unread'); fixture.detectChanges();
+    const details = fixture.nativeElement.querySelector('.inbox__item details') as HTMLDetailsElement;
+    details.open = true; details.dispatchEvent(new Event('toggle'));
+    expect(api.markRead).toHaveBeenCalledTimes(1); expect(api.markRead).toHaveBeenCalledWith('new');
+    history.set([make('new', '2031-10-26T02:01:00Z'), make('other', null)]); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.inbox__item')).toHaveLength(2);
+    expect(details.open).toBe(true); expect(fixture.nativeElement.textContent).toContain('Подія new');
+    details.open = false; details.dispatchEvent(new Event('toggle')); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.inbox__item')).toHaveLength(1);
+    expect(fixture.nativeElement.textContent).toContain('Подія other');
+  });
+  it('keeps failed reads unread and allows retry without sending duplicates while pending', () => {
+    const fixture = TestBed.createComponent(NotificationInbox); fixture.detectChanges();
+    api.markRead.mockReturnValueOnce(throwError(() => new Error('offline')));
+    const details = fixture.nativeElement.querySelector('.inbox__item details') as HTMLDetailsElement;
+    details.open = true; details.dispatchEvent(new Event('toggle')); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('Не вдалося оновити');
+    expect(history()[0].readAtUtc).toBeNull();
+    const pending = new Subject<undefined>(); api.markRead.mockReturnValueOnce(pending);
+    fixture.componentInstance.read('new'); fixture.componentInstance.openLink(history()[0]);
+    expect(api.markRead).toHaveBeenCalledTimes(2); pending.complete();
+  });
+  it('does not mark an already read notification again when opened', () => {
+    const fixture = TestBed.createComponent(NotificationInbox); fixture.detectChanges();
+    const details = fixture.nativeElement.querySelectorAll('.inbox__item details')[1] as HTMLDetailsElement;
+    details.open = true; details.dispatchEvent(new Event('toggle'));
+    expect(api.markRead).not.toHaveBeenCalled();
   });
 });
