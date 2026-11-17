@@ -1,0 +1,35 @@
+<app-skip-link targetId="workspace-main" />
+<div class="workspace">
+  <header class="workspace-topbar">
+    <a class="brand brand--compact" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a>
+    <span class="workspace-topbar__label">Панель керування</span>
+    <div class="workspace-topbar__actions">
+      <a class="workspace-home" routerLink="/">На головну</a>
+      <a class="workspace-switch" routerLink="/account/appointments">Особистий кабінет</a>
+      <app-notification-bell area="admin" />
+      <div class="desktop-logout"><app-logout-control /></div>
+      <app-mobile-navigation><ng-container [ngTemplateOutlet]="navigation" /><div class="mobile-extra"><a routerLink="/">На головну</a><a routerLink="/account/appointments">Особистий кабінет</a><app-logout-control /></div></app-mobile-navigation>
+    </div>
+  </header>
+  <div class="workspace-layout">
+    <aside class="sidebar"><div class="sidebar__intro"><span class="sidebar__overline">РОБОЧИЙ ПРОСТІР</span><strong>Керування сервісом</strong></div><ng-container [ngTemplateOutlet]="navigation" /><div class="sidebar__note"><span>УВАГА ДО ДЕТАЛЕЙ</span><p>Усе важливе про автомобіль — в одному місці.</p></div></aside>
+    <main class="workspace-main" id="workspace-main" tabindex="-1"><div class="workspace-main__inner" [class.workspace-main__inner--wide]="wide()"><ng-content /></div></main>
+  </div>
+</div>
+<ng-template #navigation>
+  <nav class="admin-nav" aria-label="Навігація панелі керування">
+    <p class="sidebar__label">ОСНОВНЕ</p><ul>
+      <li><a class="sidebar__item" routerLink="/admin" routerLinkActive="sidebar__item--active" [routerLinkActiveOptions]="{exact: true}" ariaCurrentWhenActive="page">Огляд</a></li>
+      <li><a class="sidebar__item" routerLink="/admin/appointments" routerLinkActive="sidebar__item--active" ariaCurrentWhenActive="page">Замовлення</a></li>
+      <li><a class="sidebar__item" routerLink="/admin/assignments" routerLinkActive="sidebar__item--active" ariaCurrentWhenActive="page">Розподіл робіт</a></li>
+      <li><a class="sidebar__item" routerLink="/admin/inspection-calendar" routerLinkActive="sidebar__item--active" ariaCurrentWhenActive="page">Календар оглядів</a></li>
+    </ul><p class="sidebar__label">КЕРУВАННЯ</p><ul>
+      <li><a class="sidebar__item" routerLink="/admin/employees" routerLinkActive="sidebar__item--active" ariaCurrentWhenActive="page">Працівники</a></li>
+      <li><a class="sidebar__item" routerLink="/admin/prices" routerLinkActive="sidebar__item--active" ariaCurrentWhenActive="page">Послуги та ціни</a></li>
+      <li><a class="sidebar__item" routerLink="/admin/users" routerLinkActive="sidebar__item--active" ariaCurrentWhenActive="page">Користувачі</a></li>
+      @if (isSuperAdmin()) { <li><a class="sidebar__item" routerLink="/admin/reports" routerLinkActive="sidebar__item--active" ariaCurrentWhenActive="page">Контроль та звітність</a></li> }
+      <li><a class="sidebar__item" routerLink="/admin/notifications" routerLinkActive="sidebar__item--active" ariaCurrentWhenActive="page">Сповіщення</a></li>
+      <li><a class="sidebar__item" routerLink="/admin/profile" routerLinkActive="sidebar__item--active" ariaCurrentWhenActive="page">Мій профіль</a></li>
+    </ul>
+  </nav>
+</ng-template>

@@ -28,7 +28,7 @@ export async function hub(context: BrowserContext, baseURL: string) {
   await connection.start(); return connection;
 }
 export async function confirm(page: Page) {
-  const dialog = page.locator('app-confirm-dialog dialog');
+  const dialog = page.locator('app-confirm-dialog dialog[open]');
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Підтвердити' }).click();
 }

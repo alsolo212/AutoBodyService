@@ -1,3 +1,4 @@
+import { signOut } from './navigation-helpers';
 import { randomInt } from 'node:crypto';
 import { expect, Locator, test } from '@playwright/test';
 
@@ -83,7 +84,7 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await expect(page.getByRole('heading', { name: 'Огляд і клієнт' })).toBeVisible();
   await page.goto('/admin');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.getByRole('button', { name: 'Вийти' }).click();
+  await signOut(page);
   await expect(page).toHaveURL(/\/login$/);
   await page.goto('/register');
   const phone = '000' + String(randomInt(10_000_000)).padStart(7, '0');
@@ -154,7 +155,8 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await expect(page.getByText('Запис скасовано.')).toBeVisible();
   await expect(page.getByText('Скасовано', { exact: true }).first()).toBeVisible();
   await expect(page.getByLabel('Дії із записом')).toHaveCount(0);
-  await page.getByRole('link', { name: 'Запис на огляд' }).click();
+  await page.getByRole('button', { name: 'Відкрити меню' }).click();
+  await page.getByRole('dialog', { name: 'Меню' }).getByRole('link', { name: 'Запис на огляд' }).click();
   await page.getByLabel('Дата', { exact: true }).fill('2099-01-16');
   await page.getByLabel('09:00', { exact: true }).check();
   await page.getByRole('button', { name: 'Далі' }).click();

@@ -1,10 +1,6 @@
-<div class="profile-page">
-  <header class="profile-header">
-    <a class="brand" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a>
-    <nav aria-label="Навігація адміністратора"><a routerLink="/admin">Панель керування</a><a routerLink="/admin/inspection-calendar">Календар оглядів</a></nav><app-notification-bell area="admin" />
-  </header>
-  <main class="board-main">
-    <a class="text-link" routerLink="/admin">← Панель керування</a>
+<app-admin-shell [wide]="true">
+  <div class="board-main">
+    <nav class="breadcrumbs" aria-label="Шлях сторінки"><a routerLink="/admin">Панель керування</a><span aria-hidden="true">/</span><span aria-current="page">Замовлення</span></nav>
     <p class="eyebrow"><span class="eyebrow__line"></span> РОБОТА ІЗ ЗАМОВЛЕННЯМИ</p>
     <h1>Замовлення</h1>
     <p class="intro">Перетягніть картку на наступний етап або скористайтеся кнопкою на картці.</p>
@@ -48,5 +44,5 @@
         }
       </div>
     </div>
-  </main>
-</div>
+  </div>
+</app-admin-shell>

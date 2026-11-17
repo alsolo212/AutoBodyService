@@ -74,7 +74,7 @@ test('SuperAdmin manages an Admin while old windows, cookies and Hub sessions ar
     await page.screenshot({ path: '/tmp/autobody-users-ui-mobile.png', fullPage: true });
     const button = card.getByRole('button', { name: 'Заблокувати: Адміністратор тест' });
     await button.focus(); await page.keyboard.press('Enter');
-    const prompt = page.locator('app-confirm-dialog dialog'); await expect(prompt).toBeVisible();
+    const prompt = page.locator('app-confirm-dialog dialog[open]'); await expect(prompt).toBeVisible();
     await expect(prompt).toHaveAttribute('aria-labelledby', 'user-action-title');
     await page.keyboard.press('Escape'); await expect(prompt).not.toBeVisible();
     await expect(button).toBeFocused();

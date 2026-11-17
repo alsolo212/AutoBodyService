@@ -1,2 +1,13 @@
-<header class="profile-header"><div class="profile-header__inner"><a class="brand" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a><nav aria-label="Навігація особистого кабінету"><a routerLink="/account/appointments">Мої записи</a><a routerLink="/account/book">Запис на огляд</a><a routerLink="/account/profile">Мій профіль</a>@if (isStaff()) { <a routerLink="/admin">Панель керування</a> }</nav><app-notification-bell /><button type="button" class="button button--secondary" (click)="logout()" [disabled]="loggingOut()">{{ loggingOut() ? 'Виходимо…' : 'Вийти' }}</button></div></header>
-@if (logoutError()) { <p class="auth-alert" role="alert">{{ logoutError() }}</p> }
+<app-skip-link targetId="account-main" />
+<header class="profile-header account-header"><div class="profile-header__inner">
+  <a class="brand" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a>
+  <nav class="account-nav" aria-label="Навігація особистого кабінету"><ng-container [ngTemplateOutlet]="links" /></nav>
+  <app-notification-bell /><div class="account-desktop-logout"><app-logout-control /></div>
+  <app-mobile-navigation><nav class="account-mobile-nav" aria-label="Навігація особистого кабінету"><ng-container [ngTemplateOutlet]="links" /><a routerLink="/account/notifications" routerLinkActive="account-nav__active" ariaCurrentWhenActive="page">Сповіщення</a><a routerLink="/">На головну</a><app-logout-control /></nav></app-mobile-navigation>
+</div></header>
+<ng-template #links>
+  <a routerLink="/account/appointments" routerLinkActive="account-nav__active" ariaCurrentWhenActive="page">Мої записи</a>
+  <a routerLink="/account/book" routerLinkActive="account-nav__active" ariaCurrentWhenActive="page">Запис на огляд</a>
+  <a routerLink="/account/profile" routerLinkActive="account-nav__active" ariaCurrentWhenActive="page">Мій профіль</a>
+  @if (isStaff()) { <a routerLink="/admin">Панель керування</a> }
+</ng-template>

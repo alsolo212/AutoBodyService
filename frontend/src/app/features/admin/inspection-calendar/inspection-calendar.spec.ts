@@ -34,7 +34,7 @@ describe('InspectionCalendar', () => {
   it('previews affected orders before confirmation and rejects changed data on save', () => {
     const fixture = TestBed.createComponent(InspectionCalendar); load(); fixture.detectChanges();
     const component = fixture.componentInstance; component.setTab('settings'); component.exceptionForm.controls.mode.setValue('Closed');
-    (fixture.nativeElement.querySelector('dialog') as HTMLDialogElement).showModal = () => {};
+    (fixture.nativeElement.querySelector('dialog[aria-labelledby="confirm-schedule-title"]') as HTMLDialogElement).showModal = () => {};
     component.requestSave('date'); http.expectOne('/api/auth/antiforgery').flush(null);
     const preview = http.expectOne('/api/admin/inspection-exceptions/preview'); expect(preview.request.body.exception.mode).toBe('Closed');
     preview.flush({ confirmationToken: 'snapshot', conflicts: [appointment] }); fixture.detectChanges();

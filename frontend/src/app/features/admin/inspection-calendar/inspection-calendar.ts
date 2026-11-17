@@ -1,10 +1,9 @@
-import { NotificationBell } from '../../../shared/notification-bell/notification-bell';
+import { AdminShell } from '../../../layout/admin-shell/admin-shell';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal, viewChild } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { Observable, finalize, forkJoin } from 'rxjs';
-import { AuthService } from '../../../core/auth';
 import { kyivTime } from '../../../shared/time/kyiv-time';
 import { statusLabel } from '../../appointments/appointments-api';
 import { ConfirmDialog } from '../../../shared/confirm-dialog/confirm-dialog';
@@ -15,15 +14,13 @@ const shortTime = (value: string) => value.slice(0, 5);
 
 @Component({
   selector: 'app-inspection-calendar',
-  imports: [ReactiveFormsModule, RouterLink, ConfirmDialog, NotificationBell],
+  imports: [ReactiveFormsModule, RouterLink, ConfirmDialog, AdminShell],
   templateUrl: './inspection-calendar.html',
   styleUrl: './inspection-calendar.scss',
 })
 export class InspectionCalendar {
   private readonly fb = inject(NonNullableFormBuilder);
   private readonly api = inject(InspectionCalendarApi);
-  private readonly auth = inject(AuthService);
-  private readonly router = inject(Router);
   private readonly confirmDialog = viewChild.required(ConfirmDialog);
   readonly days: { value: Day; label: string }[] = [
     { value: 'Monday', label: 'Понеділок' }, { value: 'Tuesday', label: 'Вівторок' },
@@ -34,7 +31,6 @@ export class InspectionCalendar {
   readonly loaded = signal(false); readonly displayedDate = signal('');
   readonly loading = signal(false); readonly saving = signal(false); readonly error = signal(''); readonly message = signal('');
   readonly appointments = signal<CalendarAppointment[]>([]); readonly preview = signal<SchedulePreview | null>(null); readonly slots = signal<{ startUtc: string; endUtc: string }[]>([]);
-  readonly loggingOut = signal(false); readonly logoutError = signal('');
   readonly dateForm = this.fb.group({ date: [todayKyiv(), Validators.required] });
   readonly weeklyForm = this.fb.group({ intervals: this.fb.array<ReturnType<InspectionCalendar['weeklyRow']>>([]) });
   readonly exceptionForm = this.fb.group({ mode: this.fb.control<DateMode>('Weekly'), reason: ['', Validators.maxLength(500)], intervals: this.fb.array<ReturnType<InspectionCalendar['intervalRow']>>([]), slots: this.fb.array<ReturnType<InspectionCalendar['slotRow']>>([]) });
@@ -112,9 +108,4 @@ export class InspectionCalendar {
   private showSaveError(error: unknown) { this.error.set(error instanceof HttpErrorResponse && error.status === 409 ? 'Графік або записи змінилися. Оновіть дані та повторіть перевірку.' : error instanceof HttpErrorResponse && error.status === 400 ? 'Некоректні або перехресні інтервали. Перевірте час і тривалість.' : 'Не вдалося перевірити або зберегти графік. Спробуйте ще раз.'); }
   formatTimeEnd(value: string) { return this.formatTime(new Date(new Date(value).getTime() + 30 * 60_000).toISOString()); }
   formatTime(value: string) { return new Intl.DateTimeFormat('uk-UA', { timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit', timeZoneName: 'shortOffset' }).format(new Date(value)); }
-  logout() {
-    if (this.loggingOut()) return;
-    this.loggingOut.set(true); this.logoutError.set('');
-    this.auth.logout().pipe(finalize(() => this.loggingOut.set(false))).subscribe({ next: () => void this.router.navigateByUrl('/login'), error: () => this.logoutError.set('Не вдалося вийти. Перевірте з’єднання.') });
-  }
 }

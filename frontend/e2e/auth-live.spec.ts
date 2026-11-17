@@ -1,3 +1,4 @@
+import { signOut } from './navigation-helpers';
 import { expect, test } from '@playwright/test';
 
 test('registers, signs in and signs out through the real API', async ({ page }) => {
@@ -14,7 +15,7 @@ test('registers, signs in and signs out through the real API', async ({ page }) 
   expect((await registration).status()).toBe(202);
   await expect(page).toHaveURL(/\/account\/appointments$/);
   await expect(page.getByRole('heading', { name: 'Мої записи' })).toBeVisible();
-  await page.getByRole('button', { name: 'Вийти', exact: true }).click();
+  await signOut(page);
   await expect(page).toHaveURL(/\/login$/);
   await page.goto('/account/appointments');
   await expect(page).toHaveURL(/\/login$/);

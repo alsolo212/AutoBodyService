@@ -1,3 +1,4 @@
+import { signOut } from './navigation-helpers';
 import { randomInt } from 'node:crypto';
 import { expect, Page, test } from '@playwright/test';
 
@@ -44,7 +45,7 @@ test.describe('real authentication', () => {
     await expect(page).toHaveURL(/\/account\/appointments$/);
     const accountBrand = await page.locator('.profile-header .brand').boundingBox();
     expect(accountBrand!.x).toBeCloseTo(homeBrand!.x, 0);
-    const navLinks = await page.locator('.profile-header nav a').allTextContents();
+    const navLinks = await page.locator('.profile-header .account-nav a').allTextContents();
     expect(navLinks).toEqual(['Мої записи', 'Запис на огляд', 'Мій профіль']);
     for (const path of ['/login', '/register']) {
       await page.goto(path);
@@ -60,7 +61,7 @@ test.describe('real authentication', () => {
     expect(authCookie!.expires).toBeGreaterThan(Date.now() / 1000 + 6 * 24 * 60 * 60);
     await page.getByRole('link', { name: 'Мій профіль' }).click();
     await expect(page).toHaveURL(/\/account\/profile$/);
-    expect(await page.locator('.profile-header nav a').allTextContents()).toEqual(navLinks);
+    expect(await page.locator('.profile-header .account-nav a').allTextContents()).toEqual(navLinks);
     expect((await page.locator('.profile-header .brand').boundingBox())!.x).toBeCloseTo(accountBrand!.x, 0);
     await expect(page.getByLabel('Ім’я')).toHaveValue('Тестовий користувач');
     await expect(page.getByText('+38' + phone)).toBeVisible();
@@ -78,7 +79,7 @@ test.describe('real authentication', () => {
     await expect(page.getByLabel('Ім’я')).toHaveValue('Оновлене ім’я');
     await expect(page.getByText('+38' + phone)).toBeVisible();
     const logout = page.waitForResponse(r => r.url().endsWith('/api/auth/logout') && r.request().method() === 'POST');
-    await page.getByRole('button', { name: 'Вийти', exact: true }).click();
+    await signOut(page);
     expect((await logout).status()).toBe(204);
     await expect(page).toHaveURL(/\/login$/);
     expect((await context.cookies()).some(cookie => cookie.name === '.AspNetCore.Identity.Application')).toBe(false);
@@ -91,7 +92,7 @@ test.describe('real authentication', () => {
     const phone = phoneNumber();
     await page.goto('/register');
     await register(page, phone);
-    await page.getByRole('button', { name: 'Вийти', exact: true }).click();
+    await signOut(page);
     await expect(page).toHaveURL(/\/login$/);
     await page.getByLabel('Номер телефону').fill(phone);
     await page.getByLabel('Пароль', { exact: true }).fill('Incorrect-password-123!');

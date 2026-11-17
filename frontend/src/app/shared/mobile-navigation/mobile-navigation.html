@@ -1,0 +1,7 @@
+<button class="mobile-menu-button" type="button" (click)="show()" [attr.aria-expanded]="open()" aria-controls="mobile-navigation" aria-label="Відкрити меню">
+  <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+</button>
+<dialog #menu id="mobile-navigation" class="mobile-menu" aria-labelledby="mobile-menu-title" (close)="open.set(false)">
+  <div class="mobile-menu__header"><strong id="mobile-menu-title">Меню</strong><button type="button" class="mobile-menu__close" (click)="close()" aria-label="Закрити меню">✕</button></div>
+  <div class="mobile-menu__content" (click)="followLink($event)"><ng-content /></div>
+</dialog>

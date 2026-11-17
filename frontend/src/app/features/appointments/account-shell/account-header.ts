@@ -1,22 +1,14 @@
-import { Component, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
-import { finalize } from 'rxjs';
+import { NgTemplateOutlet } from '@angular/common';
+import { Component, inject } from '@angular/core';
+import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../../core/auth';
+import { LogoutControl } from '../../../shared/logout-control/logout-control';
+import { MobileNavigation } from '../../../shared/mobile-navigation/mobile-navigation';
 import { NotificationBell } from '../../../shared/notification-bell/notification-bell';
+import { SkipLink } from '../../../shared/skip-link/skip-link';
 
-@Component({ selector: 'app-account-header', imports: [RouterLink, NotificationBell], templateUrl: './account-header.html', styleUrl: './account-shell.scss' })
+@Component({ selector: 'app-account-header', imports: [NgTemplateOutlet, RouterLink, RouterLinkActive, LogoutControl, MobileNavigation, NotificationBell, SkipLink], templateUrl: './account-header.html', styleUrl: './account-shell.scss' })
 export class AccountHeader {
   private readonly auth = inject(AuthService);
-  private readonly router = inject(Router);
-  readonly loggingOut = signal(false);
-  readonly logoutError = signal('');
   readonly isStaff = () => this.auth.session()?.roles.some(role => role === 'Admin' || role === 'SuperAdmin') ?? false;
-  logout() {
-    if (this.loggingOut()) return;
-    this.loggingOut.set(true); this.logoutError.set('');
-    this.auth.logout().pipe(finalize(() => this.loggingOut.set(false))).subscribe({
-      next: () => void this.router.navigateByUrl('/login'),
-      error: () => this.logoutError.set('Не вдалося вийти. Перевірте з’єднання та спробуйте ще раз.'),
-    });
-  }
 }

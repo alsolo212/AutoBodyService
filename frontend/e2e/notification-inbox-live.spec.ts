@@ -1,3 +1,4 @@
+import { signOut } from './navigation-helpers';
 import { expect, test, BrowserContext, Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 
@@ -120,7 +121,7 @@ test('inbox and bell synchronize through the live API and reconnect without leak
     await expect(first.page.locator('.inbox').getByText('Пароль змінено', { exact: true })).toBeVisible();
     await first.page.getByRole('button', { name: 'Позначити всі прочитаними' }).click();
     await expect(first.page.locator('app-notification-bell summary')).toHaveAttribute('aria-label', /непрочитаних: 0/);
-    await first.page.getByRole('button', { name: 'Вийти' }).click();
+    await signOut(first.page);
     await expect(first.page).toHaveURL(/\/login$/);
     await expect(first.page.locator('app-notification-bell summary')).toHaveCount(0);
     await first.page.getByLabel('Номер телефону').fill('0000000071');

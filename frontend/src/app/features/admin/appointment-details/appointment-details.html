@@ -1,10 +1,6 @@
-<div class="profile-page">
-  <header class="profile-header">
-    <a class="brand" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a>
-    <nav aria-label="Навігація адміністратора"><a routerLink="/admin/inspection-calendar">Календар оглядів</a><a routerLink="/admin">Панель керування</a></nav><app-notification-bell area="admin" />
-  </header>
-  <main class="profile-main">
-    <a class="text-link" routerLink="/admin/appointments">← Замовлення</a>
+<app-admin-shell>
+  <div class="profile-main profile-main--admin">
+    <nav class="breadcrumbs" aria-label="Шлях сторінки"><a routerLink="/admin">Панель керування</a><span aria-hidden="true">/</span><a routerLink="/admin/appointments">Замовлення</a><span aria-hidden="true">/</span><span aria-current="page">Деталі замовлення</span></nav>
     @if (loading()) { <p class="profile-panel" role="status">Завантажуємо замовлення…</p> }
     @else if (error(); as problem) {
       <section class="profile-panel" role="alert">
@@ -91,5 +87,5 @@
       </section>
       @if (canCancel()) { <dialog #cancelDialog class="confirm-dialog" aria-labelledby="cancel-title" aria-describedby="cancel-description"><h2 id="cancel-title">Скасувати замовлення?</h2><p id="cancel-description">Замовлення залишиться в історії зі статусом «Скасовано».</p><form [formGroup]="cancelForm" (ngSubmit)="confirmCancel()" novalidate><div class="field"><label class="field__label" for="cancel-reason">Причина скасування</label><textarea class="field__input" id="cancel-reason" formControlName="reason" maxlength="500" rows="3"></textarea></div>@if (cancelError()) { <p class="field__error" role="alert">{{ cancelError() }}</p> }<div class="dialog-actions"><button class="button button--secondary" type="button" (click)="closeCancel()">Назад</button><button class="button button--danger" type="submit" [disabled]="saving()">Підтвердити</button></div></form></dialog> }
     }
-  </main>
-</div>
+  </div>
+</app-admin-shell>

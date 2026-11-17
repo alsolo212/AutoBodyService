@@ -1,0 +1,10 @@
+:host { display: inline-flex; flex: none; }
+.mobile-menu-button, .mobile-menu__close { width: 2.75rem; height: 2.75rem; border: 1px solid #d3dbd3; border-radius: .5rem; background: #fff; color: var(--ink); }
+.mobile-menu-button { display: none; align-items: center; justify-content: center; flex-direction: column; gap: 4px; }
+.mobile-menu-button span { display: block; width: 1.1rem; height: 2px; background: currentColor; border-radius: 2px; }
+.mobile-menu { width: min(21rem, calc(100% - 2rem)); max-width: none; height: 100dvh; max-height: none; margin: 0 0 0 auto; padding: 1.25rem; border: 0; background: #fff; color: var(--ink); box-shadow: -1rem 0 3rem #17221f26; overflow-y: auto; overscroll-behavior: contain; }
+.mobile-menu::backdrop { background: #14211ca8; }
+.mobile-menu__header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--line); }
+.mobile-menu__close { font-size: 1.1rem; }
+.mobile-menu__content { padding-top: .75rem; }
+@media (max-width: 800px) { .mobile-menu-button { display: inline-flex; } }

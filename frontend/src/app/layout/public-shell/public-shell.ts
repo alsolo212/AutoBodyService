@@ -5,12 +5,14 @@ import { RouterLink } from '@angular/router';
 import { PublicContacts } from '../../shared/public-contacts/public-contacts';
 import { PublicPrices } from '../../shared/public-prices/public-prices';
 import { NotificationBell } from '../../shared/notification-bell/notification-bell';
+import { MobileNavigation } from '../../shared/mobile-navigation/mobile-navigation';
+import { SkipLink } from '../../shared/skip-link/skip-link';
 
 @Component({
   selector: 'app-public-shell',
-  imports: [RouterLink, PublicContacts, PublicPrices, NotificationBell],
+  imports: [RouterLink, PublicContacts, PublicPrices, NotificationBell, MobileNavigation, SkipLink],
   template: `
-    <a class="skip-link" href="#main">Перейти до вмісту</a>
+    <app-skip-link targetId="main" />
     <header class="site-header">
       <div class="site-header__inner container">
         <a class="brand" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a>
@@ -19,10 +21,10 @@ import { NotificationBell } from '../../shared/notification-bell/notification-be
         </nav>
         @if (sessionLoading()) { <span class="header-action" role="status">Перевіряємо вхід…</span> } @else { <a class="button button--outline header-action" [routerLink]="sessionTarget()">{{ sessionLabel() }} <span aria-hidden="true">↗</span></a> }
         @if (auth.session() && !auth.session()?.mustChangePassword) { <app-notification-bell [area]="isStaff() ? 'admin' : 'account'" /> }
-        <details class="public-mobile-nav"><summary>Меню</summary><nav aria-label="Мобільна навігація"><a href="#services">Послуги</a><a href="#prices">Ціни</a><a href="#process">Як це працює</a><a href="#contacts">Контакти</a>@if (!sessionLoading()) { <a [routerLink]="sessionTarget()">{{ sessionLabel() }}</a> } @else { <span role="status">Перевіряємо вхід…</span> }</nav></details>
+        <app-mobile-navigation><nav class="public-drawer-nav" aria-label="Мобільна навігація"><a href="#services">Послуги</a><a href="#prices">Ціни</a><a href="#process">Як це працює</a><a href="#contacts">Контакти</a>@if (!sessionLoading()) { <a [routerLink]="sessionTarget()">{{ sessionLabel() }}</a> } @else { <span role="status">Перевіряємо вхід…</span> }</nav></app-mobile-navigation>
       </div>
     </header>
-    <main id="main">
+    <main id="main" tabindex="-1">
       <section class="hero">
         <div class="container hero__grid">
           <div class="hero__content">

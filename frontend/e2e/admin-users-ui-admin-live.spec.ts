@@ -58,7 +58,7 @@ test('Admin resets a User, cannot manage Admin and shows the temporary secret on
     await expect(card.getByRole('button')).toHaveCount(1);
     await expect(operator.page.getByText('Оператор тест', { exact: true })).toHaveCount(0);
     await card.getByRole('button', { name: 'Скинути пароль: Клієнт тест' }).click();
-    const prompt = operator.page.locator('app-confirm-dialog dialog');
+    const prompt = operator.page.locator('app-confirm-dialog dialog[open]');
     await expect(prompt).toContainText('попередні сеанси');
     await prompt.getByRole('button', { name: 'Скасувати' }).click();
     await card.getByRole('button', { name: 'Скинути пароль: Клієнт тест' }).click(); await confirm(operator.page);

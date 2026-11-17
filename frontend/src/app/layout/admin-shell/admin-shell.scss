@@ -1,0 +1,18 @@
+:host { display: block; }
+.workspace-topbar__actions { margin-left: auto; display: flex; align-items: center; gap: 1.25rem; min-width: 0; }
+.workspace-home { margin-left: 0; }
+.workspace-main { min-width: 0; }
+.workspace-main__inner--wide { max-width: 1500px; }
+.admin-nav ul { padding: 0; margin: 0 0 1.5rem; list-style: none; }
+.mobile-extra { display: grid; gap: .5rem; border-top: 1px solid var(--line); padding: .75rem .8rem; }
+.mobile-extra > a { display: block; padding: .7rem 0; font-size: .85rem; font-weight: 700; color: #3d6247; }
+@media (max-width: 800px) {
+  .workspace-topbar { min-height: 4.5rem; flex-wrap: nowrap; gap: .75rem; }
+  .workspace-topbar__actions { gap: .6rem; }
+  .workspace-home, .workspace-switch, .desktop-logout { display: none; }
+  .sidebar { display: none; }
+  .admin-nav .sidebar__label { color: #5d6b65; }
+  .admin-nav .sidebar__item { color: var(--ink); min-height: 2.75rem; }
+  .admin-nav .sidebar__item--active { color: #223b29; background: #e4eddb; }
+  .workspace-main { padding: 1.5rem 1rem 3rem; }
+}

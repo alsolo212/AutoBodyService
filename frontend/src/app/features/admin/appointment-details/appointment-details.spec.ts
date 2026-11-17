@@ -143,7 +143,7 @@ describe('administrative appointment details', () => {
 
   it('requires a reason in the cancellation dialog and does not auto-repeat a stale cancellation', () => {
     const fixture = create(); const component = fixture.componentInstance;
-    const dialog = fixture.nativeElement.querySelector('dialog') as HTMLDialogElement;
+    const dialog = fixture.nativeElement.querySelector('dialog[aria-labelledby="cancel-title"]') as HTMLDialogElement;
     dialog.showModal = vi.fn(); dialog.close = vi.fn(); component.openCancel(); expect(dialog.showModal).toHaveBeenCalledOnce();
     component.cancelForm.controls.reason.setValue('   '); component.confirmCancel(); expect(component.cancelError()).toContain('причину'); http.expectNone('/api/auth/antiforgery');
     component.cancelForm.controls.reason.setValue('  Причина  '); component.confirmCancel(); expect(dialog.close).toHaveBeenCalledOnce(); token();

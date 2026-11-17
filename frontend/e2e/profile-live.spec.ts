@@ -1,3 +1,4 @@
+import { signOut } from './navigation-helpers';
 import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
 
@@ -42,7 +43,7 @@ test('profile and mandatory password changes work with the real API', async ({ p
   await expect(page).toHaveURL(/\/account\/appointments$/);
   await page.goto('/account/profile');
   await expect(page.getByLabel('Ім’я')).toHaveValue('Оновлено');
-  await page.getByRole('button', { name: 'Вийти', exact: true }).click();
+  await signOut(page);
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByLabel('Номер телефону')).toHaveClass(/ng-untouched/);
   await page.getByLabel('Номер телефону').fill(phone);

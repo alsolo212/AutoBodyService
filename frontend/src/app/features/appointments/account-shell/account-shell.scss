@@ -1,1 +1,11 @@
 :host { display: block; }
+.account-nav__active { color: #243c2c; text-decoration: underline; text-decoration-color: #7d9c65; text-decoration-thickness: 2px; text-underline-offset: .45rem; }
+.account-mobile-nav { display: grid; gap: .15rem; }
+.account-mobile-nav a { display: block; padding: .85rem .6rem; min-height: 2.75rem; font-size: .9rem; font-weight: 700; color: var(--ink); }
+.account-mobile-nav .account-nav__active { background: #e4eddb; border-radius: .4rem; text-decoration: none; }
+.account-mobile-nav app-logout-control { margin: .75rem .6rem; }
+@media (max-width: 800px) {
+  .profile-header__inner { flex-wrap: nowrap; gap: .6rem; }
+  .profile-header__inner .account-nav, .account-desktop-logout { display: none; }
+  .account-header app-notification-bell { margin-left: auto; }
+}

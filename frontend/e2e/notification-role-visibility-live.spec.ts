@@ -1,3 +1,4 @@
+import { signOut } from './navigation-helpers';
 import { expect, test } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 
@@ -41,7 +42,7 @@ test('role loss preserves personal inbox while hiding admin history across recon
     await page.getByLabel('Повторіть пароль').fill('Example-password-123!');
     await page.getByRole('button', { name: 'Зареєструватися' }).click();
     await expect(page).toHaveURL(/\/account\/appointments$/);
-    await page.getByRole('button', { name: 'Вийти' }).click(); await expect(page).toHaveURL(/\/login$/);
+    await signOut(page); await expect(page).toHaveURL(/\/login$/);
     sql(`INSERT INTO "AspNetUserRoles" ("UserId", "RoleId") SELECT u."Id", r."Id" FROM "AspNetUsers" u CROSS JOIN "AspNetRoles" r WHERE u."PhoneNormalized" = '+380000000073' AND r."Name" = 'Admin'`);
     const login = async (phone: string, password: string, expected: RegExp) => {
       await page.getByLabel('Номер телефону').fill(phone); await page.getByLabel('Пароль', { exact: true }).fill(password);
@@ -63,7 +64,7 @@ test('role loss preserves personal inbox while hiding admin history across recon
     const role = initial.find((n: { type: string }) => n.type === 'AdminAppointmentCreated');
     expect(personal.link).toBe(`/account/appointments/${booking.body.id}`);
     expect(role.link).toBe(`/admin/appointments/${booking.body.id}`);
-    await page.getByRole('button', { name: 'Вийти' }).click(); await expect(page).toHaveURL(/\/login$/);
+    await signOut(page); await expect(page).toHaveURL(/\/login$/);
     sql(`DELETE FROM "AspNetUserRoles" WHERE "UserId" = (SELECT "Id" FROM "AspNetUsers" WHERE "PhoneNormalized" = '+380000000073') AND "RoleId" = (SELECT "Id" FROM "AspNetRoles" WHERE "Name" = 'Admin')`);
     await login('0000000073', 'Example-password-123!', /\/account\/appointments$/);
     await page.goto('/account/notifications');
@@ -90,7 +91,7 @@ test('role loss preserves personal inbox while hiding admin history across recon
     expect(cancelled).toBe(204);
     await expect(page.locator('.inbox').getByText('Запис скасовано', { exact: true })).toBeVisible({ timeout: 15000 });
     await expect(bell).toHaveAttribute('aria-label', /непрочитаних: 1/);
-    await page.getByRole('button', { name: 'Вийти' }).click(); await expect(page).toHaveURL(/\/login$/);
+    await signOut(page); await expect(page).toHaveURL(/\/login$/);
     await login(process.env['E2E_ADMIN_PHONE']!, process.env['E2E_ADMIN_PASSWORD']!, /\/admin$/);
     await page.goto('/account/notifications');
     const switched = await page.evaluate(async () => await (await fetch('/api/notifications')).json());
