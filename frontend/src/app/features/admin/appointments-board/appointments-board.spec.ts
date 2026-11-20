@@ -7,6 +7,8 @@ import { vi } from 'vitest';
 import { AppointmentStatus } from '../../appointments/appointments-api';
 import { AdminBoardCard } from '../appointment-details/admin-appointment-api';
 import { AppointmentsBoard } from './appointments-board';
+import { BoardSnapshot, BoardState } from './board-state';
+import { AuthService } from '../../../core/auth';
 
 const statuses: AppointmentStatus[] = ['AwaitingInspection', 'Scheduled', 'InProgress', 'AwaitingPayment', 'Completed', 'Cancelled'];
 const card = (status: AppointmentStatus, id = status): AdminBoardCard => ({ id, customerName: 'Клієнт', make: 'Марка', model: 'Авто', vin: '1HGCM82633A123456', inspectionStartUtc: '2026-01-01T10:00:00Z', inspectionStartLocal: '2026-01-01T12:00:00+02:00', status, repairPlan: null, version: 42 });
@@ -135,5 +137,18 @@ describe('administrative board', () => {
     const requests = http.match(r => r.url === '/api/admin/appointments'); requests[0].flush(null, { status: 403, statusText: 'Forbidden' });
     fixture.detectChanges(); expect(fixture.componentInstance.error()).toContain('заборонено');
     expect(fixture.componentInstance.columns().every(c => c.items.length === 0)).toBe(true);
+  });
+
+  it('keeps remembered board state only for the same signed-in session and return from details', () => {
+    const state = TestBed.inject(BoardState); const auth = TestBed.inject(AuthService);
+    const snapshot: BoardSnapshot = { filter: { search: 'Тест', from: '', to: '', sort: 'inspection', direction: 'asc', pageSize: 5 }, status: '',
+      draft: { search: 'Чернетка', status: '', from: '', to: '', sort: 'inspection', direction: 'asc', pageSize: 5 }, pages: { Scheduled: 2 }, scrollY: 100, scrollLeft: 40, filtersExpanded: true };
+    state.save(snapshot, '/admin/appointments/one'); expect(state.take('/admin/appointments/one')).toEqual(snapshot); expect(state.take('/admin/appointments/one')).toBeNull();
+    state.save(snapshot, '/admin/appointments/one'); expect(state.take('/admin/appointments/two')).toBeNull();
+    state.save(snapshot, '/admin/appointments/one'); auth.invalidateSession(); expect(state.take('/admin/appointments/one')).toBeNull();
+    auth.session.set({ name: 'Test', phone: '+380000000000', roles: ['Admin'], mustChangePassword: false }); TestBed.tick();
+    state.save(snapshot, '/admin/appointments/one'); auth.session.set(null); TestBed.tick();
+    auth.session.set({ name: 'Test', phone: '+380000000000', roles: ['Admin'], mustChangePassword: false }); TestBed.tick();
+    expect(state.take('/admin/appointments/one')).toBeNull();
   });
 });

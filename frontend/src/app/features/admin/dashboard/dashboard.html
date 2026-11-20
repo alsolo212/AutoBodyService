@@ -14,10 +14,10 @@
   @if (!loading()) {
     <section class="summary" aria-labelledby="summary-title"><h2 id="summary-title">Замовлення в роботі</h2>
       <div class="summary-grid">
-        <a routerLink="/admin/appointments"><span>Очікує огляду</span><strong>{{ dashboard.counts.awaitingInspection }}</strong></a>
-        <a routerLink="/admin/appointments"><span>Заплановано</span><strong>{{ dashboard.counts.scheduled }}</strong></a>
-        <a routerLink="/admin/appointments"><span>У роботі</span><strong>{{ dashboard.counts.inProgress }}</strong></a>
-        <a routerLink="/admin/appointments"><span>Очікує оплати</span><strong>{{ dashboard.counts.awaitingPayment }}</strong></a>
+        <a routerLink="/admin/appointments" [queryParams]="{ status: 'AwaitingInspection' }"><span>Очікує огляду</span><strong>{{ dashboard.counts.awaitingInspection }}</strong></a>
+        <a routerLink="/admin/appointments" [queryParams]="{ status: 'Scheduled' }"><span>Заплановано</span><strong>{{ dashboard.counts.scheduled }}</strong></a>
+        <a routerLink="/admin/appointments" [queryParams]="{ status: 'InProgress' }"><span>У роботі</span><strong>{{ dashboard.counts.inProgress }}</strong></a>
+        <a routerLink="/admin/appointments" [queryParams]="{ status: 'AwaitingPayment' }"><span>Очікує оплати</span><strong>{{ dashboard.counts.awaitingPayment }}</strong></a>
       </div>
     </section>
     <div class="dashboard-grid">

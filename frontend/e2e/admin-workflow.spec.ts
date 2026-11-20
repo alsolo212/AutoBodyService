@@ -23,6 +23,7 @@ test('mobile order board navigates statuses and confirms changes before sending 
   const navigation = page.getByRole('navigation', { name: 'Перейти до статусу' });
   await navigation.getByRole('button', { name: 'Заплановано' }).focus(); await page.keyboard.press('Enter');
   await expect(page.locator('#column-Scheduled')).toBeInViewport();
+  await expect(page.locator('#column-Scheduled')).toBeFocused();
   const article = page.locator('[data-card-id="order-1"]');
   await expect(article).toBeVisible();
   await expect(article.locator('time')).toContainText('12:00');

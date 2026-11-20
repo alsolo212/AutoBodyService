@@ -5,14 +5,14 @@ import { DOCUMENT } from '@angular/common';
 import { Component, DestroyRef, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
-import { Subject, catchError, finalize, forkJoin, map, of, switchMap } from 'rxjs';
+import { ActivatedRoute, NavigationStart, Router, RouterLink } from '@angular/router';
+import { Subject, catchError, filter, finalize, forkJoin, map, of, switchMap } from 'rxjs';
 import { AppointmentStatus, price, statusLabel } from '../../appointments/appointments-api';
 import { AdminAppointmentApi, AdminBoardCard, AdminBoardFilter, AdminBoardPage } from '../appointment-details/admin-appointment-api';
 import { kyivWithOffset } from '../appointment-details/kyiv-date';
 import { ConfirmDialog } from '../../../shared/confirm-dialog/confirm-dialog';
+import { BoardSnapshot, BoardState, StatusFilter } from './board-state';
 
-type StatusFilter = AppointmentStatus | '';
 interface Column { status: AppointmentStatus; page: number; total: number; items: AdminBoardCard[]; filtered: boolean; }
 const statuses: AppointmentStatus[] = ['AwaitingInspection', 'Scheduled', 'InProgress', 'AwaitingPayment', 'Completed', 'Cancelled'];
 const successor: Partial<Record<AppointmentStatus, AppointmentStatus>> = {
@@ -25,6 +25,8 @@ const emptyColumns = (): Column[] => statuses.map(status => ({ status, page: 1, 
 export class AppointmentsBoard {
   private readonly api = inject(AdminAppointmentApi);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly boardState = inject(BoardState);
   private readonly destroyRef = inject(DestroyRef);
   private readonly document = inject(DOCUMENT);
   private readonly transitionDialog = viewChild<ConfirmDialog>('transitionDialog');
@@ -32,9 +34,12 @@ export class AppointmentsBoard {
   private readonly reloads = new Subject<void>();
   private filter: AdminBoardFilter = { search: '', from: '', to: '', sort: 'inspection', direction: 'asc', pageSize: 5 };
   private selectedStatus: StatusFilter = '';
+  private pendingScroll: Pick<BoardSnapshot, 'scrollY' | 'scrollLeft'> | null = null;
+  private pendingStatus: AppointmentStatus | null = null;
   readonly columns = signal<Column[]>(emptyColumns());
   readonly loading = signal(true);
   readonly saving = signal(false);
+  readonly filtersExpanded = signal(false);
   readonly error = signal('');
   readonly actionMessage = signal('');
   readonly success = signal('');
@@ -47,6 +52,26 @@ export class AppointmentsBoard {
     from: [''], to: [''], sort: ['inspection'], direction: ['asc'], pageSize: [5] });
 
   constructor() {
+    const previous = this.router.lastSuccessfulNavigation()?.finalUrl?.toString().split('?')[0].split('#')[0] ?? '';
+    const restored = this.boardState.take(previous);
+    if (restored) {
+      this.filter = restored.filter; this.selectedStatus = restored.status;
+      this.filterForm.setValue(restored.draft);
+      this.columns.update(columns => columns.map(column => ({ ...column, page: restored.pages[column.status] ?? 1 })));
+      this.filtersExpanded.set(restored.filtersExpanded);
+      this.pendingScroll = { scrollY: restored.scrollY, scrollLeft: restored.scrollLeft };
+    } else {
+      const requestedStatus = this.route.snapshot.queryParamMap.get('status');
+      if (requestedStatus && statuses.includes(requestedStatus as AppointmentStatus)) {
+        this.selectedStatus = requestedStatus as AppointmentStatus;
+        this.filterForm.controls.status.setValue(this.selectedStatus);
+        this.pendingStatus = this.selectedStatus;
+      }
+    }
+    this.router.events.pipe(filter((event): event is NavigationStart => event instanceof NavigationStart), takeUntilDestroyed(this.destroyRef)).subscribe(event => {
+      const path = event.url.split('?')[0].split('#')[0];
+      if (/^\/admin\/appointments\/(?!new$)[^/]+$/.test(path)) this.rememberBoard(path);
+    });
     this.reloads.pipe(switchMap(() => {
       this.loading.set(true); this.error.set('');
       const columns = this.columns();
@@ -66,6 +91,13 @@ export class AppointmentsBoard {
         return page ? { ...column, page: page.page, total: page.total, items: page.items, filtered: false }
           : { ...column, page: 1, total: 0, items: [], filtered: true };
       }));
+      const outOfRange = this.columns().some(column => !column.filtered && column.page > this.maxPage(column));
+      if (outOfRange) {
+        this.columns.update(columns => columns.map(column => ({ ...column, page: Math.min(column.page, this.maxPage(column)) })));
+        this.reload(); return;
+      }
+      this.restoreScroll();
+      this.showRequestedStatus();
     });
     this.reload();
   }
@@ -81,7 +113,7 @@ export class AppointmentsBoard {
     this.filterForm.markAllAsTouched();
     const value = this.filterForm.getRawValue();
     if (this.filterForm.invalid || (value.from && value.to && value.from > value.to)) {
-      this.error.set('Перевірте пошук і діапазон дат.'); return;
+      this.filtersExpanded.set(true); this.error.set('Перевірте пошук і діапазон дат.'); return;
     }
     this.filter = { search: value.search, from: value.from, to: value.to, sort: value.sort, direction: value.direction, pageSize: Number(value.pageSize) };
     this.selectedStatus = value.status; this.actionMessage.set(''); this.success.set(''); this.resetPages(); this.reload();
@@ -95,7 +127,12 @@ export class AppointmentsBoard {
     this.reload();
   }
   maxPage(column: Column) { return Math.max(1, Math.ceil(column.total / this.filter.pageSize)); }
-  scrollToStatus(status: AppointmentStatus) { this.document.getElementById(`column-${status}`)?.scrollIntoView({ block: 'start' }); }
+  hasAdvancedFilters(): boolean { return !!this.selectedStatus || !!this.filter.from || !!this.filter.to || this.filter.sort !== 'inspection' || this.filter.direction !== 'asc' || this.filter.pageSize !== 5; }
+  scrollToStatus(status: AppointmentStatus) {
+    const heading = this.document.getElementById(`column-${status}`);
+    heading?.focus({ preventScroll: true });
+    heading?.scrollIntoView?.({ block: 'start', inline: 'nearest' });
+  }
   advance(card: AdminBoardCard, target = this.next(card.status)) {
     if (!target || target !== this.next(card.status) || this.loading() || this.saving()) return;
     this.actionMessage.set(''); this.success.set('');
@@ -135,5 +172,32 @@ export class AppointmentsBoard {
     void this.router.navigate(['/admin/appointments', card.id], { queryParams: { action: 'cancel', version: card.version } });
   }
   reload() { this.reloads.next(); }
+  private rememberBoard(detailsPath: string): void {
+    const viewport = this.document.defaultView;
+    this.boardState.save({ filter: { ...this.filter }, status: this.selectedStatus, draft: this.filterForm.getRawValue(),
+      pages: Object.fromEntries(this.columns().map(column => [column.status, column.page])),
+      scrollY: viewport?.scrollY ?? 0, scrollLeft: this.document.querySelector<HTMLElement>('.board-scroll')?.scrollLeft ?? 0,
+      filtersExpanded: this.filtersExpanded() }, detailsPath);
+  }
+  private restoreScroll(): void {
+    const position = this.pendingScroll;
+    const viewport = this.document.defaultView;
+    if (!position || !viewport) return;
+    this.pendingScroll = null;
+    viewport.requestAnimationFrame(() => viewport.requestAnimationFrame(() => {
+      if (this.destroyRef.destroyed) return;
+      const board = this.document.querySelector<HTMLElement>('.board-scroll');
+      if (board) board.scrollLeft = position.scrollLeft;
+      viewport.scrollTo({ top: position.scrollY, behavior: 'instant' });
+    }));
+  }
+  private showRequestedStatus(): void {
+    const status = this.pendingStatus; const viewport = this.document.defaultView;
+    if (!status || !viewport) return;
+    this.pendingStatus = null;
+    viewport.requestAnimationFrame(() => viewport.requestAnimationFrame(() => {
+      if (!this.destroyRef.destroyed) this.scrollToStatus(status);
+    }));
+  }
   private resetPages() { this.columns.update(columns => columns.map(column => ({ ...column, page: 1 }))); }
 }
