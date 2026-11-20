@@ -99,6 +99,7 @@ public sealed class AppointmentsController(ICreateAppointmentService service, IA
             CreateAppointmentStatus.Created => Created($"/api/appointments/{result.Id}", new AppointmentCreatedResponse(result.Id!.Value, result.InspectionStartUtc!.Value, "AwaitingInspection")),
             CreateAppointmentStatus.Invalid => BadRequest(new ProblemDetails { Status = 400, Title = "Перевірте дані запису." }),
             CreateAppointmentStatus.Unauthorized => Unauthorized(),
+            CreateAppointmentStatus.DailyLimit => StatusCode(429, new ProblemDetails { Status = 429, Title = "За сьогодні вже створено 10 заявок. Спробуйте завтра за київським часом." }),
             _ => Conflict(new ProblemDetails { Status = 409, Title = "Обраний час недоступний. Оберіть інший слот." })
         };
     }
@@ -109,7 +110,7 @@ public sealed class AppointmentsController(ICreateAppointmentService service, IA
 public sealed record CreateAppointmentRequest
 {
     [Required] public required DateTimeOffset? InspectionStartUtc { get; init; }
-    [Required, StringLength(19)] public required string Vin { get; init; }
+    [StringLength(19)] public string? Vin { get; init; }
     [Required, StringLength(200)] public required string Make { get; init; }
     [Required, StringLength(200)] public required string Model { get; init; }
     [Required, StringLength(5000)] public required string ProblemDescription { get; init; }

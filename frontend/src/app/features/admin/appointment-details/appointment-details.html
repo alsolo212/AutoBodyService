@@ -28,7 +28,7 @@
           <div><dt>Клієнт</dt><dd>{{ item.customerName }}</dd></div>
           <div><dt>Телефон</dt><dd><a class="phone" [href]="'tel:' + item.customerPhone">{{ item.customerPhone }}</a> <button class="inline-button" type="button" (click)="copy(item.customerPhone, 'phone')">Копіювати телефон</button>@if (copyMessage() && copyLocation() === 'phone') { <span role="status">{{ copyMessage() }}</span> }</dd></div>
           <div><dt>Автомобіль</dt><dd>{{ item.make }} {{ item.model }}</dd></div>
-          <div><dt>VIN</dt><dd>{{ item.vin }}</dd></div>
+          @if (item.vin) { <div><dt>VIN</dt><dd>{{ item.vin }}</dd></div> }
           <div><dt>Огляд за Києвом</dt><dd><time [attr.datetime]="item.inspectionStartUtc">{{ format(item.inspectionStartUtc) }}</time></dd></div>
           <div class="full"><dt>Опис проблеми</dt><dd class="problem">{{ item.problemDescription }}</dd></div>
         </dl>

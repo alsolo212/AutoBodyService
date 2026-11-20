@@ -3,7 +3,7 @@ import { Component, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
-import { AuthService, destination } from '../../core/auth';
+import { AuthService, bookingReturn, destination } from '../../core/auth';
 import { phoneValidator } from './auth-validation';
 
 @Component({
@@ -16,7 +16,7 @@ import { phoneValidator } from './auth-validation';
     <div class="field"><label class="field__label" for="login-phone">Номер телефону</label><input class="field__input" id="login-phone" formControlName="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="+380" [attr.aria-invalid]="invalid('phone')" aria-describedby="login-phone-help" /><p id="login-phone-help" [class.field__error]="invalid('phone')" class="field__hint">{{ invalid('phone') ? 'Введіть коректний номер України.' : 'Наприклад, +380 та 9 цифр номера.' }}</p></div>
     <div class="field"><div class="auth-label-row"><label class="field__label" for="login-password">Пароль</label><a routerLink="/forgot-password">Забули пароль?</a></div><div class="password-input"><input class="field__input" id="login-password" formControlName="password" [type]="showPassword() ? 'text' : 'password'" autocomplete="current-password" [attr.aria-invalid]="invalid('password')" [attr.aria-describedby]="invalid('password') ? 'login-password-error' : null" /><button class="password-toggle" type="button" (click)="showPassword.update(value => !value)" [attr.aria-label]="showPassword() ? 'Приховати пароль' : 'Показати пароль'" [attr.aria-pressed]="showPassword()" aria-controls="login-password"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div>@if (invalid('password')) { <p class="field__error" id="login-password-error">Введіть пароль.</p> }</div>
     <button class="button button--primary auth-submit" type="submit" [disabled]="loading()">{{ loading() ? 'Входимо…' : 'Увійти' }} <span aria-hidden="true">↗</span></button>
-  </form><p class="auth-switch">Ще не маєте облікового запису? <a routerLink="/register">Зареєструватися</a></p></div></main></div>`
+  </form><p class="auth-switch">Ще не маєте облікового запису? <a routerLink="/register" [queryParams]="booking ? { returnTo: '/account/book' } : {}">Зареєструватися</a></p></div></main></div>`
 })
 export class Login {
   private readonly fb = inject(NonNullableFormBuilder);
@@ -24,7 +24,9 @@ export class Login {
   private readonly router = inject(Router);
   readonly showPassword = signal(false);
   readonly loading = signal(false);
-  readonly error = signal(inject(ActivatedRoute).snapshot.queryParamMap.get('session') === 'unavailable' ? 'Не вдалося перевірити сесію. Перевірте з’єднання та спробуйте ще раз.' : '');
+  private readonly route = inject(ActivatedRoute);
+  readonly booking = bookingReturn(this.route.snapshot.queryParamMap.get('returnTo'));
+  readonly error = signal(this.route.snapshot.queryParamMap.get('session') === 'unavailable' ? 'Не вдалося перевірити сесію. Перевірте з’єднання та спробуйте ще раз.' : '');
   readonly form = this.fb.group({ phone: ['', [Validators.required, phoneValidator]], password: ['', [Validators.required, Validators.maxLength(256)]] });
   invalid(name: 'phone' | 'password') { const field = this.form.controls[name]; return field.touched && field.invalid; }
   submit() {
@@ -33,7 +35,7 @@ export class Login {
     if (this.form.invalid) return;
     this.error.set(''); this.loading.set(true);
     this.auth.login(this.form.getRawValue()).pipe(finalize(() => this.loading.set(false))).subscribe({
-      next: session => void this.router.navigateByUrl(destination(session)),
+      next: session => void this.router.navigateByUrl(destination(session, this.booking)),
       error: (error: unknown) => this.error.set(error instanceof HttpErrorResponse && error.status === 401 ? 'Невірний номер телефону або пароль.' : error instanceof HttpErrorResponse && error.status === 429 ? 'Забагато спроб. Зачекайте та спробуйте ще раз.' : 'Не вдалося виконати вхід. Перевірте з’єднання та спробуйте ще раз.'),
     });
   }

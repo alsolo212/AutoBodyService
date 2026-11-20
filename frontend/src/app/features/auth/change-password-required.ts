@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { finalize } from 'rxjs';
-import { AuthService, destination } from '../../core/auth';
+import { AuthService, bookingReturn, destination } from '../../core/auth';
 import { PasswordForm } from '../profile/password-form';
 import { LogoutControl } from '../../shared/logout-control/logout-control';
 
@@ -12,13 +12,14 @@ import { LogoutControl } from '../../shared/logout-control/logout-control';
 <app-logout-control /></div></main></div>` })
 export class ChangePasswordRequired {
   private readonly auth = inject(AuthService); private readonly router = inject(Router);
+  private readonly booking = bookingReturn(inject(ActivatedRoute).snapshot.queryParamMap.get('returnTo'));
   readonly changed = signal(false); readonly checking = signal(false); readonly sessionError = signal('');
   passwordChanged() { this.changed.set(true); this.checkSession(); }
   checkSession() {
     if (this.checking()) return;
     this.checking.set(true); this.sessionError.set('');
     this.auth.getSession().pipe(finalize(() => this.checking.set(false))).subscribe({
-      next: session => { if (!session) { void this.router.navigateByUrl('/login'); return; } if (session.mustChangePassword) { this.sessionError.set('Не вдалося підтвердити зміну пароля. Спробуйте перевірити сесію ще раз.'); return; } void this.router.navigateByUrl(destination(session)); },
+      next: session => { if (!session) { void this.router.navigate(['/login'], { queryParams: this.booking ? { returnTo: '/account/book' } : {} }); return; } if (session.mustChangePassword) { this.sessionError.set('Не вдалося підтвердити зміну пароля. Спробуйте перевірити сесію ще раз.'); return; } void this.router.navigateByUrl(destination(session, this.booking)); },
       error: () => this.sessionError.set('Пароль змінено, але не вдалося перевірити сесію. Перевірте з’єднання та повторіть спробу.'),
     });
   }

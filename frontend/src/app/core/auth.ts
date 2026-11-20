@@ -5,10 +5,12 @@ import { Subject, catchError, defer, filter, finalize, map, of, switchMap, take,
 export interface AuthSession { name: string; phone: string; roles: string[]; mustChangePassword: boolean; }
 export interface Credentials { phone: string; password: string; }
 export interface Registration extends Credentials { name: string; }
-export function destination(session: AuthSession): string {
-  if (session.mustChangePassword) return '/account/change-temporary-password';
+export function destination(session: AuthSession, returnToBooking = false): string {
+  if (session.mustChangePassword) return '/account/change-temporary-password' + (returnToBooking ? '?returnTo=%2Faccount%2Fbook' : '');
+  if (returnToBooking) return '/account/book';
   return session.roles.some(role => role === 'Admin' || role === 'SuperAdmin') ? '/admin' : '/account/appointments';
 }
+export const bookingReturn = (value: string | null): boolean => value === '/account/book';
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);

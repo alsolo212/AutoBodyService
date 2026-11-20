@@ -72,9 +72,9 @@ public sealed class ReminderProcessor(ApplicationDbContext db, TimeProvider cloc
         return due.Count;
     }
 
-    private async Task<List<string>> EligibleOwnerAsync(ScheduledReminder reminder, string ownerId, CancellationToken cancellationToken)
+    private async Task<List<string>> EligibleOwnerAsync(ScheduledReminder reminder, string? ownerId, CancellationToken cancellationToken)
     {
-        if (reminder.RecipientId != ownerId) return [];
+        if (ownerId is null || reminder.RecipientId != ownerId) return [];
         return await (from user in db.Users.AsNoTracking()
                       join membership in db.Set<IdentityUserRole<string>>() on user.Id equals membership.UserId
                       join role in db.Roles.AsNoTracking() on membership.RoleId equals role.Id

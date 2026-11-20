@@ -2,10 +2,11 @@ import { HttpClient } from '@angular/common/http';
 import { Component, DestroyRef, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, catchError, of, switchMap } from 'rxjs';
+import { PublicContacts } from '../../../shared/public-contacts/public-contacts';
 
 interface DayAvailability { date: string; available: boolean; }
 interface MonthResponse { days: DayAvailability[]; }
-interface Request { month: string; search: boolean; remaining: number; focus?: string; }
+interface Request { month: string; search: boolean; remaining: number; focus?: string; exhausted?: boolean; }
 interface CalendarDay { date: string; number: number; status: 'past' | 'available' | 'unavailable' | 'loading' | 'unknown'; label: string; }
 
 const dateOf = (value: string) => new Date(`${value}T12:00:00Z`);
@@ -15,7 +16,7 @@ const addMonths = (value: string, count: number) => { const date = dateOf(`${val
 const dayFormat = new Intl.DateTimeFormat('uk-UA', { timeZone: 'UTC', dateStyle: 'full' });
 const monthFormat = new Intl.DateTimeFormat('uk-UA', { timeZone: 'UTC', month: 'long', year: 'numeric' });
 
-@Component({ selector: 'app-availability-calendar', templateUrl: './availability-calendar.html', styleUrl: './availability-calendar.scss' })
+@Component({ selector: 'app-availability-calendar', imports: [PublicContacts], templateUrl: './availability-calendar.html', styleUrl: './availability-calendar.scss' })
 export class AvailabilityCalendar implements OnInit, OnChanges {
   private readonly http = inject(HttpClient);
   private readonly destroyRef = inject(DestroyRef);
@@ -45,12 +46,16 @@ export class AvailabilityCalendar implements OnInit, OnChanges {
         switchMap(response => {
           this.makeDays(request.month, response.days);
           const nearest = response.days.find(day => day.date >= this.today && day.available);
-          if (request.search && !nearest && request.remaining > 1 && request.month < '9998-12') {
+          if (request.search && !nearest && request.remaining > 1 && request.month < this.maxMonth) {
             const next: Request = { month: addMonths(request.month, 1), search: true, remaining: request.remaining - 1 };
             queueMicrotask(() => { if (this.lastRequest === request) this.requests.next(next); });
           } else {
             this.loading.set(false); this.searching.set(false);
-            this.searchExhausted.set(request.search && !nearest);
+            if (request.search && !nearest) {
+              queueMicrotask(() => { if (this.lastRequest === request) this.load({ month: this.today.slice(0, 7), search: false, remaining: 0, exhausted: true }); });
+              return of(null);
+            }
+            this.searchExhausted.set(request.exhausted === true);
             if (request.search && nearest) this.select(nearest.date);
             if (request.focus) requestAnimationFrame(() => { if (this.month() === request.month) this.focusDate(request.focus!); });
           }
@@ -62,24 +67,26 @@ export class AvailabilityCalendar implements OnInit, OnChanges {
   }
   ngOnInit(): void {
     this.initialized = true;
-    const date = this.selectedDate || this.today;
+    const date = this.inRange(this.selectedDate) ? this.selectedDate : this.today;
     this.focused.set(date);
-    this.load({ month: date.slice(0, 7), search: !this.selectedDate, remaining: 12 });
+    this.load({ month: date.slice(0, 7), search: !this.selectedDate, remaining: 2 });
   }
   ngOnChanges(changes: SimpleChanges): void {
     if (this.initialized && changes['revision'] && !changes['revision'].firstChange) {
-      this.load({ month: this.selectedDate?.slice(0, 7) || this.month(), search: false, remaining: 0 });
-    } else if (this.initialized && changes['selectedDate'] && this.selectedDate && (this.selectedDate.slice(0, 7) !== this.month() || this.searching())) {
+      this.load({ month: this.inRange(this.selectedDate) ? this.selectedDate.slice(0, 7) : this.month(), search: false, remaining: 0 });
+    } else if (this.initialized && changes['selectedDate'] && this.inRange(this.selectedDate) && (this.selectedDate.slice(0, 7) !== this.month() || this.searching())) {
       this.focused.set(this.selectedDate);
       this.load({ month: this.selectedDate.slice(0, 7), search: false, remaining: 0 });
     }
   }
   private load(request: Request): void { this.searchExhausted.set(false); this.requests.next(request); }
+  private inRange(date: string): boolean { return /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= this.today && date.slice(0, 7) <= this.maxMonth; }
   retry(): void { if (this.lastRequest) this.load(this.lastRequest); }
-  searchMore(): void { this.load({ month: addMonths(this.month(), 1), search: true, remaining: 12 }); }
+  get maxMonth(): string { return addMonths(this.today.slice(0, 7), 1); }
+  returnToCurrent(): void { this.focused.set(this.today); this.load({ month: this.today.slice(0, 7), search: false, remaining: 0, focus: this.today, exhausted: true }); }
   moveMonth(delta: number): void {
     const next = addMonths(this.month(), delta);
-    if (next < this.today.slice(0, 7) || next > '9998-12') return;
+    if (next < this.today.slice(0, 7) || next > this.maxMonth) return;
     this.focused.set(`${next}-01`);
     this.load({ month: next, search: false, remaining: 0 });
   }
@@ -107,7 +114,7 @@ export class AvailabilityCalendar implements OnInit, OnChanges {
     event.preventDefault();
     const weekday = (dateOf(date).getUTCDay() + 6) % 7;
     const target = addDays(date, offset ?? (event.key === 'Home' ? -weekday : 6 - weekday));
-    if (target < `${this.today.slice(0, 7)}-01` || target > '9998-12-31') return;
+    if (target < `${this.today.slice(0, 7)}-01` || target.slice(0, 7) > this.maxMonth) return;
     this.focused.set(target);
     if (target.slice(0, 7) !== this.month()) this.load({ month: target.slice(0, 7), search: false, remaining: 0, focus: target });
     else this.focusDate(target);

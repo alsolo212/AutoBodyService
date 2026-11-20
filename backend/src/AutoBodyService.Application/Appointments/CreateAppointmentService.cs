@@ -1,4 +1,5 @@
 using AutoBodyService.Domain.Appointments;
+using AutoBodyService.Application.Authentication;
 
 namespace AutoBodyService.Application.Appointments;
 
@@ -12,13 +13,24 @@ public sealed class CreateAppointmentService(IAppointmentCreationStore store, Ti
             return Task.FromResult(new CreateAppointmentResult(CreateAppointmentStatus.Invalid));
         try
         {
-            var appointment = new Appointment(Guid.NewGuid(), command.OwnerId, command.InspectionStartUtc,
-                command.Vin, command.Make, command.Model, command.ProblemDescription, clock.GetUtcNow());
-            return store.SaveIfAvailableAsync(appointment, cancellationToken);
+            _ = Build(command, clock.GetUtcNow());
+            return store.SaveIfAvailableAsync(command, cancellationToken);
         }
         catch (ArgumentException)
         {
             return Task.FromResult(new CreateAppointmentResult(CreateAppointmentStatus.Invalid));
         }
+    }
+
+    public static Appointment Build(CreateAppointmentCommand command, DateTimeOffset now)
+    {
+        if (command.GuestName is null && command.GuestPhone is null)
+            return new Appointment(Guid.NewGuid(), command.OwnerId, command.InspectionStartUtc, command.Vin, command.Make, command.Model, command.ProblemDescription, now);
+        var name = command.GuestName?.Trim();
+        var phone = PhoneNumberNormalizer.Normalize(command.GuestPhone ?? "");
+        if (string.IsNullOrWhiteSpace(name) || name.Length > 200 || name.Any(char.IsControl) || phone is null)
+            throw new ArgumentException("Invalid guest contact details.");
+        return Appointment.ForGuest(Guid.NewGuid(), command.OwnerId, name, phone, command.InspectionStartUtc,
+            command.Vin, command.Make, command.Model, command.ProblemDescription, now);
     }
 }

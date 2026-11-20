@@ -15,18 +15,32 @@ public sealed class AppointmentCreationStore(ApplicationDbContext db, IInspectio
 {
     private static readonly TimeZoneInfo Zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
 
-    public async Task<CreateAppointmentResult> SaveIfAvailableAsync(Appointment appointment, CancellationToken cancellationToken)
+    public async Task<CreateAppointmentResult> SaveIfAvailableAsync(CreateAppointmentCommand command, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         // All booking writers serialize on the same row that schedule updates modify.
         await db.Database.ExecuteSqlRawAsync("SELECT 1 FROM \"InspectionSchedules\" WHERE \"Id\" = 1 FOR UPDATE", cancellationToken);
-        if (!await db.Users.AnyAsync(u => u.Id == appointment.UserId && !u.IsBlocked && !u.MustChangePassword, cancellationToken))
+        if (!await db.Users.AnyAsync(u => u.Id == command.OwnerId && !u.IsBlocked && !u.MustChangePassword, cancellationToken))
             return new(CreateAppointmentStatus.Unauthorized);
-        var localDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(appointment.InspectionStartUtc, Zone).DateTime);
-        if (localDate.Year is < 2 or > 9998 || !(await slots.GetAvailableAsync(localDate, cancellationToken)).Any(s => s.StartUtc == appointment.InspectionStartUtc))
-            return new(CreateAppointmentStatus.Unavailable);
+        var guest = command.GuestName is not null || command.GuestPhone is not null;
+        if (guest && !await (from membership in db.UserRoles join role in db.Roles on membership.RoleId equals role.Id
+            where membership.UserId == command.OwnerId && (role.Name == ApplicationRoles.Admin || role.Name == ApplicationRoles.SuperAdmin)
+            select role.Id).AnyAsync(cancellationToken)) return new(CreateAppointmentStatus.Unauthorized);
         var now = clock.GetUtcNow();
+        var appointment = CreateAppointmentService.Build(command, now);
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, Zone).DateTime);
+        var localDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(appointment.InspectionStartUtc, Zone).DateTime);
+        var end = new DateOnly(today.Year, today.Month, 1).AddMonths(2);
+        if (localDate < today || localDate >= end || !(await slots.GetAvailableAsync(localDate, cancellationToken)).Any(s => s.StartUtc == appointment.InspectionStartUtc))
+            return new(CreateAppointmentStatus.Unavailable);
         if (appointment.InspectionStartUtc <= now) return new(CreateAppointmentStatus.Unavailable);
+        if (!guest)
+        {
+            var fromUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(today.ToDateTime(TimeOnly.MinValue), Zone), TimeSpan.Zero);
+            var toUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(today.AddDays(1).ToDateTime(TimeOnly.MinValue), Zone), TimeSpan.Zero);
+            if (await db.Appointments.CountAsync(a => a.UserId == command.OwnerId && a.CreatedAtUtc >= fromUtc && a.CreatedAtUtc < toUtc, cancellationToken) >= 10)
+                return new(CreateAppointmentStatus.DailyLimit);
+        }
         db.Appointments.Add(appointment);
         var admins = await (from user in db.Users.AsNoTracking()
                             join userRole in db.Set<IdentityUserRole<string>>() on user.Id equals userRole.UserId
@@ -34,11 +48,12 @@ public sealed class AppointmentCreationStore(ApplicationDbContext db, IInspectio
                             where !user.IsBlocked && (role.Name == ApplicationRoles.Admin || role.Name == ApplicationRoles.SuperAdmin)
                             select user.Id).Distinct().ToListAsync(cancellationToken);
         var local = TimeZoneInfo.ConvertTime(appointment.InspectionStartUtc, Zone);
-        AddNotification(appointment.UserId, NotificationAudience.Personal, "AppointmentCreated", "Запис на огляд створено", $"Огляд заплановано на {local:dd.MM.yyyy HH:mm} (Київ, UTC{local:zzz}).");
+        if (appointment.UserId is { } owner) AddNotification(owner, NotificationAudience.Personal, "AppointmentCreated", "Запис на огляд створено", $"Огляд заплановано на {local:dd.MM.yyyy HH:mm} (Київ, UTC{local:zzz}).");
         foreach (var admin in admins) AddNotification(admin, NotificationAudience.Administrator, "AdminAppointmentCreated", "Новий запис на огляд", "Створено новий запис на огляд. Перегляньте замовлення та зв’яжіться з клієнтом за потреби.");
         foreach (var (type, lead) in new[] { ("Client24Hours", TimeSpan.FromHours(24)), ("Client2Hours", TimeSpan.FromHours(2)), ("Admin30Minutes", TimeSpan.FromMinutes(30)) })
         {
             var due = appointment.InspectionStartUtc - lead;
+            if (type != "Admin30Minutes" && appointment.UserId is null) continue;
             if (due > now) db.ScheduledReminders.Add(new ScheduledReminder { Id = Guid.NewGuid(), AppointmentId = appointment.Id, RecipientId = type == "Admin30Minutes" ? null : appointment.UserId, Type = type, DueAtUtc = due, EventKey = $"appointment:{appointment.Id}:reminder:{type}" });
         }
         var recipients = NotificationDispatch.PendingRecipients(db);

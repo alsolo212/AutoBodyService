@@ -4,6 +4,10 @@ import { expect, Locator, test } from '@playwright/test';
 
 test('booking uses the real API, preserves details on conflict and confirms another slot', async ({ page }) => {
   test.skip(process.env['E2E_REAL_AUTH'] !== '1', 'Requires the isolated API and database.');
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const [year, month] = today.split('-').map(Number);
+  const nextMonth = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7);
+  const adminDate = `${nextMonth}-15`, customerDate = `${nextMonth}-16`;
   await page.setViewportSize({ width: 320, height: 720 });
   await page.goto('/login');
   await page.getByLabel('Номер телефону').fill(process.env['E2E_ADMIN_PHONE']!);
@@ -22,7 +26,7 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await expect(page.getByLabel('Дата', { exact: true })).not.toHaveValue('');
   const suggested = await page.getByLabel('Дата', { exact: true }).inputValue();
   expect(await page.evaluate(async date => (await (await fetch(`/api/inspection-slots?date=${date}`)).json()).slots.length, suggested)).toBeGreaterThan(0);
-  await page.getByLabel('Дата', { exact: true }).fill('2099-01-15');
+  await page.getByLabel('Дата', { exact: true }).fill(adminDate);
   await page.getByLabel('09:00', { exact: true }).check();
   await page.getByRole('button', { name: 'Далі' }).click();
   await page.getByLabel('VIN').fill('1HGCM82633A004352');
@@ -30,12 +34,12 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await page.getByRole('button', { name: 'Далі' }).click();
   await page.getByLabel('Що потрібно оглянути?').fill('Тестовий опис');
   await page.getByRole('button', { name: 'Далі' }).click();
-  const taken = await page.evaluate(async () => {
-    const slots = await (await fetch('/api/inspection-slots?date=2099-01-15')).json();
+  const taken = await page.evaluate(async date => {
+    const slots = await (await fetch(`/api/inspection-slots?date=${date}`)).json();
     await fetch('/api/auth/antiforgery');
     const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
     return (await fetch('/api/appointments', { method: 'POST', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token }, body: JSON.stringify({ inspectionStartUtc: slots.slots[0].startUtc, vin: '1HGCM82633A004352', make: 'Test', model: 'Model', problemDescription: 'Issue' }) })).status;
-  });
+  }, adminDate);
   expect(taken).toBe(201);
   const conflict = page.waitForResponse(r => r.url().endsWith('/api/appointments') && r.request().method() === 'POST');
   await page.getByRole('button', { name: 'Підтвердити запис' }).click();
@@ -71,7 +75,7 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await expect(page.getByText('1HGCM82633A004352')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Історія статусів' })).toBeVisible();
   await page.goto('/admin/inspection-calendar');
-  await page.getByLabel('Дата огляду').fill('2099-01-15'); await page.getByRole('button', { name: 'Показати дату' }).click();
+  await page.getByLabel('Дата огляду').fill(adminDate); await page.getByRole('button', { name: 'Показати дату' }).click();
   await expect(page.getByText('E2E test').first()).toBeVisible();
   await expect(page.getByText(/Зайнято/).first()).toBeVisible();
   await page.getByRole('button', { name: 'Налаштування графіка' }).click();
@@ -101,7 +105,7 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await expect(page.getByRole('heading', { name: 'Запис не знайдено' })).toBeVisible();
   await page.getByRole('link', { name: 'Мої записи' }).first().click();
   await page.getByRole('link', { name: 'Записатися на огляд' }).first().click();
-  await page.getByLabel('Дата', { exact: true }).fill('2099-01-16');
+  await page.getByLabel('Дата', { exact: true }).fill(customerDate);
   await page.getByLabel('09:00', { exact: true }).check();
   await page.getByRole('button', { name: 'Далі' }).click();
   await page.getByLabel('VIN').fill('1HGCM82633A004352');
@@ -165,7 +169,7 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await expect(page.getByLabel('Дії із записом')).toHaveCount(0);
   await page.getByRole('button', { name: 'Відкрити меню' }).click();
   await page.getByRole('dialog', { name: 'Меню' }).getByRole('link', { name: 'Запис на огляд' }).click();
-  await page.getByLabel('Дата', { exact: true }).fill('2099-01-16');
+  await page.getByLabel('Дата', { exact: true }).fill(customerDate);
   await page.getByLabel('09:00', { exact: true }).check();
   await page.getByRole('button', { name: 'Далі' }).click();
   await page.getByLabel('VIN').fill('1HGCM82633A004352');
@@ -179,4 +183,37 @@ test('booking uses the real API, preserves details on conflict and confirms anot
   await expect(page).toHaveURL(/\/account\/book\/success$/);
   await expect(page.locator('main .profile-intro')).toContainText('09:00');
 
+});
+
+test('administrator creates a guest booking through the real API without adding it to personal appointments', async ({ page }) => {
+  test.skip(process.env['E2E_REAL_AUTH'] !== '1', 'Requires the isolated API and database.');
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const [year, month] = today.split('-').map(Number);
+  const date = `${new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7)}-17`;
+  await page.goto('/login'); await page.getByLabel('Номер телефону').fill(process.env['E2E_ADMIN_PHONE']!);
+  await page.getByLabel('Пароль', { exact: true }).fill(process.env['E2E_ADMIN_PASSWORD']!); await page.getByRole('button', { name: 'Увійти' }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+  const status = await page.evaluate(async () => {
+    const schedule = await (await fetch('/api/admin/inspection-schedule')).json();
+    if (schedule.intervals.length === 7 && schedule.intervals.every((item: { start: string; end: string }) => item.start.startsWith('09:00') && item.end.startsWith('10:00'))) return 204;
+    await fetch('/api/auth/antiforgery');
+    const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
+    const intervals = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(dayOfWeek => ({ dayOfWeek, start: '09:00', end: '10:00' }));
+    return (await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token }, body: JSON.stringify({ version: schedule.version, intervals }) })).status;
+  });
+  expect(status).toBe(204); await page.getByRole('link', { name: 'Записати клієнта' }).click();
+  const phone = '000' + String(randomInt(10_000_000)).padStart(7, '0');
+  await page.getByLabel('Ім’я клієнта').fill('Тестовий клієнт'); await page.getByLabel('Телефон клієнта').fill(phone);
+  await page.getByLabel('Дата', { exact: true }).fill(date); await page.getByLabel('09:00', { exact: true }).check();
+  await page.getByRole('button', { name: 'Далі' }).click(); await page.getByLabel('Марка').fill('Тест'); await page.getByLabel('Модель').fill('Авто');
+  await page.getByRole('button', { name: 'Далі' }).click(); await page.getByLabel('Що потрібно оглянути?').fill('Пошкоджено двері');
+  await page.getByRole('button', { name: 'Далі' }).click();
+  const response = page.waitForResponse(r => r.url().endsWith('/api/admin/appointments/guest') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Підтвердити запис' }).click(); const created = await response; expect(created.status()).toBe(201);
+  const id = (await created.json()).id;
+  await expect(page.getByRole('heading', { name: 'Запис для клієнта створено' })).toBeVisible();
+  await page.getByRole('link', { name: 'Відкрити замовлення' }).click();
+  await expect(page.getByText('Тестовий клієнт')).toBeVisible(); await expect(page.locator('main dt', { hasText: 'VIN' })).toHaveCount(0);
+  const personal = await page.evaluate(async () => (await fetch('/api/appointments/my')).json());
+  expect(personal.some((item: { id: string }) => item.id === id)).toBe(false);
 });

@@ -14,7 +14,7 @@ export interface AdminAppointment extends Omit<AppointmentDetails, 'history'> {
 }
 export interface RepairPlanChange { version: number; price: string; plannedStartUtc: string; estimatedFinishUtc: string; inspectionPerformed: boolean; }
 export interface TransitionChange { version: number; target: AppointmentStatus; inspectionPerformed?: boolean; paymentReceived?: boolean; vehicleHandedOver?: boolean; }
-export interface AdminBoardCard { id: string; customerName: string; vin: string; make: string; model: string; inspectionStartUtc: string; inspectionStartLocal: string; status: AppointmentStatus; repairPlan: RepairPlan | null; version: number; }
+export interface AdminBoardCard { id: string; customerName: string; vin: string | null; make: string; model: string; inspectionStartUtc: string; inspectionStartLocal: string; status: AppointmentStatus; repairPlan: RepairPlan | null; version: number; }
 export interface AdminBoardPage { items: AdminBoardCard[]; page: number; pageSize: number; total: number; }
 export interface AdminBoardFilter { search: string; from: string; to: string; sort: string; direction: string; pageSize: number; }
 export interface DashboardItem { id: string; customerName: string; make: string; model: string; status: AppointmentStatus; inspectionStartUtc: string; inspectionStartLocal: string; occurredAtUtc: string; }

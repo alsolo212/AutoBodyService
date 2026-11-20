@@ -79,7 +79,7 @@ test('blocks a user from administration and explains forgotten password', async 
   await page.goto('/admin');
   await expect(page).toHaveURL(/\/account\/appointments$/);
   await page.goto('/forgot-password');
-  await expect(page.getByText(/Зверніться до персоналу СТО/)).toBeVisible();
+  await expect(page.getByText('Зверніться до персоналу СТО, щоб відновити доступ до облікового запису.')).toBeVisible();
 });
 
 test('shows generic login errors and server connectivity errors', async ({ page }) => {

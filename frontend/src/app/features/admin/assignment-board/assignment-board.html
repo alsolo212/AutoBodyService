@@ -12,7 +12,7 @@
         @for (order of orders(); track order.id) {
           <article class="order-card" cdkDrag [cdkDragData]="order" [cdkDragDisabled]="saving()" [attr.data-order-id]="order.id">
             <div class="order-top"><span>{{ order.customerName }}</span><span class="drag-handle" cdkDragHandle aria-hidden="true" title="Перетягнути до працівника">⠿</span></div>
-            <h3><a [routerLink]="['/admin/appointments', order.id]">{{ order.make }} {{ order.model }}</a></h3><p>VIN {{ order.vin }}</p>
+            <h3><a [routerLink]="['/admin/appointments', order.id]">{{ order.make }} {{ order.model }}</a></h3>@if (order.vin) { <p>VIN {{ order.vin }}</p> }
           </article>
         } @empty { <p class="empty">Замовлень у роботі немає.</p> }
       </div>

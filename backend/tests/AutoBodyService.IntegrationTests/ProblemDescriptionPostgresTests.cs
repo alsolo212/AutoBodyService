@@ -22,8 +22,10 @@ public sealed class ProblemDescriptionPostgresTests(PostgresIdentityFixture fixt
     [PostgresFact]
     public async Task DirectApiRejectsMediaOnlyAndCreatesAppointmentWithWrittenProblemAndLink()
     {
-        var date = new DateOnly(2080, 3, 4);
-        var local = date.ToDateTime(new TimeOnly(9, 0)); var zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, zone).DateTime);
+        var date = new DateOnly(today.Year, today.Month, 1).AddMonths(1).AddDays(20);
+        var local = date.ToDateTime(new TimeOnly(9, 0));
         var start = new DateTimeOffset(local, zone.GetUtcOffset(local)).ToUniversalTime();
         await using (var scope = factory.Services.CreateAsyncScope())
         {

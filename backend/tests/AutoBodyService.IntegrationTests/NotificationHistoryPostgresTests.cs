@@ -114,7 +114,8 @@ public sealed class NotificationHistoryPostgresTests(PostgresIdentityFixture fix
         {
             var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
             Assert.True((await users.AddToRoleAsync((await users.FindByIdAsync(owner.Id))!, "Admin")).Succeeded);
-            var date = new DateOnly(2080, 1, 1).AddDays(RandomNumberGenerator.GetInt32(0, 9000));
+            var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv")).DateTime);
+            var date = new DateOnly(today.Year, today.Month, 1).AddMonths(1).AddDays(21);
             var schedules = scope.ServiceProvider.GetRequiredService<IInspectionScheduleService>();
             var current = await schedules.GetAsync(default);
             Assert.Equal(ScheduleUpdateResult.Success, await schedules.UpdateAsync(current.Version, [new(date.DayOfWeek, new(9, 0), new(10, 0))], default));

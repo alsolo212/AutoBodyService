@@ -31,6 +31,18 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CreatedById")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("CustomerName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("CustomerPhone")
+                        .HasMaxLength(13)
+                        .HasColumnType("character varying(13)");
+
                     b.Property<DateTimeOffset>("InspectionStartUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -50,7 +62,6 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("UserId")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<uint>("Version")
@@ -60,7 +71,6 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         .HasColumnName("xmin");
 
                     b.Property<string>("Vin")
-                        .IsRequired()
                         .HasMaxLength(17)
                         .HasColumnType("character varying(17)");
 
@@ -68,21 +78,27 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CreatedAtUtc");
 
+                    b.HasIndex("CreatedById");
+
                     b.HasIndex("InspectionStartUtc")
                         .IsUnique()
                         .HasFilter("\"Status\" <> 5");
 
                     b.HasIndex("Status", "InspectionStartUtc");
 
+                    b.HasIndex("UserId", "CreatedAtUtc");
+
                     b.HasIndex("UserId", "InspectionStartUtc");
 
                     b.ToTable("Appointments", t =>
                         {
+                            t.HasCheckConstraint("CK_Appointment_Customer", "(\"UserId\" IS NOT NULL AND \"CustomerName\" IS NULL AND \"CustomerPhone\" IS NULL) OR (\"UserId\" IS NULL AND \"CustomerName\" IS NOT NULL AND \"CustomerPhone\" IS NOT NULL AND \"CustomerName\" ~ '[^[:space:]]' AND \"CustomerPhone\" ~ '^\\+380[0-9]{9}$')");
+
                             t.HasCheckConstraint("CK_Appointment_RequiredText", "\"Make\" ~ '[^[:space:]]' AND \"Model\" ~ '[^[:space:]]' AND \"ProblemDescription\" ~ '[^[:space:]]'");
 
                             t.HasCheckConstraint("CK_Appointment_Status", "\"Status\" BETWEEN 0 AND 5");
 
-                            t.HasCheckConstraint("CK_Appointment_Vin", "\"Vin\" ~ '^[A-HJ-NPR-Z0-9]{17}$'");
+                            t.HasCheckConstraint("CK_Appointment_Vin", "\"Vin\" IS NULL OR \"Vin\" ~ '^[A-HJ-NPR-Z0-9]{17}$'");
                         });
                 });
 
@@ -1009,9 +1025,14 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                 {
                     b.HasOne("AutoBodyService.Infrastructure.Identity.ApplicationUser", null)
                         .WithMany()
-                        .HasForeignKey("UserId")
+                        .HasForeignKey("CreatedById")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("AutoBodyService.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("AutoBodyService.Domain.Appointments.AppointmentStatusEvent", b =>

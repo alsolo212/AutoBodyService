@@ -10,29 +10,40 @@ public sealed class Appointment
     // EF materialization must not create a second initial event.
     private Appointment()
     {
-        UserId = Vin = Make = Model = ProblemDescription = null!;
+        CreatedById = Make = Model = ProblemDescription = null!;
     }
 
     public Appointment(
         Guid id,
         string userId,
         DateTimeOffset inspectionStartUtc,
-        string vin,
+        string? vin,
         string make,
         string model,
         string problemDescription,
-        DateTimeOffset createdAtUtc)
+        DateTimeOffset createdAtUtc) : this(id, userId, userId, null, null, inspectionStartUtc, vin, make, model, problemDescription, createdAtUtc)
+    { }
+
+    public static Appointment ForGuest(Guid id, string createdById, string customerName, string customerPhone,
+        DateTimeOffset inspectionStartUtc, string? vin, string make, string model, string problemDescription, DateTimeOffset createdAtUtc) =>
+        new(id, null, createdById, customerName, customerPhone, inspectionStartUtc, vin, make, model, problemDescription, createdAtUtc);
+
+    private Appointment(Guid id, string? userId, string createdById, string? customerName, string? customerPhone,
+        DateTimeOffset inspectionStartUtc, string? vin, string make, string model, string problemDescription, DateTimeOffset createdAtUtc)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(id, Guid.Empty);
-        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(vin);
+        ArgumentException.ThrowIfNullOrWhiteSpace(createdById);
+        if (userId is null && (string.IsNullOrWhiteSpace(customerName) || string.IsNullOrWhiteSpace(customerPhone)))
+            throw new ArgumentException("Guest contact details are required.");
+        if (userId is not null && (string.IsNullOrWhiteSpace(userId) || customerName is not null || customerPhone is not null))
+            throw new ArgumentException("An appointment must have one customer identity.");
         ArgumentException.ThrowIfNullOrWhiteSpace(make);
         ArgumentException.ThrowIfNullOrWhiteSpace(model);
         if (!ProblemDescriptionValidator.IsValid(problemDescription))
             throw new ArgumentException("A text description of the problem is required.", nameof(problemDescription));
 
-        vin = vin.Trim();
-        if (vin.Length != 17 || vin.Any(c => !(c is >= '0' and <= '9' or >= 'A' and <= 'H' or >= 'J' and <= 'N' or 'P' or >= 'R' and <= 'Z')))
+        vin = string.IsNullOrWhiteSpace(vin) ? null : vin.Trim();
+        if (vin is not null && (vin.Length != 17 || vin.Any(c => !(c is >= '0' and <= '9' or >= 'A' and <= 'H' or >= 'J' and <= 'N' or 'P' or >= 'R' and <= 'Z'))))
         {
             throw new ArgumentException("VIN must contain exactly 17 permitted uppercase letters or digits.", nameof(vin));
         }
@@ -49,6 +60,9 @@ public sealed class Appointment
 
         Id = id;
         UserId = userId;
+        CreatedById = createdById;
+        CustomerName = customerName?.Trim();
+        CustomerPhone = customerPhone;
         InspectionStartUtc = inspectionStartUtc;
         Vin = vin;
         Make = make.Trim();
@@ -56,16 +70,19 @@ public sealed class Appointment
         ProblemDescription = problemDescription.Trim();
         CreatedAtUtc = createdAtUtc;
         Status = AppointmentStatus.AwaitingInspection;
-        _statusEvents.Add(new AppointmentStatusEvent(Guid.NewGuid(), Id, null, Status, UserId, CreatedAtUtc, null));
+        _statusEvents.Add(new AppointmentStatusEvent(Guid.NewGuid(), Id, null, Status, CreatedById, CreatedAtUtc, null));
     }
 
     public Guid Id { get; }
 
-    public string UserId { get; }
+    public string? UserId { get; }
+    public string CreatedById { get; }
+    public string? CustomerName { get; }
+    public string? CustomerPhone { get; }
 
     public DateTimeOffset InspectionStartUtc { get; }
 
-    public string Vin { get; }
+    public string? Vin { get; }
 
     public string Make { get; }
 
@@ -87,7 +104,7 @@ public sealed class Appointment
     public AppointmentStatusEvent? CancelByOwner(DateTimeOffset nowUtc)
     {
         if (nowUtc.Offset != TimeSpan.Zero) throw new ArgumentException("Time must use the UTC offset.", nameof(nowUtc));
-        if (Status != AppointmentStatus.AwaitingInspection || InspectionStartUtc <= nowUtc)
+        if (UserId is null || Status != AppointmentStatus.AwaitingInspection || InspectionStartUtc <= nowUtc)
             return null;
 
         var statusEvent = new AppointmentStatusEvent(Guid.NewGuid(), Id, Status, AppointmentStatus.Cancelled, UserId, nowUtc, null);

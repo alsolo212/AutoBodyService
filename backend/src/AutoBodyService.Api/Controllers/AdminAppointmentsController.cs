@@ -14,8 +14,25 @@ namespace AutoBodyService.Api.Controllers;
 [Authorize(Policy = "Admin")]
 [Route("api/admin/appointments")]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public sealed class AdminAppointmentsController(IAdminAppointmentCommands commands, IAdminOverviewQueries overview, IManualContactService contacts) : ControllerBase
+public sealed class AdminAppointmentsController(IAdminAppointmentCommands commands, IAdminOverviewQueries overview, IManualContactService contacts, ICreateAppointmentService creation) : ControllerBase
 {
+    /// <summary>Create an inspection for a customer without an account.</summary>
+    [HttpPost("guest")]
+    public async Task<IActionResult> CreateGuest(CreateGuestAppointmentRequest request, CancellationToken cancellationToken)
+    {
+        var actor = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (actor is null) return Unauthorized();
+        var result = await creation.CreateAsync(new(actor, request.InspectionStartUtc!.Value, request.Vin, request.Make,
+            request.Model, request.ProblemDescription, request.CustomerName, request.CustomerPhone), cancellationToken);
+        return result.Status switch
+        {
+            CreateAppointmentStatus.Created => Created($"/api/appointments/{result.Id}", new AppointmentCreatedResponse(result.Id!.Value, result.InspectionStartUtc!.Value, "AwaitingInspection")),
+            CreateAppointmentStatus.Invalid => BadRequest(new ProblemDetails { Status = 400, Title = "Перевірте дані запису." }),
+            CreateAppointmentStatus.Unauthorized => Forbid(),
+            _ => Conflict(new ProblemDetails { Status = 409, Title = "Обраний час недоступний. Оберіть інший слот." })
+        };
+    }
+
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] AppointmentStatus? status, [FromQuery] string? search,
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] string? sort,
@@ -82,6 +99,19 @@ public sealed class AdminAppointmentsController(IAdminAppointmentCommands comman
         AdminAppointmentResult.Invalid => BadRequest(new ProblemDetails { Status = 400, Title = "Перевірте дані замовлення." }),
         _ => Conflict(new ProblemDetails { Status = 409, Title = "Замовлення змінилося або дія недоступна." })
     };
+}
+
+/// <summary>Customer contact and inspection details supplied by an administrator.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CreateGuestAppointmentRequest
+{
+    [Required, StringLength(200)] public required string CustomerName { get; init; }
+    [Required, StringLength(32)] public required string CustomerPhone { get; init; }
+    [Required] public required DateTimeOffset? InspectionStartUtc { get; init; }
+    [StringLength(19)] public string? Vin { get; init; }
+    [Required, StringLength(200)] public required string Make { get; init; }
+    [Required, StringLength(200)] public required string Model { get; init; }
+    [Required, StringLength(5000)] public required string ProblemDescription { get; init; }
 }
 
 /// <summary>Records a manual interaction without claiming message delivery.</summary>

@@ -94,6 +94,10 @@ public sealed class InspectionReminderPostgresTests(PostgresIdentityFixture fixt
                 ('40000000-0000-0000-0000-000000000000', '10000000-0000-0000-0000-000000000000', 'Client2Hours', '2032-01-01 08:00:00+00', '2032-01-01 08:00:00+00', 'legacy-processed');
                 """);
             await migrator.MigrateAsync();
+            var appointment = await db.Appointments.AsNoTracking().SingleAsync();
+            Assert.Equal("legacy-user", appointment.CreatedById);
+            Assert.Equal("legacy-user", appointment.UserId);
+            Assert.Equal("1HGCM82633A123456", appointment.Vin);
             var rows = await db.ScheduledReminders.AsNoTracking().ToDictionaryAsync(r => r.EventKey);
             Assert.Equal("legacy-user", rows["legacy-client"].RecipientId);
             Assert.Null(rows["legacy-client"].Outcome);

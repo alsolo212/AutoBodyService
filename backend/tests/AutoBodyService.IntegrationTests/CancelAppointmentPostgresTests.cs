@@ -21,7 +21,8 @@ public sealed class CancelAppointmentPostgresTests(PostgresIdentityFixture fixtu
 {
     private readonly WebApplicationFactory<Program> factory = fixture.Factory.WithWebHostBuilder(_ => { });
     private const string Password = "Example-password-123!";
-    private static readonly DateTimeOffset BaseTime = new(2050, 1, 3, 7, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset BaseTime = FutureSlot();
+    private static DateTimeOffset FutureSlot() { var zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv"); var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, zone).DateTime); var day = new DateOnly(today.Year, today.Month, 1).AddMonths(1).AddDays(23); var local = day.ToDateTime(new TimeOnly(9, 0)); return new DateTimeOffset(local, zone.GetUtcOffset(local)).ToUniversalTime(); }
     public void Dispose() => factory.Dispose();
     private HttpClient Client() => factory.CreateClient(new() { BaseAddress = new Uri("https://localhost"), HandleCookies = true, AllowAutoRedirect = false });
     private async Task<(string Id, string Phone)> User(string role)

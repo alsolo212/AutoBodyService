@@ -20,7 +20,7 @@ public sealed class AppointmentQueries(ApplicationDbContext db) : IAppointmentQu
         var rows = await query.OrderByDescending(a => a.InspectionStartUtc).ThenBy(a => a.Id)
             .Select(a => new { a.Id, a.Make, a.Model, a.Vin, a.InspectionStartUtc, a.Status,
                 Plan = a.RepairPlan == null ? null : new AgreedRepairDetails(a.RepairPlan.AgreedPrice, a.RepairPlan.Currency, a.RepairPlan.PlannedStartUtc, a.RepairPlan.EstimatedFinishUtc) }).ToListAsync(cancellationToken);
-        return rows.Select(a => new AppointmentSummary(a.Id, a.Make, a.Model, new string('*', 13) + a.Vin[^4..], a.InspectionStartUtc, a.Status, a.Plan)).ToArray();
+        return rows.Select(a => new AppointmentSummary(a.Id, a.Make, a.Model, a.Vin is null ? null : new string('*', 13) + a.Vin[^4..], a.InspectionStartUtc, a.Status, a.Plan)).ToArray();
     }
 
     public async Task<CustomerAppointmentDetails?> GetOwnAsync(Guid id, string userId, CancellationToken cancellationToken)
@@ -40,12 +40,13 @@ public sealed class AppointmentQueries(ApplicationDbContext db) : IAppointmentQu
     public async Task<AdminAppointmentDetails?> GetForAdminAsync(Guid id, CancellationToken cancellationToken)
     {
         var row = await (from a in db.Appointments.AsNoTracking()
-                         join owner in db.Users.AsNoTracking() on a.UserId equals owner.Id
+                         join owner in db.Users.AsNoTracking() on a.UserId equals owner.Id into owners
+                         from owner in owners.DefaultIfEmpty()
                          where a.Id == id
                          select new { a.Id, a.Vin, a.Make, a.Model, a.ProblemDescription, a.InspectionStartUtc, a.Status,
                              Version = EF.Property<uint>(a, "Version"),
                              Plan = a.RepairPlan == null ? null : new AgreedRepairDetails(a.RepairPlan.AgreedPrice, a.RepairPlan.Currency, a.RepairPlan.PlannedStartUtc, a.RepairPlan.EstimatedFinishUtc),
-                             CustomerName = owner.Name, CustomerPhone = owner.PhoneNormalized })
+                             CustomerName = owner != null ? owner.Name : a.CustomerName!, CustomerPhone = owner != null ? owner.PhoneNormalized : a.CustomerPhone! })
             .SingleOrDefaultAsync(cancellationToken);
         if (row is null) return null;
         var history = await (from e in db.AppointmentStatusEvents.AsNoTracking()

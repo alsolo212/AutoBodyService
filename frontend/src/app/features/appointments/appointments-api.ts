@@ -6,10 +6,10 @@ import { formatUah } from '../../shared/money/money';
 export type AppointmentStatus = 'AwaitingInspection' | 'Scheduled' | 'InProgress' | 'AwaitingPayment' | 'Completed' | 'Cancelled';
 export type AppointmentCategory = 'all' | 'active' | 'completed' | 'cancelled';
 export interface RepairPlan { agreedPriceExact: string; currency: string; plannedStartUtc: string; estimatedFinishUtc: string; }
-export interface AppointmentSummary { id: string; make: string; model: string; maskedVin: string; inspectionStartUtc: string; status: AppointmentStatus; repairPlan: RepairPlan | null; }
+export interface AppointmentSummary { id: string; make: string; model: string; maskedVin: string | null; inspectionStartUtc: string; status: AppointmentStatus; repairPlan: RepairPlan | null; }
 export interface StatusHistory { fromStatus: AppointmentStatus | null; toStatus: AppointmentStatus; changedAtUtc: string; }
 export interface Participant { name: string; specialization: string; }
-export interface AppointmentDetails { id: string; vin: string; make: string; model: string; problemDescription: string; inspectionStartUtc: string; status: AppointmentStatus; history: StatusHistory[]; repairPlan: RepairPlan | null; participants: Participant[] | null; }
+export interface AppointmentDetails { id: string; vin: string | null; make: string; model: string; problemDescription: string; inspectionStartUtc: string; status: AppointmentStatus; history: StatusHistory[]; repairPlan: RepairPlan | null; participants: Participant[] | null; }
 
 const labels: Record<AppointmentStatus, string> = { AwaitingInspection: 'Очікує огляду', Scheduled: 'Заплановано', InProgress: 'У роботі', AwaitingPayment: 'Очікує оплати', Completed: 'Завершено', Cancelled: 'Скасовано' };
 export function statusLabel(status: AppointmentStatus): string { return labels[status] ?? 'Невідомий статус'; }

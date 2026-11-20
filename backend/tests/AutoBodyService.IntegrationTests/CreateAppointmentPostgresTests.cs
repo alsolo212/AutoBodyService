@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AutoBodyService.IntegrationTests;
 
@@ -22,8 +23,9 @@ public sealed class CreateAppointmentPostgresTests(PostgresIdentityFixture fixtu
 {
     private const string Password = "Example-password-123!";
     private const string Url = "/api/appointments";
-    private static readonly DateOnly FirstDate = new(2035, 1, 1);
     private static readonly TimeZoneInfo Zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
+    private static readonly DateOnly FirstDate = FirstOfNextMonth();
+    private static DateOnly FirstOfNextMonth() { var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Zone).DateTime); return new DateOnly(today.Year, today.Month, 1).AddMonths(1); }
 
     [PostgresFact]
     public async Task AllRolesCreateOnlyOwnAppointmentsWithAtomicEventsAndValidation()
@@ -84,6 +86,8 @@ public sealed class CreateAppointmentPostgresTests(PostgresIdentityFixture fixtu
     {
         var owner = await CreateUser("User", "+380000000048");
         var date = new DateOnly(2031, 10, 26);
+        using var timeFactory = fixture.Factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+            services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new FixedClock { Now = new DateTimeOffset(2031, 10, 1, 0, 0, 0, TimeSpan.Zero) }))));
         await using (var scope = fixture.Factory.Services.CreateAsyncScope())
         {
             var schedules = scope.ServiceProvider.GetRequiredService<IInspectionScheduleService>();
@@ -91,7 +95,7 @@ public sealed class CreateAppointmentPostgresTests(PostgresIdentityFixture fixtu
             Assert.Equal(ScheduleUpdateResult.Success, await schedules.UpdateAsync(current.Version,
                 [new(date.DayOfWeek, new TimeOnly(3, 0), new TimeOnly(4, 0))], default));
         }
-        using var client = await Login("+380000000048");
+        using var client = await Login("+380000000048", timeFactory);
         var instants = new[] { new DateTimeOffset(2031, 10, 26, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2031, 10, 26, 1, 0, 0, TimeSpan.Zero) };
         var offsets = new[] { "UTC+03:00", "UTC+02:00" };
         for (var i = 0; i < instants.Length; i++)
@@ -112,7 +116,7 @@ public sealed class CreateAppointmentPostgresTests(PostgresIdentityFixture fixtu
     {
         await CreateUser("User", "+380000000044");
         await CreateUser("User", "+380000000045");
-        var date = FirstDate.AddDays(7);
+        var date = FirstDate.AddDays(2);
         await SetWeekly(date.DayOfWeek);
         using var first = await Login("+380000000044");
         using var second = await Login("+380000000045");
@@ -135,7 +139,7 @@ public sealed class CreateAppointmentPostgresTests(PostgresIdentityFixture fixtu
     public async Task DateExceptionsControlBookingAndPastRemindersAreNotCreated()
     {
         var owner = await CreateUser("User", "+380000000046");
-        var date = FirstDate.AddDays(14);
+        var date = FirstDate.AddDays(4);
         await SetWeekly(date.DayOfWeek);
         await using var scope = fixture.Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -166,7 +170,7 @@ public sealed class CreateAppointmentPostgresTests(PostgresIdentityFixture fixtu
     public async Task NotificationFailureRollsBackAppointmentAndInitialHistory()
     {
         await CreateUser("User", "+380000000047");
-        var date = FirstDate.AddDays(28);
+        var date = FirstDate.AddDays(6);
         await SetWeekly(date.DayOfWeek);
         await using var scope = fixture.Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -209,9 +213,9 @@ public sealed class CreateAppointmentPostgresTests(PostgresIdentityFixture fixtu
         return user.Id;
     }
     private HttpClient Client() => fixture.Factory.CreateClient(new() { BaseAddress = new Uri("https://localhost"), HandleCookies = true, AllowAutoRedirect = false });
-    private async Task<HttpClient> Login(string phone)
+    private async Task<HttpClient> Login(string phone, WebApplicationFactory<Program>? factory = null)
     {
-        var client = Client(); await Token(client);
+        var client = factory?.CreateClient(new() { BaseAddress = new Uri("https://localhost"), HandleCookies = true, AllowAutoRedirect = false }) ?? Client(); await Token(client);
         Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync("/api/auth/login", new { phone, password = Password })).StatusCode);
         await Token(client); return client;
     }

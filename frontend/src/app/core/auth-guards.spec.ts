@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { GuardResult, provideRouter, Router, UrlTree } from '@angular/router';
+import { convertToParamMap, GuardResult, provideRouter, Router, UrlTree } from '@angular/router';
 import { firstValueFrom, Observable, Subject, throwError } from 'rxjs';
 import { AuthService, AuthSession } from './auth';
 import { authGuard, guestGuard } from './auth-guards';
@@ -12,7 +12,7 @@ describe('guestGuard', () => {
     session = new Subject<AuthSession | null>();
     TestBed.configureTestingModule({ providers: [provideRouter([]), { provide: AuthService, useValue: { getSession: () => session.asObservable() } }] });
   });
-  const invoke = () => TestBed.runInInjectionContext(() => guestGuard({} as never, {} as never));
+  const invoke = () => TestBed.runInInjectionContext(() => guestGuard({ queryParamMap: convertToParamMap({}) } as never, { url: "/login" } as never));
 
   it('waits for the server session before allowing a guest', async () => {
     let resolved = false;
@@ -49,24 +49,24 @@ describe('admin authGuard', () => {
   });
   for (const role of ['Admin', 'SuperAdmin']) {
     it(`allows ${role} to the common dashboard`, async () => {
-      const result = firstValueFrom(TestBed.runInInjectionContext(() => authGuard({ data: { area: 'admin' } } as never, {} as never)) as Observable<GuardResult>);
+      const result = firstValueFrom(TestBed.runInInjectionContext(() => authGuard({ data: { area: 'admin' } } as never, { url: "/admin" } as never)) as Observable<GuardResult>);
       session.next(account(role)); expect(await result).toBe(true);
     });
   }
   it('redirects User away from the dashboard', async () => {
-    const result = firstValueFrom(TestBed.runInInjectionContext(() => authGuard({ data: { area: 'admin' } } as never, {} as never)) as Observable<GuardResult>);
+    const result = firstValueFrom(TestBed.runInInjectionContext(() => authGuard({ data: { area: 'admin' } } as never, { url: "/admin" } as never)) as Observable<GuardResult>);
     session.next(account('User'));
     expect(TestBed.inject(Router).serializeUrl(await result as UrlTree)).toBe('/account/appointments');
   });
   for (const [role, expected] of [['Admin', '/admin'], ['User', '/account/appointments']] as const) {
     it(`denies ${role} the SuperAdmin reports route`, async () => {
-      const result = firstValueFrom(TestBed.runInInjectionContext(() => authGuard({ data: { area: 'admin', role: 'SuperAdmin' } } as never, {} as never)) as Observable<GuardResult>);
+      const result = firstValueFrom(TestBed.runInInjectionContext(() => authGuard({ data: { area: 'admin', role: 'SuperAdmin' } } as never, { url: "/admin" } as never)) as Observable<GuardResult>);
       session.next(account(role));
       expect(TestBed.inject(Router).serializeUrl(await result as UrlTree)).toBe(expected);
     });
   }
   it('allows SuperAdmin to the reports route', async () => {
-    const result = firstValueFrom(TestBed.runInInjectionContext(() => authGuard({ data: { area: 'admin', role: 'SuperAdmin' } } as never, {} as never)) as Observable<GuardResult>);
+    const result = firstValueFrom(TestBed.runInInjectionContext(() => authGuard({ data: { area: 'admin', role: 'SuperAdmin' } } as never, { url: "/admin" } as never)) as Observable<GuardResult>);
     session.next(account('SuperAdmin')); expect(await result).toBe(true);
   });
 });

@@ -19,8 +19,10 @@ public sealed class InspectionCalendarPostgresTests(PostgresIdentityFixture fixt
 {
     private readonly WebApplicationFactory<Program> factory = fixture.Factory.WithWebHostBuilder(_ => { });
     private const string Password = "Example-password-123!";
-    private readonly DateOnly date = new DateOnly(2088, 1, 6).AddDays(RandomNumberGenerator.GetInt32(0, 10000));
+    private static int dateSequence;
+    private readonly DateOnly date = NextMonthDay(24 + Interlocked.Increment(ref dateSequence));
     private static readonly TimeZoneInfo Zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
+    private static DateOnly NextMonthDay(int day) { var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Zone).DateTime); return new DateOnly(today.Year, today.Month, 1).AddMonths(1).AddDays(day - 1); }
     public void Dispose() => factory.Dispose();
     private HttpClient Client() => factory.CreateClient(new() { BaseAddress = new Uri("https://localhost"), HandleCookies = true, AllowAutoRedirect = false });
     private DateTimeOffset Start(int hour, int minute) => new DateTimeOffset(date.ToDateTime(new TimeOnly(hour, minute)), Zone.GetUtcOffset(date.ToDateTime(new TimeOnly(hour, minute)))).ToUniversalTime();

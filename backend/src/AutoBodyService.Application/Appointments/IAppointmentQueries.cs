@@ -6,7 +6,7 @@ namespace AutoBodyService.Application.Appointments;
 public enum AppointmentCategory { Active, Completed, Cancelled }
 
 /// <summary>Customer-safe overview of an appointment.</summary>
-public sealed record AppointmentSummary(Guid Id, string Make, string Model, string MaskedVin,
+public sealed record AppointmentSummary(Guid Id, string Make, string Model, string? MaskedVin,
     DateTimeOffset InspectionStartUtc, AppointmentStatus Status, AgreedRepairDetails? RepairPlan);
 /// <summary>Price and dates agreed after inspection.</summary>
 public sealed record AgreedRepairDetails(decimal AgreedPrice, string Currency, DateTimeOffset PlannedStartUtc, DateTimeOffset EstimatedFinishUtc)
@@ -27,11 +27,11 @@ public sealed record AdminPaymentConfirmation(string ActorName, DateTimeOffset P
 public sealed record AdminAssignmentDetails(Guid Id, Guid EmployeeId, string Name, string Specialization, string AssignedById,
     string AssignedByName, DateTimeOffset AssignedAtUtc, DateTimeOffset? ReleasedAtUtc, string? ReleasedById, string? ReleasedByName);
 /// <summary>Owner-visible details, including the workers who participated.</summary>
-public sealed record CustomerAppointmentDetails(Guid Id, string Vin, string Make, string Model, string ProblemDescription,
+public sealed record CustomerAppointmentDetails(Guid Id, string? Vin, string Make, string Model, string ProblemDescription,
     DateTimeOffset InspectionStartUtc, AppointmentStatus Status, IReadOnlyList<CustomerStatusHistory> History,
     AgreedRepairDetails? RepairPlan, IReadOnlyList<AppointmentParticipant> Participants);
 /// <summary>Administrative details of an appointment and its customer.</summary>
-public sealed record AdminAppointmentDetails(Guid Id, string Vin, string Make, string Model, string ProblemDescription,
+public sealed record AdminAppointmentDetails(Guid Id, string? Vin, string Make, string Model, string ProblemDescription,
     DateTimeOffset InspectionStartUtc, AppointmentStatus Status, string CustomerName, string CustomerPhone,
     IReadOnlyList<AdminStatusHistory> History, AgreedRepairDetails? RepairPlan, IReadOnlyList<AppointmentParticipant> Participants, uint Version,
     AdminPaymentConfirmation? PaymentConfirmation, IReadOnlyList<AdminManualContact> ManualContacts, IReadOnlyList<AdminAssignmentDetails> Assignments);

@@ -94,8 +94,9 @@ public sealed class InspectionCalendarService(ApplicationDbContext db, IInspecti
         if (to.HasValue) appointments = appointments.Where(a => a.InspectionStartUtc < to.Value);
         if (onlyActive) appointments = appointments.Where(a => a.InspectionStartUtc > from && a.Status != AppointmentStatus.Cancelled);
         return from a in appointments
-               join customer in db.Users.AsNoTracking() on a.UserId equals customer.Id
+               join customer in db.Users.AsNoTracking() on a.UserId equals customer.Id into customers
+               from customer in customers.DefaultIfEmpty()
                orderby a.InspectionStartUtc, a.Id
-               select new CalendarAppointment(a.Id, a.Make, a.Model, customer.Name, a.InspectionStartUtc, a.Status);
+               select new CalendarAppointment(a.Id, a.Make, a.Model, customer != null ? customer.Name : a.CustomerName!, a.InspectionStartUtc, a.Status);
     }
 }

@@ -5,7 +5,7 @@
   <div class="calendar__heading">
     <button type="button" class="calendar__arrow" aria-label="Попередній місяць" (click)="moveMonth(-1)" [disabled]="month() <= today.slice(0, 7)">‹</button>
     <strong aria-live="polite">{{ monthLabel }}</strong>
-    <button type="button" class="calendar__arrow" aria-label="Наступний місяць" (click)="moveMonth(1)" [disabled]="month() >= '9998-12'">›</button>
+    <button type="button" class="calendar__arrow" aria-label="Наступний місяць" (click)="moveMonth(1)" [disabled]="month() >= maxMonth">›</button>
   </div>
   <div class="calendar__grid" role="group" aria-labelledby="calendar-title" aria-describedby="calendar-help" [attr.aria-busy]="loading()">
     <div class="calendar__week" aria-hidden="true">@for (weekday of weekdays; track weekday) { <span>{{ weekday }}</span> }</div>
@@ -19,5 +19,5 @@
   @if (searching()) { <p role="status">Шукаємо найближчу доступну дату…</p> }
   @else if (loading()) { <p role="status">Завантажуємо доступність дат…</p> }
   @if (error()) { <p role="alert">Не вдалося завантажити доступність дат.</p><button type="button" class="button button--secondary" (click)="retry()">Спробувати ще раз</button> }
-  @if (searchExhausted()) { <p role="status">За наступні 12 місяців вільних дат не знайдено.</p>@if (month() < '9998-12') { <button type="button" class="button button--secondary" (click)="searchMore()">Шукати далі</button> } }
+  @if (searchExhausted()) { <p role="status">До кінця наступного місяця вільних дат немає. Зв’яжіться з майстернею.</p><app-public-contacts /><button type="button" class="button button--secondary" (click)="returnToCurrent()">До поточного місяця</button> }
 </section>

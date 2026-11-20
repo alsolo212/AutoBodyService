@@ -19,14 +19,14 @@ class CalendarStub {
 
 describe('Booking', () => {
   let http: HttpTestingController;
-  const slot = '2099-01-15T08:00:00Z';
-  beforeEach(() => { TestBed.configureTestingModule({ imports: [Booking], providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()] }).overrideComponent(Booking, { remove: { imports: [AvailabilityCalendar] }, add: { imports: [CalendarStub] } }); http = TestBed.inject(HttpTestingController); });
-  afterEach(() => http.verify());
+  const slot = '2027-10-15T08:00:00Z';
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2027-10-01T00:00:00Z')); TestBed.configureTestingModule({ imports: [Booking], providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()] }).overrideComponent(Booking, { remove: { imports: [AvailabilityCalendar] }, add: { imports: [CalendarStub] } }); http = TestBed.inject(HttpTestingController); });
+  afterEach(() => { http.verify(); vi.useRealTimers(); });
   function setup() {
     const fixture = TestBed.createComponent(Booking);
     const component = fixture.componentInstance;
-    component.form.controls.date.setValue('2099-01-15');
-    http.expectOne(r => r.url === '/api/inspection-slots' && r.params.get('date') === '2099-01-15').flush({ slots: [{ startUtc: slot, endUtc: '2099-01-15T08:30:00Z' }] });
+    component.form.controls.date.setValue('2027-10-15');
+    http.expectOne(r => r.url === '/api/inspection-slots' && r.params.get('date') === '2027-10-15').flush({ slots: [{ startUtc: slot, endUtc: '2027-10-15T08:30:00Z' }] });
     fixture.detectChanges();
     return { fixture, component };
   }
@@ -50,6 +50,14 @@ describe('Booking', () => {
     request.flush({ id: 'id', inspectionStartUtc: slot, status: 'AwaitingInspection' });
     expect(navigate).toHaveBeenCalledWith(['/account/book/success'], { state: { inspectionStartUtc: slot } });
   });
+  it('accepts an omitted VIN and hides it from the confirmation', () => {
+    const { fixture, component } = setup(); vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true); component.form.controls.slot.setValue(slot); component.next();
+    component.form.patchValue({ vin: '', make: 'Test', model: 'Car', problem: 'Пошкоджено двері' }); component.next(); component.next(); fixture.detectChanges();
+    expect(component.step()).toBe(4); expect(fixture.nativeElement.querySelector('.summary')?.textContent).not.toContain('VIN');
+    component.submit(); http.expectOne('/api/auth/antiforgery').flush(null);
+    const request = http.expectOne('/api/appointments'); expect(request.request.body.vin).toBeNull();
+    request.flush({ id: 'id', inspectionStartUtc: slot, status: 'AwaitingInspection' });
+  });
   it('blocks duplicate submissions while pending and permits retry after a network failure', () => {
     const { component } = setup();
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
@@ -70,15 +78,14 @@ describe('Booking', () => {
     http.expectOne('/api/appointments').flush({}, { status: 409, statusText: 'Conflict' });
     expect(component.step()).toBe(1); expect(component.conflict()).toBe(true); expect(component.form.controls.slot.value).toBe('');
     expect(component.form.controls.problem.value).toBe(' Опис '); expect(component.form.controls.vin.value).toBe('1HGCM82633A004352');
-    http.expectOne(r => r.url === '/api/inspection-slots' && r.params.get('date') === '2099-01-15').flush({ slots: [] });
+    http.expectOne(r => r.url === '/api/inspection-slots' && r.params.get('date') === '2027-10-15').flush({ slots: [] });
   });
   it('uses Kyiv time for the displayed slot and shows an empty availability message', () => {
-    const { fixture, component } = setup(); expect(fixture.nativeElement.textContent).toContain('10:00');
-    component.form.controls.date.setValue('2099-01-16'); http.expectOne(r => r.url === '/api/inspection-slots').flush({ slots: [] }); fixture.detectChanges();
+    const { fixture, component } = setup(); expect(fixture.nativeElement.textContent).toContain('11:00');
+    component.form.controls.date.setValue('2027-10-16'); http.expectOne(r => r.url === '/api/inspection-slots').flush({ slots: [] }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('На цю дату вільного часу немає');
   });
   it('distinguishes repeated Kyiv times and submits the selected UTC instant', () => {
-    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
     const { fixture, component } = setup();
     component.form.controls.date.setValue('2027-10-31');
     http.expectOne(r => r.url === '/api/inspection-slots').flush({ slots: [
@@ -96,7 +103,6 @@ describe('Booking', () => {
     component.submit(); http.expectOne('/api/auth/antiforgery').flush(null);
     const request = http.expectOne('/api/appointments'); expect(request.request.body.inspectionStartUtc).toBe('2027-10-31T01:00:00Z');
     request.flush({ id: 'id', inspectionStartUtc: '2027-10-31T01:00:00Z', status: 'AwaitingInspection' });
-    vi.useRealTimers();
   });
 
   it.each([

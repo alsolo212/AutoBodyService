@@ -43,6 +43,12 @@ describe('AvailabilityCalendar', () => {
     expect(selected).toEqual([]);
     expect(fixture.componentInstance.selectedDate).toBe('2026-11-25');
   });
+  it('does not request a month outside the booking horizon for manual input', () => {
+    const fixture = create('2026-11-18'); respond('2026-11', ['2026-11-18']);
+    fixture.componentRef.setInput('selectedDate', '2027-01-01'); fixture.detectChanges();
+    expect(fixture.componentInstance.month()).toBe('2026-11');
+    http.expectNone(request => request.url.endsWith('/month'));
+  });
   it('describes past, unavailable and available days and selects only available dates', () => {
     const fixture = create('2026-11-18');
     const selected: string[] = []; fixture.componentInstance.selectedDateChange.subscribe(value => selected.push(value));
@@ -74,14 +80,15 @@ describe('AvailabilityCalendar', () => {
     fixture.componentInstance.retry(); respond('2026-11', ['2026-11-18']); fixture.detectChanges();
     expect(fixture.componentInstance.days().find(day => day.date === '2026-11-18')?.status).toBe('available');
   });
-  it('stops after twelve empty months and allows searching further', async () => {
+  it('stops after next month and returns to the current month with contacts', async () => {
     const fixture = create();
-    for (let index = 0; index < 12; index++) {
-      const date = new Date(Date.UTC(2026, 10 + index, 1));
-      respond(date.toISOString().slice(0, 7)); await Promise.resolve();
-    }
-    fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('За наступні 12 місяців');
-    fixture.componentInstance.searchMore(); respond('2027-11', ['2027-11-02']);
-    expect(fixture.componentInstance.searchExhausted()).toBe(false);
+    respond('2026-11'); await Promise.resolve(); respond('2026-12'); await Promise.resolve();
+    respond('2026-11'); fixture.detectChanges();
+    http.expectOne('/api/public/contacts').flush({ phone: '+380000000000', address: 'Тестова адреса', workingHours: null }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('До кінця наступного місяця вільних дат немає');
+    expect(fixture.nativeElement.textContent).toContain('+380000000000');
+    expect(fixture.componentInstance.month()).toBe('2026-11');
+    fixture.componentInstance.moveMonth(1); respond('2026-12'); fixture.componentInstance.moveMonth(1);
+    http.expectNone(request => request.params.get('month') === '01');
   });
 });

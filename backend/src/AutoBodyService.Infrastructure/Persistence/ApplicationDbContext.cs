@@ -173,17 +173,21 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         builder.Entity<Appointment>(entity =>
         {
             entity.HasKey(x => x.Id);
-            entity.Property(x => x.UserId).IsRequired();
+            entity.Property(x => x.CreatedById).IsRequired();
+            entity.Property(x => x.CustomerName).HasMaxLength(200);
+            entity.Property(x => x.CustomerPhone).HasMaxLength(13);
             entity.Property(x => x.InspectionStartUtc).IsRequired();
             entity.Property(x => x.CreatedAtUtc).IsRequired();
-            entity.Property(x => x.Vin).HasMaxLength(17).IsRequired();
+            entity.Property(x => x.Vin).HasMaxLength(17);
             entity.Property(x => x.Make).IsRequired();
             entity.Property(x => x.Model).IsRequired();
             entity.Property(x => x.ProblemDescription).IsRequired();
             entity.HasOne(x => x.RepairPlan).WithOne().HasForeignKey<RepairPlan>(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => x.InspectionStartUtc).IsUnique().HasFilter("\"Status\" <> 5");
             entity.HasIndex(x => new { x.UserId, x.InspectionStartUtc });
+            entity.HasIndex(x => new { x.UserId, x.CreatedAtUtc });
             entity.HasIndex(x => new { x.Status, x.InspectionStartUtc });
             entity.HasIndex(x => x.CreatedAtUtc);
             entity.Property<uint>("Version").IsRowVersion();
@@ -192,7 +196,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint("CK_Appointment_Status", "\"Status\" BETWEEN 0 AND 5");
-                table.HasCheckConstraint("CK_Appointment_Vin", "\"Vin\" ~ '^[A-HJ-NPR-Z0-9]{17}$'");
+                table.HasCheckConstraint("CK_Appointment_Vin", "\"Vin\" IS NULL OR \"Vin\" ~ '^[A-HJ-NPR-Z0-9]{17}$'");
+                table.HasCheckConstraint("CK_Appointment_Customer", "(\"UserId\" IS NOT NULL AND \"CustomerName\" IS NULL AND \"CustomerPhone\" IS NULL) OR (\"UserId\" IS NULL AND \"CustomerName\" IS NOT NULL AND \"CustomerPhone\" IS NOT NULL AND \"CustomerName\" ~ '[^[:space:]]' AND \"CustomerPhone\" ~ '^\\+380[0-9]{9}$')");
                 table.HasCheckConstraint("CK_Appointment_RequiredText", "\"Make\" ~ '[^[:space:]]' AND \"Model\" ~ '[^[:space:]]' AND \"ProblemDescription\" ~ '[^[:space:]]'");
             });
         });

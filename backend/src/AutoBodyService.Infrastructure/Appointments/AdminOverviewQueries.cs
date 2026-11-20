@@ -15,15 +15,16 @@ public sealed class AdminOverviewQueries(ApplicationDbContext db, IInspectionCal
     public async Task<AdminAppointmentPage> GetAppointmentsAsync(AdminAppointmentFilter filter, CancellationToken cancellationToken)
     {
         var query = from a in db.Appointments.AsNoTracking()
-                    join user in db.Users.AsNoTracking() on a.UserId equals user.Id
-                    select new { Appointment = a, Customer = user.Name, Phone = user.PhoneNormalized };
+                    join user in db.Users.AsNoTracking() on a.UserId equals user.Id into users
+                    from user in users.DefaultIfEmpty()
+                    select new { Appointment = a, Customer = user != null ? user.Name : a.CustomerName!, Phone = user != null ? user.PhoneNormalized : a.CustomerPhone! };
         if (filter.Status.HasValue) query = query.Where(x => x.Appointment.Status == filter.Status.Value);
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
             var escaped = filter.Search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
             var term = "%" + escaped + "%";
             query = query.Where(x => EF.Functions.ILike(x.Customer, term, "\\") || EF.Functions.ILike(x.Phone, term, "\\") ||
-                EF.Functions.ILike(x.Appointment.Vin, term, "\\") || EF.Functions.ILike(x.Appointment.Make, term, "\\") || EF.Functions.ILike(x.Appointment.Model, term, "\\"));
+                (x.Appointment.Vin != null && EF.Functions.ILike(x.Appointment.Vin, term, "\\")) || EF.Functions.ILike(x.Appointment.Make, term, "\\") || EF.Functions.ILike(x.Appointment.Model, term, "\\"));
         }
         if (filter.From.HasValue) { var from = MidnightUtc(filter.From.Value); query = query.Where(x => x.Appointment.InspectionStartUtc >= from); }
         if (filter.To.HasValue) { var to = MidnightUtc(filter.To.Value.AddDays(1)); query = query.Where(x => x.Appointment.InspectionStartUtc < to); }
@@ -52,8 +53,9 @@ public sealed class AdminOverviewQueries(ApplicationDbContext db, IInspectionCal
         int Count(AppointmentStatus status) => totals.FirstOrDefault(x => x.Status == status)?.Count ?? 0;
         var counts = new AdminWorkingCounts(Count(AppointmentStatus.AwaitingInspection), Count(AppointmentStatus.Scheduled), Count(AppointmentStatus.InProgress), Count(AppointmentStatus.AwaitingPayment));
         var rows = from a in db.Appointments.AsNoTracking()
-                   join u in db.Users.AsNoTracking() on a.UserId equals u.Id
-                   select new { Appointment = a, Customer = u.Name };
+                   join u in db.Users.AsNoTracking() on a.UserId equals u.Id into users
+                   from u in users.DefaultIfEmpty()
+                   select new { Appointment = a, Customer = u != null ? u.Name : a.CustomerName! };
         var upcomingRows = await rows.Where(x => x.Appointment.Status == AppointmentStatus.AwaitingInspection && x.Appointment.InspectionStartUtc > now)
             .OrderBy(x => x.Appointment.InspectionStartUtc).ThenBy(x => x.Appointment.Id).Take(10)
             .Select(x => new { x.Appointment.Id, x.Customer, x.Appointment.Make, x.Appointment.Model, x.Appointment.Status, x.Appointment.InspectionStartUtc, x.Appointment.CreatedAtUtc }).ToListAsync(cancellationToken);
@@ -61,10 +63,11 @@ public sealed class AdminOverviewQueries(ApplicationDbContext db, IInspectionCal
             .Select(x => new { x.Appointment.Id, x.Customer, x.Appointment.Make, x.Appointment.Model, x.Appointment.Status, x.Appointment.InspectionStartUtc, x.Appointment.CreatedAtUtc }).ToListAsync(cancellationToken);
         var cancelledRows = await (from e in db.AppointmentStatusEvents.AsNoTracking()
                                    join a in db.Appointments.AsNoTracking() on e.AppointmentId equals a.Id
-                                   join u in db.Users.AsNoTracking() on a.UserId equals u.Id
+                                   join u in db.Users.AsNoTracking() on a.UserId equals u.Id into users
+                                   from u in users.DefaultIfEmpty()
                                    where e.ToStatus == AppointmentStatus.Cancelled
                                    orderby e.ChangedAtUtc descending, e.Id
-                                   select new { a.Id, Customer = u.Name, a.Make, a.Model, a.Status, a.InspectionStartUtc, Occurred = e.ChangedAtUtc }).Take(10).ToListAsync(cancellationToken);
+                                   select new { a.Id, Customer = u != null ? u.Name : a.CustomerName!, a.Make, a.Model, a.Status, a.InspectionStartUtc, Occurred = e.ChangedAtUtc }).Take(10).ToListAsync(cancellationToken);
         var upcoming = upcomingRows.Select(x => new AdminDashboardItem(x.Id, x.Customer, x.Make, x.Model, x.Status, x.InspectionStartUtc, Local(x.InspectionStartUtc), x.InspectionStartUtc)).ToArray();
         var recent = newRows.Select(x => new AdminDashboardItem(x.Id, x.Customer, x.Make, x.Model, x.Status, x.InspectionStartUtc, Local(x.InspectionStartUtc), x.CreatedAtUtc)).ToArray();
         var cancellations = cancelledRows.Select(x => new AdminDashboardItem(x.Id, x.Customer, x.Make, x.Model, x.Status, x.InspectionStartUtc, Local(x.InspectionStartUtc), x.Occurred)).ToArray();

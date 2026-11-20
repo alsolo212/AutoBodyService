@@ -1,15 +1,15 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, finalize, of, switchMap } from 'rxjs';
-import { AuthService, destination } from '../../core/auth';
+import { AuthService, bookingReturn, destination } from '../../core/auth';
 import { nameValidator, passwordValidator, passwordsMatch, phoneValidator } from './auth-validation';
 
 @Component({ selector: 'app-register', imports: [ReactiveFormsModule, RouterLink], template: `
 <div class="auth-page"><header class="auth-header"><a class="brand" routerLink="/" aria-label="AutoBodyService — головна"><span class="brand__name">AutoBody<span>Service</span><small>СЕРВІС КУЗОВНОГО РЕМОНТУ</small></span></a><a class="auth-back" routerLink="/">← На головну</a></header>
 <main class="auth-main"><div class="auth-card"><p class="eyebrow"><span class="eyebrow__line"></span> ОСОБИСТИЙ КАБІНЕТ</p><h1>Створіть обліковий запис.</h1><p class="auth-intro">Вкажіть свої дані, щоб користуватися особистим кабінетом.</p>
-@if (success()) { <div class="auth-success" role="status"><strong>Запит прийнято.</strong><p>Якщо облікового запису з цим номером ще немає, його створено. Тепер ви можете увійти. Якщо не вдається увійти, зверніться до персоналу СТО.</p><a class="button button--primary" routerLink="/login">Перейти до входу ↗</a></div> }
+@if (success()) { <div class="auth-success" role="status"><strong>Запит прийнято.</strong><p>Якщо облікового запису з цим номером ще немає, його створено. Тепер ви можете увійти. Якщо не вдається увійти, зверніться до персоналу СТО.</p><a class="button button--primary" routerLink="/login" [queryParams]="booking ? { returnTo: '/account/book' } : {}">Перейти до входу ↗</a></div> }
 @else {
 @if (error()) { <div class="auth-alert" role="alert">{{ error() }}</div> }
 <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
@@ -19,11 +19,12 @@ import { nameValidator, passwordValidator, passwordsMatch, phoneValidator } from
 <div class="field"><label class="field__label" for="register-confirm">Повторіть пароль</label><div class="password-input"><input class="field__input" id="register-confirm" formControlName="confirmPassword" [type]="showConfirmPassword() ? 'text' : 'password'" autocomplete="new-password" [attr.aria-invalid]="confirmInvalid()" [attr.aria-describedby]="confirmInvalid() ? 'confirm-error' : null" /><button class="password-toggle" type="button" (click)="showConfirmPassword.update(value => !value)" [attr.aria-label]="showConfirmPassword() ? 'Приховати повторений пароль' : 'Показати повторений пароль'" [attr.aria-pressed]="showConfirmPassword()" aria-controls="register-confirm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div>@if (confirmInvalid()) { <p class="field__error" id="confirm-error">Паролі мають збігатися.</p> }</div>
 <button class="button button--primary auth-submit" type="submit" [disabled]="loading()">{{ loading() ? 'Надсилаємо…' : 'Зареєструватися' }} <span aria-hidden="true">↗</span></button>
 </form> }
-<p class="auth-switch">Вже маєте обліковий запис? <a routerLink="/login">Увійти</a></p></div></main></div>` })
+<p class="auth-switch">Вже маєте обліковий запис? <a routerLink="/login" [queryParams]="booking ? { returnTo: '/account/book' } : {}">Увійти</a></p></div></main></div>` })
 export class Register {
   private readonly fb = inject(NonNullableFormBuilder);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  readonly booking = bookingReturn(inject(ActivatedRoute).snapshot.queryParamMap.get('returnTo'));
   readonly showPassword = signal(false); readonly showConfirmPassword = signal(false);
   readonly loading = signal(false); readonly success = signal(false); readonly error = signal('');
   readonly form = this.fb.group({ name: ['', [nameValidator, Validators.maxLength(200)]], phone: ['', [Validators.required, phoneValidator]], password: ['', [Validators.required, passwordValidator]], confirmPassword: ['', Validators.required] }, { validators: passwordsMatch });
@@ -38,7 +39,7 @@ export class Register {
       switchMap(() => this.auth.login({ phone, password }).pipe(catchError(() => of(null)))),
       finalize(() => this.loading.set(false)),
     ).subscribe({
-      next: session => { this.form.reset(); if (session) void this.router.navigateByUrl(destination(session)); else this.success.set(true); },
+      next: session => { this.form.reset(); if (session) void this.router.navigateByUrl(destination(session, this.booking)); else this.success.set(true); },
       error: (error: unknown) => this.error.set(error instanceof HttpErrorResponse && error.status === 429 ? 'Забагато спроб. Зачекайте та спробуйте ще раз.' : error instanceof HttpErrorResponse && error.status === 400 ? 'Не вдалося зареєструватися. Перевірте введені дані та спробуйте ще раз.' : 'Не вдалося надіслати запит. Перевірте з’єднання та спробуйте ще раз.'),
     });
   }
