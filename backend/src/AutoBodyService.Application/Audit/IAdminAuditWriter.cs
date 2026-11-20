@@ -6,6 +6,7 @@ namespace AutoBodyService.Application.Audit;
 /// <summary>Stages safe administrative events in the current business transaction.</summary>
 public interface IAdminAuditWriter
 {
+    void RecordWorkshopContactChange(string actorId, bool phone);
     void RecordWeeklyScheduleChange(string actorId, IReadOnlyList<WeeklyInterval> before, IReadOnlyList<WeeklyInterval> after);
     void RecordDateExceptionChange(string actorId, DateOnly date, InspectionException? before, InspectionException? after);
     void RecordAppointmentStatusChange(string actorId, Guid appointmentId, AppointmentStatus from, AppointmentStatus to, Guid? statusEventId = null);

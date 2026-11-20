@@ -7,6 +7,7 @@ using AutoBodyService.Domain.Employees;
 using AutoBodyService.Domain.Assignments;
 using AutoBodyService.Domain.Prices;
 using AutoBodyService.Domain.Finance;
+using AutoBodyService.Infrastructure.Contacts;
 using WeeklyScheduleEntity = AutoBodyService.Domain.InspectionSchedule.InspectionSchedule;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -23,6 +24,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<ScheduledReminder> ScheduledReminders => Set<ScheduledReminder>();
     public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();
+    public DbSet<WorkshopContactsRecord> WorkshopContacts => Set<WorkshopContactsRecord>();
     public DbSet<EmployeeAssignment> EmployeeAssignments => Set<EmployeeAssignment>();
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
@@ -103,6 +105,15 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.Entity<WorkshopContactsRecord>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Phone).HasMaxLength(13);
+            entity.Property(x => x.Address).HasMaxLength(200);
+            entity.Property(x => x.Version).IsConcurrencyToken();
+            entity.ToTable(t => t.HasCheckConstraint("CK_WorkshopContacts_Singleton", "\"Id\" = 1"));
+            entity.HasData(new WorkshopContactsRecord { Id = 1, Version = 0 });
+        });
         builder.Entity<WeeklyScheduleEntity>(entity =>
         {
             entity.HasKey(schedule => schedule.Id);

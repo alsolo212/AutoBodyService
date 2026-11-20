@@ -9,6 +9,9 @@ namespace AutoBodyService.Infrastructure.Audit;
 
 public sealed class AdminAuditWriter(ApplicationDbContext db, TimeProvider clock) : IAdminAuditWriter
 {
+    public void RecordWorkshopContactChange(string actorId, bool phone) =>
+        Add(actorId, phone ? "WorkshopPhoneChanged" : "WorkshopAddressChanged", "WorkshopContacts", "1", new { });
+
     public void RecordWeeklyScheduleChange(string actorId, IReadOnlyList<WeeklyInterval> before, IReadOnlyList<WeeklyInterval> after) =>
         Add(actorId, "InspectionScheduleChanged", "InspectionSchedule", "1", new { before, after });
 

@@ -35,6 +35,6 @@ export const routes: Routes = [
   { path: 'admin/employees', component: WorkspaceShell, canActivate: [authGuard], data: { area: 'admin', section: 'Працівники' }, title: 'Працівники — AutoBodyService' },
   { path: 'admin/users', component: WorkspaceShell, canActivate: [authGuard], data: { area: 'admin', section: 'Користувачі' }, title: 'Користувачі — AutoBodyService' },
   { path: 'admin/reports', component: WorkspaceShell, canActivate: [authGuard], data: { area: 'admin', role: 'SuperAdmin', section: 'Звіти' }, title: 'Контроль та звітність — AutoBodyService' },
-  { path: 'admin/prices', component: WorkspaceShell, canActivate: [authGuard], data: { area: 'admin', section: 'Послуги та ціни' }, title: 'Послуги та ціни — AutoBodyService' },
+  { path: 'admin/prices', component: WorkspaceShell, canActivate: [authGuard], data: { area: 'admin', section: 'Налаштування майстерні' }, title: 'Налаштування майстерні — AutoBodyService' },
   { path: 'admin', component: WorkspaceShell, canActivate: [authGuard], data: { area: 'admin' }, title: 'Панель керування — AutoBodyService' },
 ];

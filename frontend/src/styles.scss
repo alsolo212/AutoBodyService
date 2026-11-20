@@ -27,6 +27,29 @@ button { cursor: pointer; }
 .field { display: grid; gap: .45rem; }
 .field__label { font-size: .84rem; font-weight: 700; }
 .field__input { width: 100%; min-height: 3rem; padding: .75rem .9rem; border: 1px solid #cbd4cb; border-radius: var(--radius); color: var(--ink); background: var(--surface); }
+select.field__input {
+  appearance: none;
+  padding-right: 3rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%23465946' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  cursor: pointer;
+}
+select.field__input:focus-visible { outline: 3px solid #8aaa72; outline-offset: 2px; border-color: #597748; }
+@supports (appearance: base-select) {
+  @media (pointer: fine) {
+    select.field__input, select.field__input::picker(select) { appearance: base-select; }
+    select.field__input { background-image: none; padding-right: 1rem; }
+    select.field__input::picker-icon { color: #465946; transition: rotate .15s ease; }
+    select.field__input:open::picker-icon { rotate: 180deg; }
+    select.field__input::picker(select) { border: 1px solid #cbd4cb; border-radius: var(--radius); background: var(--surface); padding: .3rem; box-shadow: 0 .5rem 1.5rem #1e302222; }
+    select.field__input option { padding: .65rem .75rem; border-radius: .35rem; gap: .75rem; }
+    select.field__input option:hover, select.field__input option:focus-visible { background: #edf4e8; }
+    select.field__input option:checked { background: #dcebcf; font-weight: 600; }
+    select.field__input option::checkmark { color: #496c3b; }
+  }
+}
+@media (prefers-reduced-motion: reduce) { select.field__input::picker-icon { transition: none; } }
 .field__input[aria-invalid='true'] { border-color: var(--danger); }
 .field__hint, .field__error { margin: 0; font-size: .8rem; line-height: 1.5; }
 .field__hint { color: var(--muted); } .field__error { color: var(--danger); }

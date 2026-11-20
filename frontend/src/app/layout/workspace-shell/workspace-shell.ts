@@ -19,7 +19,7 @@ import { AdminShell } from '../admin-shell/admin-shell';
       <nav class="breadcrumbs" aria-label="Шлях сторінки"><a routerLink="/admin">Панель керування</a>@if (section) { <span aria-hidden="true">/</span><span aria-current="page">{{ section === 'Звіти' ? 'Контроль та звітність' : section }}</span> }</nav>
       @if (!section) { <app-admin-dashboard /> }
       @else if (section === 'Розподіл робіт') { @defer (on immediate) { <app-assignment-board /> } @placeholder { <p role="status">Завантажуємо розподіл робіт…</p> } }
-      @else if (section === 'Послуги та ціни') { <app-prices-editor /> }
+      @else if (section === 'Налаштування майстерні') { <app-prices-editor /> }
       @else if (section === 'Сповіщення') { <app-notification-inbox /> }
       @else if (section === 'Працівники') { <app-employees /> }
       @else if (section === 'Користувачі') { <app-users /> }

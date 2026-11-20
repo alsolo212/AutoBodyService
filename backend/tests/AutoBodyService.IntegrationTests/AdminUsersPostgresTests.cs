@@ -244,6 +244,7 @@ public sealed class AdminUsersPostgresTests(PostgresIdentityFixture fixture) : I
 
     private sealed class FailingAudit : IAdminAuditWriter
     {
+        public void RecordWorkshopContactChange(string actorId, bool phone) => throw new NotSupportedException();
         public void RecordAccountAction(string actorId, string targetId, string action, bool? value) => throw new InvalidOperationException("Audit unavailable");
         public void RecordExpenseChange(string actorId, Guid expenseId, decimal? beforeAmount, decimal afterAmount, bool beforeHasDescription, bool afterHasDescription, bool descriptionChanged) => throw new InvalidOperationException("Audit unavailable");
         public void RecordWeeklyScheduleChange(string actorId, IReadOnlyList<WeeklyInterval> before, IReadOnlyList<WeeklyInterval> after) => throw new NotSupportedException();

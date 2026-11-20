@@ -10,6 +10,7 @@ describe('PricesEditor', () => {
   afterEach(() => http.verify());
   function create(items = [item]) {
     const fixture = TestBed.createComponent(PricesEditor); fixture.detectChanges();
+    http.expectOne('/api/admin/workshop-contacts').flush({ phone: null, address: null, version: 0 });
     http.expectOne('/api/admin/prices').flush(items); fixture.detectChanges(); return fixture;
   }
   it('accepts exact nonnegative decimal boundaries and rejects rounding or invalid values', () => {
@@ -41,6 +42,7 @@ describe('PricesEditor', () => {
   });
   it('prevents archived publication and reports forbidden loads and server validation errors', () => {
     const fixture = TestBed.createComponent(PricesEditor); fixture.detectChanges();
+    http.expectOne('/api/admin/workshop-contacts').flush({ phone: null, address: null, version: 0 });
     http.expectOne('/api/admin/prices').flush(null, { status: 403, statusText: 'Forbidden' }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Доступ до прайсу заборонено');
     fixture.componentInstance.load(); http.expectOne('/api/admin/prices').flush([item]); fixture.detectChanges();

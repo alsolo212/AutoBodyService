@@ -593,6 +593,41 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.ToTable("AdminAuditEvents");
                 });
 
+            modelBuilder.Entity("AutoBodyService.Infrastructure.Contacts.WorkshopContactsRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(13)
+                        .HasColumnType("character varying(13)");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("WorkshopContacts", t =>
+                        {
+                            t.HasCheckConstraint("CK_WorkshopContacts_Singleton", "\"Id\" = 1");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Version = 0
+                        });
+                });
+
             modelBuilder.Entity("AutoBodyService.Infrastructure.Identity.ApplicationUser", b =>
                 {
                     b.Property<string>("Id")

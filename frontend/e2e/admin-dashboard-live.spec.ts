@@ -74,7 +74,7 @@ test('common dashboard reflects real orders and manual contacts for Admin and Su
   expect(dashboardRequests).toBe(2);
   const details = await page.evaluate(async id => (await (await fetch(`/api/appointments/${id}`)).json()).manualContacts, ids[0]);
   expect(details.some((event: { reason: string; actorName: string; recordedAtUtc: string }) => event.reason === 'NewAppointment' && event.actorName === 'E2E test' && !!event.recordedAtUtc)).toBe(true);
-  for (const [path, label] of [['assignments', 'Розподіл робіт'], ['employees', 'Працівники'], ['prices', 'Послуги та ціни']]) {
+  for (const [path, label] of [['assignments', 'Розподіл робіт'], ['employees', 'Працівники'], ['prices', 'Налаштування майстерні']]) {
     await page.goto('/admin'); await expect(page.getByRole('heading', { name: 'Замовлення в роботі' })).toBeVisible();
     const beforePlaceholder = dashboardRequests;
     await page.locator('.quick-links').getByRole('link', { name: new RegExp(label) }).click();

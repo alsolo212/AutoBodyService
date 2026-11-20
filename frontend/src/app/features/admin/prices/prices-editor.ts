@@ -3,6 +3,7 @@ import { Component, DestroyRef, ElementRef, inject, signal, viewChild } from '@a
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, ValidatorFn, Validators } from '@angular/forms';
 import { finalize, switchMap } from 'rxjs';
+import { WorkshopContacts } from './workshop-contacts';
 
 interface PriceItem { id: string; name: string; description: string; priceExact: string; isFrom: boolean; sortOrder: number; isPublished: boolean; isArchived: boolean; version: number; }
 
@@ -20,7 +21,7 @@ const orderValidator: ValidatorFn = control => {
   return Number.isInteger(value) && value >= -2147483648 && value <= 2147483647 ? null : { invalidOrder: true };
 };
 
-@Component({ selector: 'app-prices-editor', imports: [ReactiveFormsModule], templateUrl: './prices-editor.html', styleUrl: './prices-editor.scss' })
+@Component({ selector: 'app-prices-editor', imports: [ReactiveFormsModule, WorkshopContacts], templateUrl: './prices-editor.html', styleUrl: './prices-editor.scss' })
 export class PricesEditor {
   private readonly http = inject(HttpClient);
   private readonly fb = inject(NonNullableFormBuilder);

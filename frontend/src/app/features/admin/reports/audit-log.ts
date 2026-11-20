@@ -17,8 +17,9 @@ const actions: Record<string, string> = {
   AccountPasswordReset: 'Скидання пароля', AccountAdminChanged: 'Зміна ролі адміністратора', AccountBlockedChanged: 'Зміна блокування',
   ExpenseCreated: 'Додавання витрати', ExpenseCorrected: 'Виправлення витрати',
   PriceItemCreated: 'Додавання послуги', PriceItemChanged: 'Зміна послуги', ManualContactRecorded: 'Ручний контакт',
+  WorkshopPhoneChanged: 'Зміна телефону майстерні', WorkshopAddressChanged: 'Зміна адреси майстерні',
 };
-const objects: Record<string, string> = { Appointment: 'Замовлення', EmployeeAssignment: 'Призначення', ApplicationUser: 'Обліковий запис', MonthlyExpense: 'Витрата', InspectionSchedule: 'Тижневий розклад', InspectionDate: 'Дата огляду', PriceListItem: 'Послуга' };
+const objects: Record<string, string> = { WorkshopContacts: 'Контакти майстерні', Appointment: 'Замовлення', EmployeeAssignment: 'Призначення', ApplicationUser: 'Обліковий запис', MonthlyExpense: 'Витрата', InspectionSchedule: 'Тижневий розклад', InspectionDate: 'Дата огляду', PriceListItem: 'Послуга' };
 const statuses: Record<string, string> = { AwaitingInspection: 'Очікує огляду', Scheduled: 'Заплановано', InProgress: 'У роботі', AwaitingPayment: 'Очікує оплати', Completed: 'Завершено', Cancelled: 'Скасовано' };
 const modes: Record<string, string> = { Weekly: 'За тижневим розкладом', Closed: 'Закрито', Replace: 'Окремий розклад', Open: 'Відкрито' };
 const contacts: Record<string, string> = { NewAppointment: 'Новий запис', ScheduleConflictOrReschedule: 'Конфлікт розкладу або перенесення', Agreement: 'Узгодження', ReadyForPayment: 'Готовність до оплати і видачі' };

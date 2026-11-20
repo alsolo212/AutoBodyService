@@ -33,7 +33,7 @@ test('admin pages retain navigation and highlight the current section', async ({
     ['/admin', 'Огляд'], ['/admin/appointments', 'Замовлення'],
     [`/admin/appointments/${appointmentId}`, 'Замовлення'], ['/admin/assignments', 'Розподіл робіт'],
     ['/admin/inspection-calendar', 'Календар оглядів'], ['/admin/employees', 'Працівники'],
-    ['/admin/prices', 'Послуги та ціни'], ['/admin/users', 'Користувачі'],
+    ['/admin/prices', 'Налаштування майстерні'], ['/admin/users', 'Користувачі'],
     ['/admin/reports', 'Контроль та звітність'], ['/admin/notifications', 'Сповіщення'], ['/admin/profile', 'Мій профіль'],
   ];
   for (const [path, label] of pages) {

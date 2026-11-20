@@ -1,5 +1,6 @@
 using AutoBodyService.Api.Configuration;
 using AutoBodyService.Application.Authentication;
+using AutoBodyService.Application.Contacts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -9,14 +10,16 @@ namespace AutoBodyService.Api.Controllers;
 [ApiController]
 [AllowAnonymous]
 [Route("api/public/contacts")]
-public sealed class PublicContactsController(IOptions<PublicContactsOptions> options) : ControllerBase
+public sealed class PublicContactsController(IOptions<PublicContactsOptions> options, IWorkshopContacts store) : ControllerBase
 {
     [HttpGet]
-    public ActionResult<PublicContactsResponse> Get()
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<ActionResult<PublicContactsResponse>> Get(CancellationToken cancellationToken)
     {
         var contacts = options.Value;
-        var phone = string.IsNullOrWhiteSpace(contacts.Phone) ? null : PhoneNumberNormalizer.Normalize(contacts.Phone);
-        return Ok(new PublicContactsResponse(phone, Clean(contacts.Address), Clean(contacts.WorkingHours)));
+        var saved = await store.GetAsync(cancellationToken);
+        var phone = saved.Phone ?? (string.IsNullOrWhiteSpace(contacts.Phone) ? null : PhoneNumberNormalizer.Normalize(contacts.Phone));
+        return Ok(new PublicContactsResponse(phone, saved.Address ?? Clean(contacts.Address), Clean(contacts.WorkingHours)));
     }
 
     private static string? Clean(string? value)

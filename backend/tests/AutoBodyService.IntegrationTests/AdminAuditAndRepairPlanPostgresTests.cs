@@ -169,6 +169,7 @@ public sealed class AdminAuditAndRepairPlanPostgresTests(PostgresIdentityFixture
 
     private sealed class FailingAuditWriter : IAdminAuditWriter
     {
+        public void RecordWorkshopContactChange(string actorId, bool phone) => throw new NotSupportedException();
         public void RecordWeeklyScheduleChange(string actorId, IReadOnlyList<WeeklyInterval> before, IReadOnlyList<WeeklyInterval> after) => throw new InvalidOperationException("Audit unavailable");
         public void RecordDateExceptionChange(string actorId, DateOnly date, InspectionException? before, InspectionException? after) => throw new InvalidOperationException("Audit unavailable");
         public void RecordAppointmentStatusChange(string actorId, Guid appointmentId, AppointmentStatus from, AppointmentStatus to, Guid? statusEventId = null) => throw new InvalidOperationException("Audit unavailable");

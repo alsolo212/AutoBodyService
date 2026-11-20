@@ -1,4 +1,6 @@
 using AutoBodyService.Infrastructure.Persistence;
+using AutoBodyService.Application.Contacts;
+using AutoBodyService.Infrastructure.Contacts;
 using AutoBodyService.Application.Notifications;
 using AutoBodyService.Infrastructure.Notifications;
 using AutoBodyService.Application.Appointments;
@@ -115,6 +117,7 @@ public static class DependencyInjection
         services.AddScoped<IAppointmentQueries, AppointmentQueries>();
         services.AddScoped<IEmployeeDirectory, EmployeeDirectory>();
         services.AddScoped<IPriceCatalog, PriceCatalog>();
+        services.AddScoped<IWorkshopContacts, WorkshopContactsStore>();
         services.AddScoped<IEmployeeAssignments, EmployeeAssignments>();
         services.AddScoped<ICancelAppointmentService, CancelAppointmentService>();
         services.AddScoped<IAppointmentCreationStore, AppointmentCreationStore>();

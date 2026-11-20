@@ -1,4 +1,5 @@
-<div class="workspace-heading"><div><p class="eyebrow"><span class="eyebrow__line"></span> ПАНЕЛЬ КЕРУВАННЯ</p><h1>Послуги та ціни</h1><p>Орієнтовний прайс не змінює погоджену вартість замовлень.</p></div></div>
+<div class="workspace-heading"><div><p class="eyebrow"><span class="eyebrow__line"></span> ПАНЕЛЬ КЕРУВАННЯ</p><h1>Налаштування майстерні</h1><p>Орієнтовний прайс не змінює погоджену вартість замовлень.</p></div></div>
+<app-workshop-contacts />
 @if (actionError()) { <div class="auth-alert" role="alert">{{ actionError() }} <button type="button" class="text-button" [disabled]="saving()" (click)="load()">Оновити список</button></div> }
 @if (notice()) { <p class="profile-success" role="status">{{ notice() }}</p> }
 <section class="workspace-panel" aria-labelledby="price-form-heading">
