@@ -46,6 +46,11 @@ export class AdminAppointmentApi {
     const json = JSON.stringify(fields).slice(0, -1) + ',"price":' + price + '}';
     return this.token().pipe(switchMap(() => this.http.put<void>(`${this.path(id)}/repair-plan`, json, { headers: new HttpHeaders({ 'Content-Type': 'application/json' }) })));
   }
+  schedule(id: string, body: { version: number; price: string; start: string; durationDays: number; inspectionPerformed: boolean }) {
+    const { price, ...fields } = body;
+    const json = JSON.stringify(fields).slice(0, -1) + ',"price":' + price + '}';
+    return this.token().pipe(switchMap(() => this.http.post<void>(`${this.path(id)}/schedule`, json, { headers: new HttpHeaders({ 'Content-Type': 'application/json' }) })));
+  }
   transition(id: string, body: TransitionChange) { return this.token().pipe(switchMap(() => this.http.post<void>(`${this.path(id)}/transition`, body))); }
   cancel(id: string, version: number, reason: string) { return this.token().pipe(switchMap(() => this.http.post<void>(`${this.path(id)}/cancel`, { version, confirmed: true, reason }))); }
   contact(id: string, reason: ContactReason) { return this.token().pipe(switchMap(() => this.http.post<void>(`${this.path(id)}/manual-contact`, { reason }))); }

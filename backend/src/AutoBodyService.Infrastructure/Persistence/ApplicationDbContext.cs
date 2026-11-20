@@ -8,6 +8,7 @@ using AutoBodyService.Domain.Assignments;
 using AutoBodyService.Domain.Prices;
 using AutoBodyService.Domain.Finance;
 using AutoBodyService.Infrastructure.Contacts;
+using AutoBodyService.Infrastructure.Appointments;
 using WeeklyScheduleEntity = AutoBodyService.Domain.InspectionSchedule.InspectionSchedule;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -25,6 +26,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<ScheduledReminder> ScheduledReminders => Set<ScheduledReminder>();
     public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();
     public DbSet<WorkshopContactsRecord> WorkshopContacts => Set<WorkshopContactsRecord>();
+    public DbSet<RepairCapacityRecord> RepairCapacity => Set<RepairCapacityRecord>();
     public DbSet<EmployeeAssignment> EmployeeAssignments => Set<EmployeeAssignment>();
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
@@ -105,6 +107,16 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.Entity<RepairCapacityRecord>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.ToTable("RepairCapacity", t =>
+            {
+                t.HasCheckConstraint("CK_RepairCapacity_Singleton", "\"Id\" = 1");
+                t.HasCheckConstraint("CK_RepairCapacity_Positive", "\"Workplaces\" IS NULL OR \"Workplaces\" > 0");
+            });
+            entity.HasData(new RepairCapacityRecord { Id = 1 });
+        });
         builder.Entity<WorkshopContactsRecord>(entity =>
         {
             entity.HasKey(x => x.Id);

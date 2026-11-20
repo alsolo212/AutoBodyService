@@ -8,6 +8,7 @@ import { kyivTime } from '../../../shared/time/kyiv-time';
 import { statusLabel } from '../../appointments/appointments-api';
 import { ConfirmDialog } from '../../../shared/confirm-dialog/confirm-dialog';
 import { CalendarAppointment, DateChange, DateMode, Day, InspectionCalendarApi, SchedulePreview, SlotMode, WeeklyChange } from './inspection-calendar-api';
+import { RepairCapacityApi, RepairCapacityOverview } from '../repair-capacity-api';
 
 const todayKyiv = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const shortTime = (value: string) => value.slice(0, 5);
@@ -21,6 +22,7 @@ const shortTime = (value: string) => value.slice(0, 5);
 export class InspectionCalendar {
   private readonly fb = inject(NonNullableFormBuilder);
   private readonly api = inject(InspectionCalendarApi);
+  private readonly capacityApi = inject(RepairCapacityApi);
   private readonly confirmDialog = viewChild.required(ConfirmDialog);
   readonly days: { value: Day; label: string }[] = [
     { value: 'Monday', label: 'Понеділок' }, { value: 'Tuesday', label: 'Вівторок' },
@@ -31,6 +33,9 @@ export class InspectionCalendar {
   readonly loaded = signal(false); readonly displayedDate = signal('');
   readonly loading = signal(false); readonly saving = signal(false); readonly error = signal(''); readonly message = signal('');
   readonly appointments = signal<CalendarAppointment[]>([]); readonly preview = signal<SchedulePreview | null>(null); readonly slots = signal<{ startUtc: string; endUtc: string }[]>([]);
+  readonly capacity = signal<RepairCapacityOverview | null>(null);
+  readonly capacityError = signal(''); readonly capacityMessage = signal(''); readonly capacitySaving = signal(false);
+  readonly capacityForm = this.fb.group({ workplaces: [1, [Validators.required, Validators.min(1)]] });
   readonly dateForm = this.fb.group({ date: [todayKyiv(), Validators.required] });
   readonly weeklyForm = this.fb.group({ intervals: this.fb.array<ReturnType<InspectionCalendar['weeklyRow']>>([]) });
   readonly exceptionForm = this.fb.group({ mode: this.fb.control<DateMode>('Weekly'), reason: ['', Validators.maxLength(500)], intervals: this.fb.array<ReturnType<InspectionCalendar['intervalRow']>>([]), slots: this.fb.array<ReturnType<InspectionCalendar['slotRow']>>([]) });
@@ -44,6 +49,24 @@ export class InspectionCalendar {
   readonly statusLabel = statusLabel; readonly formatDate = (value: string) => kyivTime(value, true);
 
   constructor() { this.load(); }
+  loadCapacity() {
+    const date = this.dateForm.controls.date.value;
+    if (!date) return;
+    this.capacityApi.overview(date).subscribe({ next: result => {
+      if (this.dateForm.controls.date.value !== date) return;
+      this.capacity.set(result); this.capacityError.set('');
+      this.capacityForm.controls.workplaces.setValue(result.workplaces ?? 1);
+    }, error: () => this.capacityError.set('Не вдалося завантажити зайнятість робочих місць.') });
+  }
+  saveCapacity() {
+    const workplaces = this.capacityForm.controls.workplaces.value;
+    if (this.capacitySaving() || this.capacityForm.invalid || !Number.isSafeInteger(workplaces)) return;
+    this.capacitySaving.set(true); this.capacityError.set(''); this.capacityMessage.set('');
+    this.capacityApi.save(workplaces).pipe(finalize(() => this.capacitySaving.set(false))).subscribe({
+      next: () => { this.capacityMessage.set('Кількість робочих місць збережено.'); this.loadCapacity(); },
+      error: () => this.capacityError.set('Не вдалося зберегти кількість місць.'),
+    });
+  }
   weeklyRow(dayOfWeek: Day = 'Monday', start = '', end = '') { return this.fb.group({ dayOfWeek: this.fb.control<Day>(dayOfWeek), start: [shortTime(start), Validators.required], end: [shortTime(end), Validators.required] }); }
   intervalRow(start = '', end = '') { return this.fb.group({ start: [shortTime(start), Validators.required], end: [shortTime(end), Validators.required] }); }
   slotRow(start = '', mode: SlotMode = 'Closed') { return this.fb.group({ start: [shortTime(start), Validators.required], mode: this.fb.control<SlotMode>(mode) }); }
@@ -56,6 +79,7 @@ export class InspectionCalendar {
   setTab(tab: 'appointments' | 'settings') { this.tab.set(tab); }
   load() {
     if (this.dateForm.invalid || this.saving()) return;
+    this.loadCapacity();
     const date = this.dateForm.getRawValue().date;
     const serial = ++this.requestSerial;
     this.loaded.set(false); this.version = ''; this.slots.set([]); this.appointments.set([]); this.preview.set(null);

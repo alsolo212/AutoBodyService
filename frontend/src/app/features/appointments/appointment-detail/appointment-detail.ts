@@ -6,6 +6,7 @@ import { Subject, catchError, combineLatest, of, startWith, switchMap, tap } fro
 import { CancelAppointment } from '../cancel-appointment/cancel-appointment';
 import { AccountShell } from '../account-shell/account-shell';
 import { AppointmentDetails, AppointmentsApi, kyivTime, price, statusLabel } from '../appointments-api';
+import { kyivDate } from '../../../shared/time/kyiv-time';
 
 @Component({ selector: 'app-appointment-detail', imports: [RouterLink, AccountShell, CancelAppointment], templateUrl: './appointment-detail.html', styleUrl: './appointment-detail.scss' })
 export class AppointmentDetail {
@@ -19,6 +20,7 @@ export class AppointmentDetail {
   readonly message = signal('');
   readonly error = signal<'missing' | 'session' | 'failed' | null>(null);
   readonly statusLabel = statusLabel; readonly kyivTime = kyivTime; readonly price = price;
+  readonly kyivDate = kyivDate;
   constructor() {
     this.api.mine('all').pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: items => this.ownIds.set(new Set(items.map(item => item.id))), error: () => this.ownIds.set(new Set()) });
     combineLatest([this.route.paramMap, this.retry.pipe(startWith(undefined))]).pipe(

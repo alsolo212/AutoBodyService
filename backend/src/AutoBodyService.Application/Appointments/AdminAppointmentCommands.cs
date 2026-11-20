@@ -4,9 +4,29 @@ namespace AutoBodyService.Application.Appointments;
 
 public sealed class AdminAppointmentCommands(IAdminAppointmentStore store) : IAdminAppointmentCommands
 {
+    private static readonly TimeZoneInfo Kyiv = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
+
+    public Task<AdminAppointmentResult> ScheduleAsync(Guid id, uint version, string actorId, ScheduleRepairCommand command, CancellationToken cancellationToken) =>
+        store.ExecuteAsync(id, version, actorId, (appointment, now) => Guard(() =>
+        {
+            var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, Kyiv).DateTime);
+            if (command.Start < today || command.Start > today.AddYears(1) || command.DurationDays <= 0 ||
+                (long)command.Start.DayNumber + command.DurationDays > DateOnly.MaxValue.DayNumber || !command.InspectionPerformed)
+                return new(AdminAppointmentResult.Invalid);
+            var end = command.Start.AddDays(command.DurationDays);
+            var startUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(command.Start.ToDateTime(TimeOnly.MinValue), Kyiv));
+            var endUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(end.ToDateTime(TimeOnly.MinValue), Kyiv));
+            var plan = new RepairPlan(id, command.Price, startUtc, endUtc, now, calendarDatesOnly: true);
+            var from = appointment.Status;
+            appointment.AgreeRepairPlan(plan, true);
+            appointment.Schedule(appointment.RepairPlan!, true);
+            return new(AdminAppointmentResult.Success, AppointmentStatusEvent.ForTransition(id, from, appointment.Status, actorId, now), PriceChanged: true, DatesChanged: true);
+        }), cancellationToken);
+
     public Task<AdminAppointmentResult> PutPlanAsync(Guid id, uint version, string actorId, RepairPlanCommand command, CancellationToken cancellationToken) =>
         store.ExecuteAsync(id, version, actorId, (appointment, now) => Guard(() =>
         {
+            if (appointment.Status == AppointmentStatus.AwaitingInspection) return new(AdminAppointmentResult.Conflict);
             var plan = new RepairPlan(id, command.Price, command.PlannedStartUtc, command.EstimatedFinishUtc, now);
             var previous = appointment.RepairPlan;
             var priceChanged = previous is null || previous.AgreedPrice != plan.AgreedPrice;
@@ -31,9 +51,7 @@ public sealed class AdminAppointmentCommands(IAdminAppointmentStore store) : IAd
             switch (command.Target)
             {
                 case AppointmentStatus.Scheduled:
-                    if (appointment.RepairPlan is null) return new(AdminAppointmentResult.Conflict);
-                    appointment.Schedule(appointment.RepairPlan, command.InspectionPerformed);
-                    break;
+                    return new(AdminAppointmentResult.Conflict);
                 case AppointmentStatus.InProgress: appointment.StartRepair(); break;
                 case AppointmentStatus.AwaitingPayment: appointment.FinishRepair(); break;
                 case AppointmentStatus.Completed:

@@ -17,13 +17,16 @@ test('board copies an order to two workers, releases one and preserves customer 
     const intervals = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(dayOfWeek => ({ dayOfWeek, start: '09:00', end: '11:00' }));
     const preview = await (await checked(await fetch('/api/admin/inspection-schedule/preview', { method: 'POST', headers, body: JSON.stringify({ version: schedule.version, intervals }) }), 200)).json();
     await checked(await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers, body: JSON.stringify({ version: schedule.version, intervals, confirmationToken: preview.confirmationToken }) }), 204);
-    const slots = (await (await checked(await fetch('/api/inspection-slots?date=2099-09-10'), 200)).json()).slots;
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const tomorrow = new Date(`${today}T12:00:00Z`); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const slots = (await (await checked(await fetch(`/api/inspection-slots?date=${tomorrow.toISOString().slice(0, 10)}`), 200)).json()).slots;
     const employees = [];
     for (const [fullName, specialization, isActive] of [['Майстер А', 'Маляр', true], ['Майстер Б', 'Рихтування', true], ['Неактивний', 'Майстер', false]]) {
       employees.push(await (await checked(await fetch('/api/admin/employees', { method: 'POST', headers, body: JSON.stringify({ fullName, specialization, isActive }) }), 201)).json());
     }
     const foreign = await (await checked(await fetch('/api/appointments', { method: 'POST', headers, body: JSON.stringify({ inspectionStartUtc: slots[2].startUtc, vin: '1HGCM82633A123456', make: 'Чужа', model: 'Авто', problemDescription: 'Пошкодження' }) }), 201)).json();
-    return { employees, slots, foreign: foreign.id as string };
+    await checked(await fetch('/api/admin/repair-capacity', { method: 'PUT', headers, body: JSON.stringify({ workplaces: 2 }) }), 204);
+    return { employees, slots, today, foreign: foreign.id as string };
   });
   const customerContext = await browser.newContext({ ignoreHTTPSErrors: true });
   try {
@@ -43,18 +46,18 @@ test('board copies an order to two workers, releases one and preserves customer 
       }
       return ids;
     }, setup.slots);
-    await page.evaluate(async id => {
+    await page.evaluate(async ({ id, today }) => {
       await fetch('/api/auth/antiforgery'); const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
       const headers = { 'Content-Type': 'application/json', RequestVerificationToken: token };
       const details = async () => (await (await fetch(`/api/appointments/${id}`)).json());
       let item = await details();
-      const plan = await fetch(`/api/admin/appointments/${id}/repair-plan`, { method: 'PUT', headers, body: JSON.stringify({ version: item.version, price: 100, plannedStartUtc: '2099-09-11T07:00:00Z', estimatedFinishUtc: '2099-09-12T07:00:00Z', inspectionPerformed: true }) });
+      const plan = await fetch(`/api/admin/appointments/${id}/schedule`, { method: 'POST', headers, body: JSON.stringify({ version: item.version, price: 100, start: today, durationDays: 1, inspectionPerformed: true }) });
       if (plan.status !== 204) throw new Error(`Plan: ${plan.status}`);
-      for (const target of ['Scheduled', 'InProgress']) {
+      for (const target of ['InProgress']) {
         item = await details(); const response = await fetch(`/api/admin/appointments/${id}/transition`, { method: 'POST', headers, body: JSON.stringify({ version: item.version, target, inspectionPerformed: true }) });
         if (response.status !== 204) throw new Error(`Transition: ${response.status}`);
       }
-    }, orders[0]);
+    }, { id: orders[0], today: setup.today });
     await page.goto('/admin/assignments');
     const source = page.locator('#assignment-source');
     const order = source.locator(`[data-order-id="${orders[0]}"]`);
@@ -129,8 +132,11 @@ test('board copies an order to two workers, releases one and preserves customer 
     await expect(customer.locator('.status')).toContainText('У роботі');
     const repairPlan = customer.locator('section').filter({ has: customer.getByRole('heading', { name: 'Узгоджені вартість і терміни' }) });
     await expect(repairPlan.locator('dd').nth(0)).toHaveText('100,00 ₴');
-    await expect(repairPlan.locator('dd').nth(1)).toContainText('10:00');
-    await expect(repairPlan.locator('dd').nth(2)).toContainText('10:00');
+    const repairStart = new Date(`${setup.today}T12:00:00Z`);
+    const repairFinish = new Date(repairStart); repairFinish.setUTCDate(repairFinish.getUTCDate() + 1);
+    const date = new Intl.DateTimeFormat('uk-UA', { timeZone: 'Europe/Kyiv', day: 'numeric', month: 'long', year: 'numeric' });
+    await expect(repairPlan.locator('dd').nth(1)).toHaveText(date.format(repairStart));
+    await expect(repairPlan.locator('dd').nth(2)).toHaveText(date.format(repairFinish));
     await expect(repairPlan).not.toContainText('поки недоступні');
     const statusHistory = customer.locator('section').filter({ has: customer.getByRole('heading', { name: 'Історія статусів' }) });
     await expect(statusHistory).toContainText('Очікує огляду');

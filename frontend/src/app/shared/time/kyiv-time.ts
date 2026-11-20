@@ -2,6 +2,11 @@ const zone = 'Europe/Kyiv';
 const keyFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const offsetFormatter = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'longOffset' });
 
+/** Calendar-only repair plans have no agreed time of day. */
+export function kyivDate(value: string): string {
+  return new Intl.DateTimeFormat('uk-UA', { timeZone: zone, day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(value));
+}
+
 /** Add the offset when Kyiv's local time occurs twice during the autumn transition. */
 export function kyivTime(value: string, withDate = false): string {
   const instant = new Date(value);

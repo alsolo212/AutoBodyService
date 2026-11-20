@@ -20,7 +20,10 @@ test('board uses real guarded transitions, server pages and confirmation forms',
     if (!preview.ok) throw new Error(`Schedule preview: ${preview.status}`);
     const updated = await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers: headers(), body: JSON.stringify({ version: schedule.version, intervals, confirmationToken: (await preview.json()).confirmationToken }) });
     if (updated.status !== 204) throw new Error(`Schedule update: ${updated.status}`);
-    const slots = (await (await fetch('/api/inspection-slots?date=2099-09-10')).json()).slots;
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const tomorrow = new Date(`${today}T12:00:00Z`); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const slots = (await (await fetch(`/api/inspection-slots?date=${tomorrow.toISOString().slice(0, 10)}`)).json()).slots;
+    if ((await fetch('/api/admin/repair-capacity', { method: 'PUT', headers: headers(), body: JSON.stringify({ workplaces: 4 }) })).status !== 204) throw new Error('Capacity update failed');
     if (slots.length < 9) throw new Error('Nine inspection slots are required.');
     const ids: string[] = [];
     for (let i = 0; i < 9; i++) {
@@ -30,11 +33,8 @@ test('board uses real guarded transitions, server pages and confirmation forms',
     }
     for (const id of ids.slice(0, 2)) {
       let item = await (await fetch(`/api/appointments/${id}`)).json();
-      const plan = await fetch(`/api/admin/appointments/${id}/repair-plan`, { method: 'PUT', headers: headers(), body: JSON.stringify({ version: item.version, price: 1200, plannedStartUtc: '2099-09-11T07:00:00Z', estimatedFinishUtc: '2099-09-12T07:00:00Z', inspectionPerformed: true }) });
+      const plan = await fetch(`/api/admin/appointments/${id}/schedule`, { method: 'POST', headers: headers(), body: JSON.stringify({ version: item.version, price: 1200, start: today, durationDays: 1, inspectionPerformed: true }) });
       if (plan.status !== 204) throw new Error(`Plan: ${plan.status}`);
-      item = await (await fetch(`/api/appointments/${id}`)).json();
-      const transition = await fetch(`/api/admin/appointments/${id}/transition`, { method: 'POST', headers: headers(), body: JSON.stringify({ version: item.version, target: 'Scheduled', inspectionPerformed: true }) });
-      if (transition.status !== 204) throw new Error(`Schedule: ${transition.status}`);
     }
     return ids;
   });
@@ -142,7 +142,8 @@ test('board uses real guarded transitions, server pages and confirmation forms',
   const awaiting = page.locator(`[data-card-id="${ids[2]}"]`);
   await awaiting.getByRole('button', { name: 'Перевести: Заплановано' }).focus(); await page.keyboard.press('Enter');
   await expect(page).toHaveURL(new RegExp(`/admin/appointments/${ids[2]}\\?`));
-  await expect(page.getByLabel('Узгоджена вартість, ₴')).toBeVisible();
+  await expect(page.getByLabel('Орієнтовна вартість, ₴')).toBeVisible();
+  await expect(page.getByLabel('Початок ремонту за Києвом')).toBeFocused();
   await page.goto('/admin/appointments');
   await expect(page.locator(`[data-card-id="${ids[2]}"]`)).toBeVisible();
   const menu = page.locator(`[data-card-id="${ids[2]}"]`).getByLabel('Дії: Тестова Board2');
@@ -163,7 +164,9 @@ test('board uses real guarded transitions, server pages and confirmation forms',
     const changed = await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers: headers(), body: JSON.stringify({ version: schedule.version, intervals, confirmationToken: result.confirmationToken }) });
     if (changed.status !== 204) throw new Error(`Schedule update: ${changed.status}`);
     const dashboard = await (await fetch('/api/admin/dashboard')).json();
-    const calendar = await (await fetch('/api/admin/inspection-calendar?date=2099-09-10')).json();
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const tomorrow = new Date(`${today}T12:00:00Z`); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const calendar = await (await fetch(`/api/admin/inspection-calendar?date=${tomorrow.toISOString().slice(0, 10)}`)).json();
     const outcomes = [];
     for (const id of orderIds) {
       const before = await (await fetch(`/api/appointments/${id}`)).json();
@@ -215,7 +218,9 @@ test('a customer cannot enter the board and an administrator sees the foreign cu
       if (!preview.ok) throw new Error(`Preview: ${preview.status}`);
       const updated = await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers: headers(), body: JSON.stringify({ version: schedule.version, intervals, confirmationToken: (await preview.json()).confirmationToken }) });
       if (updated.status !== 204) throw new Error(`Schedule: ${updated.status}`);
-      const slots = (await (await fetch('/api/inspection-slots?date=2099-10-18')).json()).slots;
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      const later = new Date(`${today}T12:00:00Z`); later.setUTCDate(later.getUTCDate() + 2);
+      const slots = (await (await fetch(`/api/inspection-slots?date=${later.toISOString().slice(0, 10)}`)).json()).slots;
       if (slots.length < 2) throw new Error('Two free inspection slots are required.');
       const foreign = await fetch('/api/appointments', { method: 'POST', headers: headers(), body: JSON.stringify({ inspectionStartUtc: slots[0].startUtc, vin: '1HGCM82633A123456', make: 'Тестова', model: 'ForeignOwner', problemDescription: 'Інший власник' }) });
       if (foreign.status !== 201) throw new Error(`Foreign booking: ${foreign.status}`);

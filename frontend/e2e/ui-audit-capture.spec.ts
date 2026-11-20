@@ -57,15 +57,20 @@ test('capture real route states at desktop, tablet and mobile widths', async ({ 
     await fetch('/api/auth/antiforgery');
     const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
     const intervals = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].flatMap(dayOfWeek => [{ dayOfWeek, start: '03:00', end: '04:00' }, { dayOfWeek, start: '09:00', end: '10:00' }]);
-    return (await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token }, body: JSON.stringify({ version: schedule.version, intervals }) })).status;
+    const headers = { 'Content-Type': 'application/json', RequestVerificationToken: token };
+    const preview = await (await fetch('/api/admin/inspection-schedule/preview', { method: 'POST', headers, body: JSON.stringify({ version: schedule.version, intervals }) })).json();
+    return (await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers, body: JSON.stringify({ version: schedule.version, intervals, confirmationToken: preview.confirmationToken }) })).status;
   });
   expect(setup).toBe(204);
   const customer = await register(browser, 'ДужеДовгеТестовеІмяДляПеревіркиПеренесення', '0000000051');
   await visit(customer.page, '/account/appointments', 'account-empty');
   expect(await contrast(customer.page, '.profile-intro', '.profile-page')).toBeGreaterThanOrEqual(4.5);
   await visit(customer.page, '/account/book', 'book-step1');
+  const today = await customer.page.evaluate(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
+  const tomorrow = new Date(`${today}T12:00:00Z`); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const bookingDate = tomorrow.toISOString().slice(0, 10);
   await customer.context.setOffline(true);
-  await customer.page.getByLabel('Дата', { exact: true }).fill('2099-10-24');
+  await customer.page.getByLabel('Дата', { exact: true }).fill(bookingDate);
   await expect(customer.page.getByRole('alert')).toContainText('Не вдалося завантажити вільний час');
   await capture(customer.page, 'book-offline');
   await customer.context.setOffline(false);
@@ -80,11 +85,9 @@ test('capture real route states at desktop, tablet and mobile widths', async ({ 
   await capture(customer.page, 'book-loading');
   releaseSlots(); expect((await slotsLoaded).status()).toBe(200);
   await customer.page.unroute('**/api/inspection-slots?*');
-  await customer.page.getByLabel('Дата', { exact: true }).fill('2099-10-25');
-  await expect(customer.page.getByLabel('03:00 (UTC+03:00)', { exact: true })).toBeVisible();
-  await expect(customer.page.getByLabel('03:00 (UTC+02:00)', { exact: true })).toBeVisible();
-  await capture(customer.page, 'book-dst');
-  await customer.page.getByLabel('03:00 (UTC+02:00)', { exact: true }).check();
+  await expect(customer.page.getByLabel('09:00', { exact: true })).toBeVisible();
+  await capture(customer.page, 'book-slots');
+  await customer.page.getByLabel('09:00', { exact: true }).check();
   await customer.page.getByRole('button', { name: 'Далі' }).click(); await capture(customer.page, 'book-step2');
   await customer.page.getByLabel('VIN').fill('1HGCM82633A004352');
   await customer.page.getByLabel('Марка').fill('ДужеДовгаТестоваНазваАвтомобіля');
@@ -140,8 +143,10 @@ test('capture real route states at desktop, tablet and mobile widths', async ({ 
     };
     const details = async () => (await (await checked(await fetch(`/api/appointments/${appointmentId}`), 200)).json());
     let item = await details();
-    await checked(await fetch(`/api/admin/appointments/${appointmentId}/repair-plan`, { method: 'PUT', headers, body: JSON.stringify({ version: item.version, price: 1234.56, plannedStartUtc: '2099-10-26T07:00:00Z', estimatedFinishUtc: '2099-10-27T07:00:00Z', inspectionPerformed: true }) }), 204);
-    for (const target of ['Scheduled', 'InProgress']) {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    await checked(await fetch('/api/admin/repair-capacity', { method: 'PUT', headers, body: JSON.stringify({ workplaces: 2 }) }), 204);
+    await checked(await fetch(`/api/admin/appointments/${appointmentId}/schedule`, { method: 'POST', headers, body: JSON.stringify({ version: item.version, price: 1234.56, start: today, durationDays: 1, inspectionPerformed: true }) }), 204);
+    for (const target of ['InProgress']) {
       item = await details();
       await checked(await fetch(`/api/admin/appointments/${appointmentId}/transition`, { method: 'POST', headers, body: JSON.stringify({ version: item.version, target, inspectionPerformed: true }) }), 204);
     }

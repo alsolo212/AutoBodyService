@@ -51,6 +51,9 @@ public sealed class PostgresIdentityFixture : IAsyncLifetime
         await using var scope = Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         await db.Database.MigrateAsync();
+        // Existing lifecycle fixtures exercise status and audit independently of capacity.
+        (await db.RepairCapacity.SingleAsync()).Workplaces = 10000;
+        await db.SaveChangesAsync();
     }
     public async Task DisposeAsync()
     {

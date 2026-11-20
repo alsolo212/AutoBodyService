@@ -6,6 +6,7 @@ import { ApiStatus } from '../../../core/api-status/api-status';
 import { CancelAppointment } from '../cancel-appointment/cancel-appointment';
 import { AccountShell } from '../account-shell/account-shell';
 import { AppointmentCategory, AppointmentSummary, AppointmentsApi, kyivTime, price, statusLabel } from '../appointments-api';
+import { kyivDate } from '../../../shared/time/kyiv-time';
 
 @Component({ selector: 'app-appointment-list', imports: [RouterLink, AccountShell, ApiStatus, CancelAppointment], templateUrl: './appointment-list.html', styleUrl: './appointment-list.scss' })
 export class AppointmentList {
@@ -18,6 +19,7 @@ export class AppointmentList {
   readonly error = signal(false);
   readonly message = signal('');
   readonly statusLabel = statusLabel; readonly kyivTime = kyivTime; readonly price = price;
+  readonly kyivDate = kyivDate;
   readonly filters: { value: AppointmentCategory; label: string }[] = [{ value: 'active', label: 'Активні' }, { value: 'completed', label: 'Завершені' }, { value: 'cancelled', label: 'Скасовані' }, { value: 'all', label: 'Усі' }];
   constructor() {
     this.requests.pipe(startWith(this.category()), tap(() => { this.loading.set(true); this.error.set(false); this.items.set([]); }),

@@ -5,7 +5,7 @@ import { formatUah } from '../../shared/money/money';
 
 export type AppointmentStatus = 'AwaitingInspection' | 'Scheduled' | 'InProgress' | 'AwaitingPayment' | 'Completed' | 'Cancelled';
 export type AppointmentCategory = 'all' | 'active' | 'completed' | 'cancelled';
-export interface RepairPlan { agreedPriceExact: string; currency: string; plannedStartUtc: string; estimatedFinishUtc: string; }
+export interface RepairPlan { agreedPriceExact: string; currency: string; plannedStartUtc: string; estimatedFinishUtc: string; calendarDatesOnly?: boolean; }
 export interface AppointmentSummary { id: string; make: string; model: string; maskedVin: string | null; inspectionStartUtc: string; status: AppointmentStatus; repairPlan: RepairPlan | null; }
 export interface StatusHistory { fromStatus: AppointmentStatus | null; toStatus: AppointmentStatus; changedAtUtc: string; }
 export interface Participant { name: string; specialization: string; }

@@ -21,7 +21,10 @@ test('administrative order handles a real version conflict and both completion f
     const token = (await preview.json()).confirmationToken;
     const updated = await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers: headers(), body: JSON.stringify({ version: schedule.version, intervals, confirmationToken: token }) });
     if (updated.status !== 204) throw new Error(`Schedule update failed: ${updated.status}`);
-    const slots = await (await fetch('/api/inspection-slots?date=2099-09-10')).json();
+    if ((await fetch('/api/admin/repair-capacity', { method: 'PUT', headers: headers(), body: JSON.stringify({ workplaces: 2 }) })).status !== 204) throw new Error('Capacity update failed');
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const tomorrow = new Date(`${today}T12:00:00Z`); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const slots = await (await fetch(`/api/inspection-slots?date=${tomorrow.toISOString().slice(0, 10)}`)).json();
     if (slots.slots.length < 2) throw new Error('Two inspection slots are required.');
     const create = async (slot: string, model: string) => {
       const result = await fetch('/api/appointments', { method: 'POST', headers: headers(), body: JSON.stringify({ inspectionStartUtc: slot, vin: '1HGCM82633A123456', make: 'Тестова', model, problemDescription: 'Опис для перевірки' }) });
@@ -34,15 +37,14 @@ test('administrative order handles a real version conflict and both completion f
   await expect(page.getByRole('heading', { name: 'Тестова Перша' })).toBeVisible();
   await expect(page.locator('section[aria-labelledby="customer-heading"] time')).toContainText('09:00');
   await page.getByRole('button', { name: 'Узгодити план' }).click();
-  await page.getByLabel('Узгоджена вартість, ₴').fill('1200');
-  await page.getByLabel('Плановий початок за Києвом').fill('2099-09-11T10:00');
-  await page.getByLabel('Орієнтовне завершення за Києвом').fill('2099-09-12T10:00');
-  await page.locator('form').filter({ has: page.locator('#plan-price') }).getByLabel('Підтверджую, що огляд проведено').check();
+  await page.getByLabel('Орієнтовна вартість, ₴').fill('1200');
+  await page.getByLabel('Підтверджую, що огляд проведено і умови погоджено').check();
+  await expect(page.getByText('За планом місце доступне на весь період.')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.locator('section').filter({ has: page.locator('#plan-price') }).screenshot({ path: testInfo.outputPath('mobile-plan.png') });
-  const saved = page.waitForResponse(r => r.url().endsWith('/repair-plan') && r.request().method() === 'PUT');
-  await page.getByRole('button', { name: 'Зберегти план' }).click(); expect((await saved).status()).toBe(204);
-  await expect(page.getByText('Узгоджені дані збережено.')).toBeVisible();
+  await page.locator('section').filter({ has: page.locator('#schedule-price') }).screenshot({ path: testInfo.outputPath('mobile-plan.png') });
+  const saved = page.waitForResponse(r => r.url().endsWith('/schedule') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Підтвердити і запланувати' }).click(); expect((await saved).status()).toBe(204);
+  await expect(page.getByText('Ремонт заплановано.')).toBeVisible();
   await page.getByRole('button', { name: 'Змінити план' }).click();
   await page.getByLabel('Узгоджена вартість, ₴').fill('1600');
 
@@ -58,9 +60,8 @@ test('administrative order handles a real version conflict and both completion f
     }, created[0]);
     expect(changed).toBe(204);
     const conflict = page.waitForResponse(r => r.url().endsWith('/repair-plan') && r.request().method() === 'PUT');
-    await page.locator('form').filter({ has: page.locator('#plan-price') }).getByLabel('Підтверджую, що огляд проведено').check();
     await page.getByRole('button', { name: 'Зберегти план' }).click(); expect((await conflict).status()).toBe(409);
-    await expect(page.getByRole('alert').filter({ hasText: 'Замовлення змінилося' })).toBeVisible();
+    await expect(page.getByRole('alert').filter({ hasText: 'Замовлення або зайнятість змінилися' })).toBeVisible();
     await expect(page.getByLabel('Узгоджена вартість, ₴')).toHaveValue('1600');
     await expect(page.getByText(/1 700,00/)).toBeVisible();
     const currentPrice = await other.evaluate(async id => (await (await fetch(`/api/appointments/${id}`)).json()).repairPlan.agreedPrice, created[0]);
@@ -73,11 +74,10 @@ test('administrative order handles a real version conflict and both completion f
   await page.getByRole('button', { name: 'Зв’язалися' }).click(); expect((await contact).status()).toBe(204);
   await expect(page.getByRole('heading', { name: 'Історія зв’язку' })).toBeVisible();
   await expect(page.getByText('E2E test').first()).toBeVisible();
-  await page.getByLabel('Підтверджую, що огляд проведено').check();
-  for (const label of ['Заплановано', 'У роботі', 'Очікує оплати']) {
+  for (const label of ['У роботі', 'Очікує оплати']) {
     const response = page.waitForResponse(r => r.url().endsWith('/transition') && r.request().method() === 'POST');
     await page.getByRole('button', { name: `Перевести: ${label}` }).click();
-    if (label !== 'Заплановано') await page.getByRole('dialog').getByRole('button', { name: 'Змінити етап' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Змінити етап' }).click();
     expect((await response).status()).toBe(204);
     await expect(page.getByText('Статус замовлення оновлено.')).toBeVisible();
   }

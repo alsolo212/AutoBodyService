@@ -256,9 +256,8 @@ public sealed class EmployeeAssignmentPostgresTests(PostgresIdentityFixture fixt
         var owner = await User("User"); var admin = await User("Admin"); using var actor = await Login(admin.Phone);
         var order = await Appointment(owner.Id, false); var worker = await Employee("Assigned"); var otherWorker = await Employee("Other");
         Assert.Equal(HttpStatusCode.Conflict, (await Assign(actor, order, worker)).StatusCode);
-        var start = new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero);
-        Assert.Equal(HttpStatusCode.NoContent, (await actor.PutAsJsonAsync($"/api/admin/appointments/{order}/repair-plan", new { version = await Version(actor, order), price = 100m, plannedStartUtc = start, estimatedFinishUtc = start.AddDays(1), inspectionPerformed = true })).StatusCode);
-        Assert.Equal(HttpStatusCode.NoContent, (await actor.PostAsJsonAsync($"/api/admin/appointments/{order}/transition", new { version = await Version(actor, order), target = "Scheduled", inspectionPerformed = true })).StatusCode);
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv")).DateTime);
+        Assert.Equal(HttpStatusCode.NoContent, (await actor.PostAsJsonAsync($"/api/admin/appointments/{order}/schedule", new { version = await Version(actor, order), price = 100m, start = today, durationDays = 1, inspectionPerformed = true })).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await Assign(actor, order, worker)).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await actor.PostAsJsonAsync($"/api/admin/appointments/{order}/transition", new { version = await Version(actor, order), target = "InProgress" })).StatusCode);
         using var created = await Assign(actor, order, worker); Assert.Equal(HttpStatusCode.Created, created.StatusCode);

@@ -208,6 +208,9 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("AgreedPrice")
                         .HasColumnType("numeric");
 
+                    b.Property<bool>("CalendarDatesOnly")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasMaxLength(3)
@@ -563,6 +566,33 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_PriceListItem_Price", "\"Price\" >= 0 AND \"Price\" <> 'NaN'::numeric AND \"Price\" <> 'Infinity'::numeric AND \"Price\" <= 79228162514264337593543950335");
 
                             t.HasCheckConstraint("CK_PriceListItem_Publication", "NOT (\"IsArchived\" AND \"IsPublished\")");
+                        });
+                });
+
+            modelBuilder.Entity("AutoBodyService.Infrastructure.Appointments.RepairCapacityRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("Workplaces")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("RepairCapacity", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_RepairCapacity_Positive", "\"Workplaces\" IS NULL OR \"Workplaces\" > 0");
+
+                            t.HasCheckConstraint("CK_RepairCapacity_Singleton", "\"Id\" = 1");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1
                         });
                 });
 

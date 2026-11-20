@@ -18,7 +18,10 @@ test('common dashboard reflects real orders and manual contacts for Admin and Su
     if (!preview.ok) throw new Error(`Preview ${preview.status}`);
     const update = await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers: headers(), body: JSON.stringify({ version: schedule.version, intervals, confirmationToken: (await preview.json()).confirmationToken }) });
     if (update.status !== 204) throw new Error(`Schedule ${update.status}`);
-    const slots = (await (await fetch('/api/inspection-slots?date=2099-09-10')).json()).slots;
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const tomorrow = new Date(`${today}T12:00:00Z`); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const slots = (await (await fetch(`/api/inspection-slots?date=${tomorrow.toISOString().slice(0, 10)}`)).json()).slots;
+    if ((await fetch('/api/admin/repair-capacity', { method: 'PUT', headers: headers(), body: JSON.stringify({ workplaces: 5 }) })).status !== 204) throw new Error('Capacity update failed');
     if (slots.length < 5) throw new Error('Expected five slots');
     const result: string[] = [];
     for (let i = 0; i < 5; i++) {
@@ -28,9 +31,9 @@ test('common dashboard reflects real orders and manual contacts for Admin and Su
     }
     for (let i = 1; i <= 3; i++) {
       const id = result[i]; let item = await (await fetch(`/api/appointments/${id}`)).json();
-      const plan = await fetch(`/api/admin/appointments/${id}/repair-plan`, { method: 'PUT', headers: headers(), body: JSON.stringify({ version: item.version, price: 1299, plannedStartUtc: '2099-09-11T07:00:00Z', estimatedFinishUtc: '2099-09-12T07:00:00Z', inspectionPerformed: true }) });
+      const plan = await fetch(`/api/admin/appointments/${id}/schedule`, { method: 'POST', headers: headers(), body: JSON.stringify({ version: item.version, price: 1299, start: today, durationDays: 1, inspectionPerformed: true }) });
       if (plan.status !== 204) throw new Error(`Plan ${plan.status}`);
-      for (const target of ['Scheduled', 'InProgress', 'AwaitingPayment'].slice(0, i)) {
+      for (const target of ['InProgress', 'AwaitingPayment'].slice(0, i - 1)) {
         item = await (await fetch(`/api/appointments/${id}`)).json();
         const transition = await fetch(`/api/admin/appointments/${id}/transition`, { method: 'POST', headers: headers(), body: JSON.stringify({ version: item.version, target, inspectionPerformed: true }) });
         if (transition.status !== 204) throw new Error(`Transition ${target}: ${transition.status}`);

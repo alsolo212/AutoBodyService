@@ -14,13 +14,38 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
         Func<Domain.Appointments.Appointment, DateTimeOffset, AdminAppointmentMutation> mutate, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        // Serialize capacity changes with all administrative status and plan writes.
+        await RepairCapacityStore.LockAsync(db, cancellationToken);
         // Customer cancellation uses the same row lock; xmin also rejects other stale writers.
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Appointments\" WHERE \"Id\" = {id} FOR UPDATE", cancellationToken);
         var appointment = await db.Appointments.Include(a => a.RepairPlan).SingleOrDefaultAsync(a => a.Id == id, cancellationToken);
         if (appointment is null) return AdminAppointmentResult.NotFound;
         if (db.Entry(appointment).Property<uint>("Version").CurrentValue != version) return AdminAppointmentResult.Conflict;
+        var oldStatus = appointment.Status;
+        var oldStart = appointment.RepairPlan?.PlannedStartUtc;
         var mutation = mutate(appointment, clock.GetUtcNow());
         if (mutation.Result != AdminAppointmentResult.Success) return mutation.Result;
+        if (mutation.DatesChanged && appointment.RepairPlan is { } revised && oldStart != revised.PlannedStartUtc &&
+            RepairCapacityStore.LocalDate(revised.PlannedStartUtc) > RepairCapacityStore.LocalDate(clock.GetUtcNow()).AddYears(1))
+            return AdminAppointmentResult.Invalid;
+        if (appointment.Status == AppointmentStatus.InProgress && oldStatus != AppointmentStatus.InProgress)
+        {
+            var places = (await db.RepairCapacity.SingleAsync(cancellationToken)).Workplaces;
+            var actual = await db.Appointments.CountAsync(a => a.Status == AppointmentStatus.InProgress, cancellationToken);
+            if (places is null || actual >= places.Value) return AdminAppointmentResult.Conflict;
+        }
+        if (appointment.Status is AppointmentStatus.Scheduled or AppointmentStatus.InProgress &&
+            (oldStatus == AppointmentStatus.AwaitingInspection || mutation.DatesChanged))
+        {
+            var plan = appointment.RepairPlan!;
+            var start = RepairCapacityStore.LocalDate(plan.PlannedStartUtc);
+            var end = RepairCapacityStore.LocalDate(plan.EstimatedFinishUtc);
+            var today = RepairCapacityStore.LocalDate(clock.GetUtcNow());
+            if (oldStart != plan.PlannedStartUtc && (start < today || start > today.AddYears(1))) return AdminAppointmentResult.Invalid;
+            var places = (await db.RepairCapacity.SingleAsync(cancellationToken)).Workplaces;
+            var reservations = await RepairCapacityStore.ReservationsAsync(db, id, cancellationToken);
+            if (places is null || !RepairAvailability.Fits(new(start, end), reservations, places.Value)) return AdminAppointmentResult.Conflict;
+        }
         if (mutation.StatusEvent is null && mutation.Confirmation is null && !mutation.PriceChanged && !mutation.DatesChanged)
             return AdminAppointmentResult.Success;
         if (mutation.StatusEvent is { } statusEvent)
@@ -66,7 +91,7 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
             var eventId = $"plan:{id}:{Guid.NewGuid()}";
             if (appointment.UserId is { } owner) NotificationEvents.Add(db, owner, id, NotificationAudience.Personal, "RepairPlanChanged", "План ремонту змінено",
                 "Вартість або терміни ремонту змінено. Перегляньте актуальний план замовлення.", now, $"{eventId}:customer:{appointment.UserId}");
-            if (appointment.Status == AppointmentStatus.Scheduled)
+            if (appointment.Status == AppointmentStatus.Scheduled && oldStatus != AppointmentStatus.AwaitingInspection)
                 await NotificationEvents.AddForAdministratorsAsync(db, id, "AdminContactPlanChanged", "Завдання зв’язатися з клієнтом",
                     "План ремонту змінено. За потреби зв’яжіться з клієнтом.", now, eventId, cancellationToken);
         }

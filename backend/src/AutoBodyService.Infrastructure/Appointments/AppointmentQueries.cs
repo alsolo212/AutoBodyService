@@ -19,7 +19,7 @@ public sealed class AppointmentQueries(ApplicationDbContext db) : IAppointmentQu
         };
         var rows = await query.OrderByDescending(a => a.InspectionStartUtc).ThenBy(a => a.Id)
             .Select(a => new { a.Id, a.Make, a.Model, a.Vin, a.InspectionStartUtc, a.Status,
-                Plan = a.RepairPlan == null ? null : new AgreedRepairDetails(a.RepairPlan.AgreedPrice, a.RepairPlan.Currency, a.RepairPlan.PlannedStartUtc, a.RepairPlan.EstimatedFinishUtc) }).ToListAsync(cancellationToken);
+                Plan = a.RepairPlan == null ? null : new AgreedRepairDetails(a.RepairPlan.AgreedPrice, a.RepairPlan.Currency, a.RepairPlan.PlannedStartUtc, a.RepairPlan.EstimatedFinishUtc, a.RepairPlan.CalendarDatesOnly) }).ToListAsync(cancellationToken);
         return rows.Select(a => new AppointmentSummary(a.Id, a.Make, a.Model, a.Vin is null ? null : new string('*', 13) + a.Vin[^4..], a.InspectionStartUtc, a.Status, a.Plan)).ToArray();
     }
 
@@ -27,7 +27,7 @@ public sealed class AppointmentQueries(ApplicationDbContext db) : IAppointmentQu
     {
         var row = await db.Appointments.AsNoTracking().Where(a => a.Id == id && a.UserId == userId)
             .Select(a => new { a.Id, a.Vin, a.Make, a.Model, a.ProblemDescription, a.InspectionStartUtc, a.Status,
-                Plan = a.RepairPlan == null ? null : new AgreedRepairDetails(a.RepairPlan.AgreedPrice, a.RepairPlan.Currency, a.RepairPlan.PlannedStartUtc, a.RepairPlan.EstimatedFinishUtc),
+                Plan = a.RepairPlan == null ? null : new AgreedRepairDetails(a.RepairPlan.AgreedPrice, a.RepairPlan.Currency, a.RepairPlan.PlannedStartUtc, a.RepairPlan.EstimatedFinishUtc, a.RepairPlan.CalendarDatesOnly),
                 History = a.StatusEvents.OrderBy(e => e.ChangedAtUtc).ThenBy(e => e.Id)
                     .Select(e => new CustomerStatusHistory(e.FromStatus, e.ToStatus, e.ChangedAtUtc)).ToList() })
             .SingleOrDefaultAsync(cancellationToken);
@@ -45,7 +45,7 @@ public sealed class AppointmentQueries(ApplicationDbContext db) : IAppointmentQu
                          where a.Id == id
                          select new { a.Id, a.Vin, a.Make, a.Model, a.ProblemDescription, a.InspectionStartUtc, a.Status,
                              Version = EF.Property<uint>(a, "Version"),
-                             Plan = a.RepairPlan == null ? null : new AgreedRepairDetails(a.RepairPlan.AgreedPrice, a.RepairPlan.Currency, a.RepairPlan.PlannedStartUtc, a.RepairPlan.EstimatedFinishUtc),
+                             Plan = a.RepairPlan == null ? null : new AgreedRepairDetails(a.RepairPlan.AgreedPrice, a.RepairPlan.Currency, a.RepairPlan.PlannedStartUtc, a.RepairPlan.EstimatedFinishUtc, a.RepairPlan.CalendarDatesOnly),
                              CustomerName = owner != null ? owner.Name : a.CustomerName!, CustomerPhone = owner != null ? owner.PhoneNormalized : a.CustomerPhone! })
             .SingleOrDefaultAsync(cancellationToken);
         if (row is null) return null;

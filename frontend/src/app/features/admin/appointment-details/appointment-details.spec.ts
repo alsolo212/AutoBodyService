@@ -39,13 +39,31 @@ describe('administrative appointment details', () => {
     TestBed.configureTestingModule({ imports: [AppointmentDetailsAdmin], providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: ActivatedRoute, useValue: { paramMap: params, snapshot } }] });
     http = TestBed.inject(HttpTestingController);
   });
-  afterEach(() => { http.verify(); vi.unstubAllGlobals(); });
+  afterEach(() => { http.verify(); vi.unstubAllGlobals(); vi.useRealTimers(); });
   function create(item: AdminAppointment = base) {
     const fixture = TestBed.createComponent(AppointmentDetailsAdmin); fixture.detectChanges();
     http.expectOne('/api/appointments/order-1').flush(item); fixture.detectChanges();
     return fixture;
   }
   function token() { http.expectOne('/api/auth/antiforgery').flush(null); }
+
+  it('schedules the agreed plan with one confirmation and the exact price', () => {
+    vi.useFakeTimers();
+    const fixture = create(); const component = fixture.componentInstance; component.editPlan();
+    vi.advanceTimersByTime(200);
+    const preview = http.expectOne(r => r.url === '/api/admin/repair-capacity/preview');
+    const start = preview.request.params.get('start')!;
+    preview.flush({ today: start, latestStart: '2099-01-01', nearestStart: start, finish: '2099-01-02', fits: true });
+    component.scheduleForm.patchValue({ price: '9007199254740993.01', inspectionPerformed: true });
+    vi.advanceTimersByTime(200);
+    http.expectNone(r => r.url === '/api/admin/repair-capacity/preview');
+    component.schedule(); token();
+    const request = http.expectOne('/api/admin/appointments/order-1/schedule');
+    expect(request.request.body).toContain('"price":9007199254740993.01');
+    expect(JSON.parse(request.request.body)).toMatchObject({ version: 41, start, durationDays: 1, inspectionPerformed: true });
+    request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, status: 'Scheduled', version: 42, repairPlan: plan });
+    http.expectNone('/api/admin/appointments/order-1/transition');
+  });
 
   it('refuses a stale board action while displaying the current order', () => {
     snapshot.queryParamMap = convertToParamMap({ action: 'plan', version: '40' });
@@ -86,28 +104,27 @@ describe('administrative appointment details', () => {
     http.expectNone('/api/auth/antiforgery');
   });
 
-  it('validates Kyiv times and inspection before saving a plan with the version', () => {
-    const fixture = create(); const component = fixture.componentInstance; component.editPlan(); fixture.detectChanges();
+  it('validates Kyiv times before saving a plan correction with the version', () => {
+    const fixture = create({ ...base, status: 'Scheduled', repairPlan: plan }); const component = fixture.componentInstance; component.editPlan(); fixture.detectChanges();
     component.planForm.setValue({ price: '0', start: '2026-03-29T03:30', startOffset: '+02:00', finish: '2026-03-29T05:00', finishOffset: '+03:00', inspectionPerformed: true });
     component.savePlan(); expect(component.planError()).toContain('час за Києвом'); http.expectNone('/api/auth/antiforgery');
-    component.planForm.patchValue({ start: '2026-10-25T03:30', startOffset: '+03:00', finish: '2026-10-25T03:30', finishOffset: '+02:00', inspectionPerformed: false });
-    component.savePlan(); expect(component.planError()).toContain('огляд'); http.expectNone('/api/auth/antiforgery');
-    component.planForm.controls.inspectionPerformed.setValue(true); component.savePlan(); token();
+    component.planForm.patchValue({ start: '2026-10-25T03:30', startOffset: '+03:00', finish: '2026-10-25T03:30', finishOffset: '+02:00', inspectionPerformed: true });
+    component.savePlan(); token();
     const request = http.expectOne('/api/admin/appointments/order-1/repair-plan');
     expect(request.request.method).toBe('PUT');
-    expect(JSON.parse(request.request.body)).toEqual({ version: 41, price: 0, plannedStartUtc: '2026-10-25T00:30:00.000Z', estimatedFinishUtc: '2026-10-25T01:30:00.000Z', inspectionPerformed: true });
-    request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, repairPlan: plan, version: 42 }); fixture.detectChanges();
+    expect(JSON.parse(request.request.body)).toEqual({ version: 41, price: 0, plannedStartUtc: plan.plannedStartUtc, estimatedFinishUtc: plan.estimatedFinishUtc, inspectionPerformed: true });
+    request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, status: 'Scheduled', repairPlan: plan, version: 42 }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Узгоджені дані збережено');
   });
 
   it('derives ordinary Kyiv offsets automatically and asks about repeated times only', () => {
-    const fixture = create(); const component = fixture.componentInstance; component.editPlan();
+    const fixture = create({ ...base, status: 'Scheduled', repairPlan: plan }); const component = fixture.componentInstance; component.editPlan();
     component.planForm.patchValue({ price: '100', start: '2026-07-01T12:00', finish: '2026-07-01T13:00', inspectionPerformed: true }); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#plan-start-offset')).toBeNull();
     component.savePlan(); token();
     const request = http.expectOne('/api/admin/appointments/order-1/repair-plan');
     expect(JSON.parse(request.request.body)).toMatchObject({ plannedStartUtc: '2026-07-01T09:00:00.000Z', estimatedFinishUtc: '2026-07-01T10:00:00.000Z' });
-    request.flush(null); http.expectOne('/api/appointments/order-1').flush(base); fixture.detectChanges();
+    request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, status: 'Scheduled', repairPlan: plan }); fixture.detectChanges();
     component.editPlan(); component.planForm.patchValue({ price: '100', start: '2026-10-25T03:30', finish: '2026-10-25T05:00', inspectionPerformed: true }); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#plan-start-offset')).not.toBeNull();
     component.savePlan(); expect(component.planError()).toContain('повторного часу'); http.expectNone('/api/auth/antiforgery');
@@ -126,13 +143,13 @@ describe('administrative appointment details', () => {
   });
 
   it('sends the exact decimal literal and rejects values outside decimal precision', () => {
-    const fixture = create(); const component = fixture.componentInstance;
+    const fixture = create({ ...base, status: 'Scheduled', repairPlan: plan }); const component = fixture.componentInstance;
     component.editPlan();
     component.planForm.setValue({ price: '9007199254740993,01', start: '2026-10-25T03:30', startOffset: '+03:00', finish: '2026-10-25T03:30', finishOffset: '+02:00', inspectionPerformed: true });
     component.savePlan(); token();
     const request = http.expectOne('/api/admin/appointments/order-1/repair-plan');
     expect(request.request.body).toContain('"price":9007199254740993.01');
-    request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, repairPlan: { ...plan, agreedPriceExact: '9007199254740993.01' }, version: 42 }); fixture.detectChanges();
+    request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, status: 'Scheduled', repairPlan: { ...plan, agreedPriceExact: '9007199254740993.01' }, version: 42 }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('9 007 199 254 740 993,01 ₴');
     component.editPlan();
     expect(component.planForm.controls.price.value).toBe('9007199254740993.01');
@@ -162,7 +179,7 @@ describe('administrative appointment details', () => {
     http.expectOne('/api/appointments/order-1').flush({ ...base, status: 'InProgress', repairPlan: plan, version: 42 }); fixture.detectChanges();
     expect(component.planForm.controls.price.value).toBe('4567');
     expect(component.item()?.version).toBe(42);
-    expect(fixture.nativeElement.textContent).toContain('Актуальні дані завантажено');
+    expect(fixture.nativeElement.textContent).toContain('зайнятість змінилися');
     http.expectNone('/api/admin/appointments/order-1/repair-plan');
   });
 

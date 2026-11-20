@@ -11,6 +11,7 @@ describe('InspectionCalendar', () => {
   beforeEach(() => { TestBed.configureTestingModule({ imports: [InspectionCalendar], providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()] }); http = TestBed.inject(HttpTestingController); });
   afterEach(() => http.verify());
   function load() {
+    http.expectOne(r => r.url === '/api/admin/repair-capacity').flush({ workplaces: 3, inProgress: 1, days: [{ date: '2026-11-09', reserved: 2 }] });
     http.expectOne('/api/admin/inspection-schedule').flush({ version, intervals: [{ dayOfWeek: 'Monday', start: '09:00:00', end: '10:00:00' }] });
     const exception = http.expectOne(r => r.url === '/api/admin/inspection-exceptions'); const date = exception.request.params.get('date');
     exception.flush({ version, date, exception: null });

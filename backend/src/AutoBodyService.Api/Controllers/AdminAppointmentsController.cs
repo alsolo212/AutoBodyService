@@ -75,6 +75,17 @@ public sealed class AdminAppointmentsController(IAdminAppointmentCommands comman
         return Result(await commands.PutPlanAsync(id, request.Version!.Value, actor, command, cancellationToken));
     }
 
+    /// <summary>Agree a repair plan and schedule the order in one transaction.</summary>
+    [HttpPost("{id:guid}/schedule")]
+    public async Task<IActionResult> Schedule(Guid id, ScheduleRepairRequest request, CancellationToken cancellationToken)
+    {
+        var actor = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (actor is null) return Unauthorized();
+        if (!ExactDecimal.TryNonnegative(request.Price, out var price)) return BadRequest();
+        return Result(await commands.ScheduleAsync(id, request.Version!.Value, actor,
+            new(request.Start!.Value, request.DurationDays!.Value, price, request.InspectionPerformed == true), cancellationToken));
+    }
+
     [HttpPost("{id:guid}/transition")]
     public async Task<IActionResult> Transition(Guid id, TransitionRequest request, CancellationToken cancellationToken)
     {
@@ -130,6 +141,17 @@ public sealed record RepairPlanRequest
     [Required] public required DateTimeOffset? PlannedStartUtc { get; init; }
     [Required] public required DateTimeOffset? EstimatedFinishUtc { get; init; }
     public bool? InspectionPerformed { get; init; }
+}
+
+/// <summary>Calendar dates and agreed price for the initial repair plan.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ScheduleRepairRequest
+{
+    [Required] public required uint? Version { get; init; }
+    [Required] public required DateOnly? Start { get; init; }
+    [Required] public required int? DurationDays { get; init; }
+    public JsonElement Price { get; init; }
+    [Required] public required bool? InspectionPerformed { get; init; }
 }
 
 /// <summary>One forward transition, with explicit facts where required.</summary>

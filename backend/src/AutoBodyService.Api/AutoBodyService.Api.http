@@ -3,6 +3,26 @@
 ### Check that the AutoBodyService API is available
 GET {{baseUrl}}/api/health
 
+### Administrative repair occupancy for a selected month (Admin/SuperAdmin cookie)
+GET {{baseUrl}}/api/admin/repair-capacity?date={{repairStartDate}}
+
+### Set physical workplaces (Admin/SuperAdmin cookie and antiforgery token)
+PUT {{baseUrl}}/api/admin/repair-capacity
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{ "workplaces": 2 }
+
+### Preview a repair period, including a nearest available start
+GET {{baseUrl}}/api/admin/repair-capacity/preview?start={{repairStartDate}}&durationDays=10
+
+### Confirm plan and status together (version from appointment details)
+POST {{baseUrl}}/api/admin/appointments/{{appointmentId}}/schedule
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{ "version": {{appointmentVersion}}, "start": "{{repairStartDate}}", "durationDays": 10, "price": 1200, "inspectionPerformed": true }
+
 ### Check the ProblemDetails response for an unknown route
 GET {{baseUrl}}/api/unknown
 

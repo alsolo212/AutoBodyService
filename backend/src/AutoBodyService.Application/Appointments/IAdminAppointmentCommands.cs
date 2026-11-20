@@ -5,10 +5,12 @@ namespace AutoBodyService.Application.Appointments;
 public enum AdminAppointmentResult { Success, NotFound, Conflict, Invalid }
 public sealed record RepairPlanCommand(decimal Price, DateTimeOffset PlannedStartUtc, DateTimeOffset EstimatedFinishUtc, bool InspectionPerformed);
 public sealed record TransitionCommand(AppointmentStatus Target, bool InspectionPerformed, bool PaymentReceived, bool VehicleHandedOver);
+public sealed record ScheduleRepairCommand(DateOnly Start, int DurationDays, decimal Price, bool InspectionPerformed);
 
 public interface IAdminAppointmentCommands
 {
     Task<AdminAppointmentResult> PutPlanAsync(Guid id, uint version, string actorId, RepairPlanCommand command, CancellationToken cancellationToken);
+    Task<AdminAppointmentResult> ScheduleAsync(Guid id, uint version, string actorId, ScheduleRepairCommand command, CancellationToken cancellationToken);
     Task<AdminAppointmentResult> TransitionAsync(Guid id, uint version, string actorId, TransitionCommand command, CancellationToken cancellationToken);
     Task<AdminAppointmentResult> CancelAsync(Guid id, uint version, string actorId, bool confirmed, string reason, CancellationToken cancellationToken);
 }

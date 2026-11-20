@@ -10,6 +10,7 @@ import { Subject, catchError, filter, finalize, forkJoin, map, of, switchMap } f
 import { AppointmentStatus, price, statusLabel } from '../../appointments/appointments-api';
 import { AdminAppointmentApi, AdminBoardCard, AdminBoardFilter, AdminBoardPage } from '../appointment-details/admin-appointment-api';
 import { kyivWithOffset } from '../appointment-details/kyiv-date';
+import { kyivDate } from '../../../shared/time/kyiv-time';
 import { ConfirmDialog } from '../../../shared/confirm-dialog/confirm-dialog';
 import { BoardSnapshot, BoardState, StatusFilter } from './board-state';
 
@@ -47,6 +48,7 @@ export class AppointmentsBoard {
   readonly statusLabel = statusLabel;
   readonly price = price;
   readonly format = kyivWithOffset;
+  readonly kyivDate = kyivDate;
   readonly statuses = statuses;
   readonly filterForm = this.fb.group({ search: ['', Validators.maxLength(100)], status: this.fb.control<StatusFilter>(''),
     from: [''], to: [''], sort: ['inspection'], direction: ['asc'], pageSize: [5] });

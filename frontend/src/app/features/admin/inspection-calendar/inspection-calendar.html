@@ -24,6 +24,15 @@
           @else { <p class="empty-note">На цю дату немає доступних майбутніх інтервалів.</p> }
         }
       } @else if (loaded()) {
+        <div class="section-title"><div><p class="panel-eyebrow">РЕМОНТИ</p><h2>Робочі місця і завантаження</h2></div></div>
+        @if (capacityError()) { <p class="field__error" role="alert">{{ capacityError() }}</p> }
+        @if (capacityMessage()) { <p role="status">{{ capacityMessage() }}</p> }
+        @if (capacity(); as load) {
+          <p>Фактично у роботі: <strong>{{ load.inProgress }}</strong> із {{ load.workplaces ?? 'не налаштовано' }} місць. Планова зайнятість на місяць обраної дати:</p>
+          @if (load.workplaces !== null && load.inProgress > load.workplaces) { <p role="alert">Фактична зайнятість перевищує кількість місць.</p> }
+          <details><summary>Показати планову зайнятість за днями</summary><ul>@for (day of load.days; track day.date) { <li>{{ day.date }}: {{ day.reserved }} / {{ load.workplaces ?? '—' }} @if (load.workplaces !== null && day.reserved > load.workplaces) { <strong>Перевантаження</strong> }</li> }</ul></details>
+          <form class="profile-form" [formGroup]="capacityForm" (ngSubmit)="saveCapacity()"><div class="field"><label class="field__label" for="workplaces">Кількість робочих місць</label><input id="workplaces" class="field__input" type="number" min="1" step="1" formControlName="workplaces" /></div><button class="button button--primary" type="submit" [disabled]="capacitySaving() || capacityForm.invalid">Зберегти кількість місць</button></form>
+        }
         <div class="section-title"><div><p class="panel-eyebrow">ЩОТИЖНЯ</p><h2>Робочі дні та години</h2></div></div>
         <p class="calendar-help">День без інтервалів зачинений. Тривалість інтервалу — кратна 30 хвилинам; інтервали не можуть перетинатися.</p>
         <form [formGroup]="weeklyForm" (ngSubmit)="requestSave('weekly')"><div formArrayName="intervals">

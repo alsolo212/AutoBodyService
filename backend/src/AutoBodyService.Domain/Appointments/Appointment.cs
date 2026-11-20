@@ -150,6 +150,7 @@ public sealed class Appointment
         {
             if (plan.UpdatedAtUtc < RepairPlan.UpdatedAtUtc) throw new ArgumentException("The agreement cannot be backdated.", nameof(plan));
             RepairPlan.Update(plan.AgreedPrice, plan.PlannedStartUtc, plan.EstimatedFinishUtc, plan.UpdatedAtUtc);
+            RepairPlan.SetCalendarDatesOnly(plan.CalendarDatesOnly);
         }
     }
 
@@ -161,7 +162,9 @@ public sealed class Appointment
             throw new InvalidOperationException("Only a non-terminal appointment with an agreed plan can be revised.");
         if (updatedAtUtc < RepairPlan.UpdatedAtUtc)
             throw new ArgumentException("The update cannot precede the previous agreement.", nameof(updatedAtUtc));
+        var datesChanged = plannedStartUtc != RepairPlan.PlannedStartUtc || estimatedFinishUtc != RepairPlan.EstimatedFinishUtc;
         RepairPlan.Update(agreedPrice, plannedStartUtc, estimatedFinishUtc, updatedAtUtc);
+        if (datesChanged) RepairPlan.SetCalendarDatesOnly(false);
     }
 
     public void FinishRepair() => MoveFrom(AppointmentStatus.InProgress, AppointmentStatus.AwaitingPayment);

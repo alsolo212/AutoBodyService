@@ -10,12 +10,14 @@ public sealed class RepairPlan
         decimal agreedPrice,
         DateTimeOffset plannedStartUtc,
         DateTimeOffset estimatedFinishUtc,
-        DateTimeOffset updatedAtUtc)
+        DateTimeOffset updatedAtUtc,
+        bool calendarDatesOnly = false)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(appointmentId, Guid.Empty);
         AppointmentId = appointmentId;
         Currency = "UAH";
         Update(agreedPrice, plannedStartUtc, estimatedFinishUtc, updatedAtUtc);
+        CalendarDatesOnly = calendarDatesOnly;
     }
 
     public Guid AppointmentId { get; }
@@ -29,6 +31,8 @@ public sealed class RepairPlan
     public DateTimeOffset EstimatedFinishUtc { get; private set; }
 
     public DateTimeOffset UpdatedAtUtc { get; private set; }
+
+    public bool CalendarDatesOnly { get; private set; }
 
     internal void Update(decimal agreedPrice, DateTimeOffset plannedStartUtc, DateTimeOffset estimatedFinishUtc, DateTimeOffset updatedAtUtc)
     {
@@ -44,6 +48,8 @@ public sealed class RepairPlan
         EstimatedFinishUtc = estimatedFinishUtc;
         UpdatedAtUtc = updatedAtUtc;
     }
+
+    internal void SetCalendarDatesOnly(bool value) => CalendarDatesOnly = value;
 
     private static void EnsureUtc(DateTimeOffset value, string parameterName)
     {

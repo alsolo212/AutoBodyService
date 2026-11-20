@@ -17,7 +17,7 @@ const actions: Record<string, string> = {
   AccountPasswordReset: 'Скидання пароля', AccountAdminChanged: 'Зміна ролі адміністратора', AccountBlockedChanged: 'Зміна блокування',
   ExpenseCreated: 'Додавання витрати', ExpenseCorrected: 'Виправлення витрати',
   PriceItemCreated: 'Додавання послуги', PriceItemChanged: 'Зміна послуги', ManualContactRecorded: 'Ручний контакт',
-  WorkshopPhoneChanged: 'Зміна телефону майстерні', WorkshopAddressChanged: 'Зміна адреси майстерні',
+  WorkshopPhoneChanged: 'Зміна телефону майстерні', WorkshopAddressChanged: 'Зміна адреси майстерні', RepairCapacityChanged: 'Зміна кількості робочих місць',
 };
 const objects: Record<string, string> = { WorkshopContacts: 'Контакти майстерні', Appointment: 'Замовлення', EmployeeAssignment: 'Призначення', ApplicationUser: 'Обліковий запис', MonthlyExpense: 'Витрата', InspectionSchedule: 'Тижневий розклад', InspectionDate: 'Дата огляду', PriceListItem: 'Послуга' };
 const statuses: Record<string, string> = { AwaitingInspection: 'Очікує огляду', Scheduled: 'Заплановано', InProgress: 'У роботі', AwaitingPayment: 'Очікує оплати', Completed: 'Завершено', Cancelled: 'Скасовано' };

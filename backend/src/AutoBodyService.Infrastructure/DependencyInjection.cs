@@ -123,6 +123,7 @@ public static class DependencyInjection
         services.AddScoped<IAppointmentCreationStore, AppointmentCreationStore>();
         services.AddScoped<IAdminAuditWriter, AdminAuditWriter>();
         services.AddScoped<IAdminAppointmentCommands, AdminAppointmentCommands>();
+        services.AddScoped<IRepairCapacity, RepairCapacityStore>();
         services.AddScoped<IAdminAppointmentStore, AdminAppointmentStore>();
         services.AddScoped<IAdminOverviewQueries, AdminOverviewQueries>();
         services.AddScoped<IManualContactService, ManualContactService>();

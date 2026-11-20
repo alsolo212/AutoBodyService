@@ -46,10 +46,13 @@ test('admin editor publishes exact prices and leaves the customer agreed price i
       const intervals = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(dayOfWeek => ({ dayOfWeek, start: '09:00', end: '10:00' }));
       const preview = await (await checked(await fetch('/api/admin/inspection-schedule/preview', { method: 'POST', headers, body: JSON.stringify({ version: schedule.version, intervals }) }), 200)).json();
       await checked(await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers, body: JSON.stringify({ version: schedule.version, intervals, confirmationToken: preview.confirmationToken }) }), 204);
-      const slots = await (await checked(await fetch('/api/inspection-slots?date=2099-09-10'), 200)).json();
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      const tomorrow = new Date(`${today}T12:00:00Z`); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+      const slots = await (await checked(await fetch(`/api/inspection-slots?date=${tomorrow.toISOString().slice(0, 10)}`), 200)).json();
       const order = await (await checked(await fetch('/api/appointments', { method: 'POST', headers, body: JSON.stringify({ inspectionStartUtc: slots.slots[0].startUtc, vin: '1HGCM82633A123456', make: 'Тест', model: 'Авто', problemDescription: 'Огляд кузова' }) }), 201)).json();
       const details = await (await checked(await fetch(`/api/appointments/${order.id}`), 200)).json();
-      await checked(await fetch(`/api/admin/appointments/${order.id}/repair-plan`, { method: 'PUT', headers, body: JSON.stringify({ version: details.version, price: 1250.35, plannedStartUtc: '2099-09-11T07:00:00Z', estimatedFinishUtc: '2099-09-12T07:00:00Z', inspectionPerformed: true }) }), 204);
+      await checked(await fetch('/api/admin/repair-capacity', { method: 'PUT', headers, body: JSON.stringify({ workplaces: 2 }) }), 204);
+      await checked(await fetch(`/api/admin/appointments/${order.id}/schedule`, { method: 'POST', headers, body: JSON.stringify({ version: details.version, price: 1250.35, start: today, durationDays: 1, inspectionPerformed: true }) }), 204);
       return order.id as string;
     });
     await page.goto(`/account/appointments/${id}`);
