@@ -156,15 +156,25 @@ public sealed class Appointment
 
     public void StartRepair() => MoveFrom(AppointmentStatus.Scheduled, AppointmentStatus.InProgress);
 
+    public void PauseRepair() => MoveFrom(AppointmentStatus.InProgress, AppointmentStatus.Paused);
+
+    public void ResumeRepair() => MoveFrom(AppointmentStatus.Paused, AppointmentStatus.InProgress);
+
     public void ReviseRepairPlan(decimal agreedPrice, DateTimeOffset plannedStartUtc, DateTimeOffset estimatedFinishUtc, DateTimeOffset updatedAtUtc)
     {
-        if (Status is not (AppointmentStatus.Scheduled or AppointmentStatus.InProgress or AppointmentStatus.AwaitingPayment) || RepairPlan is null)
+        if (Status is not (AppointmentStatus.Scheduled or AppointmentStatus.InProgress or AppointmentStatus.Paused or AppointmentStatus.AwaitingPayment) || RepairPlan is null)
             throw new InvalidOperationException("Only a non-terminal appointment with an agreed plan can be revised.");
         if (updatedAtUtc < RepairPlan.UpdatedAtUtc)
             throw new ArgumentException("The update cannot precede the previous agreement.", nameof(updatedAtUtc));
         var datesChanged = plannedStartUtc != RepairPlan.PlannedStartUtc || estimatedFinishUtc != RepairPlan.EstimatedFinishUtc;
         RepairPlan.Update(agreedPrice, plannedStartUtc, estimatedFinishUtc, updatedAtUtc);
         if (datesChanged) RepairPlan.SetCalendarDatesOnly(false);
+    }
+
+    public void ReviseCalendarRepairPlan(decimal agreedPrice, DateTimeOffset startUtc, DateTimeOffset finishUtc, DateTimeOffset updatedAtUtc)
+    {
+        ReviseRepairPlan(agreedPrice, startUtc, finishUtc, updatedAtUtc);
+        RepairPlan!.SetCalendarDatesOnly(true);
     }
 
     public void FinishRepair() => MoveFrom(AppointmentStatus.InProgress, AppointmentStatus.AwaitingPayment);
@@ -182,7 +192,7 @@ public sealed class Appointment
     /// <summary>Cancels a repair after the caller has verified operator authorization.</summary>
     public void CancelByAdmin(bool confirmed, string reason)
     {
-        if (Status is not (AppointmentStatus.AwaitingInspection or AppointmentStatus.Scheduled or AppointmentStatus.InProgress))
+        if (Status is not (AppointmentStatus.AwaitingInspection or AppointmentStatus.Scheduled or AppointmentStatus.InProgress or AppointmentStatus.Paused))
             throw new InvalidOperationException("This appointment cannot be cancelled.");
         if (!confirmed)
             throw new InvalidOperationException("Cancellation must be confirmed.");

@@ -32,7 +32,9 @@
             <div class="column-items" cdkDropList [cdkDropListData]="column" [cdkDropListEnterPredicate]="canEnter" [cdkDropListSortingDisabled]="true" (cdkDropListDropped)="dropped($event)" [attr.data-status]="column.status">
               @if (!loading() && !error()) {
                 @for (card of column.items; track card.id) {
-                  <article class="card" cdkDrag [cdkDragData]="card" [cdkDragDisabled]="!next(card.status) || saving()" [attr.data-card-id]="card.id">
+                  <article class="card" [class.card--paused]="card.status === 'Paused'" cdkDrag [cdkDragData]="card" [cdkDragDisabled]="!next(card.status) || saving()" [attr.data-card-id]="card.id">
+                    @if (card.status === 'Paused') { <p class="paused-label">Призупинено</p> }
+                    @if (card.dateConflict) { <p class="conflict-label">Конфлікт дати</p> }
                     <div class="card-top"><span class="client">{{ card.customerName }}</span>@if (next(card.status)) { <span class="drag-handle" cdkDragHandle aria-hidden="true" title="Перетягніть на наступний етап">⠿</span> }</div>
                     <h3><a [routerLink]="['/admin/appointments', card.id]">{{ card.make }} {{ card.model }}</a></h3>
                     @if (card.vin) { <p class="vin">VIN {{ card.vin }}</p> }<p class="meta">Огляд: <time [attr.datetime]="card.inspectionStartUtc">{{ format(card.inspectionStartUtc) }}</time></p>

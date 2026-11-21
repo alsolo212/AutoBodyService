@@ -1,0 +1,14 @@
+<dialog #dialog class="confirm-dialog contact-dialog" [attr.aria-labelledby]="dialogId + '-title'" [attr.aria-describedby]="dialogId + '-description'" (close)="closed()" (cancel)="cancel($event)">
+  <h2 [id]="dialogId + '-title'">Зв’язатися з клієнтом</h2>
+  <p [id]="dialogId + '-description'">Дзвінок або повідомлення надсилаються вручну. Закриття вікна не зберігає відмітку.</p>
+  @if (loading()) { <p role="status">Завантажуємо актуальні дані…</p> }
+  @if (error()) { <p role="alert" class="field__error">{{ error() }}</p> }
+  @if (item(); as customer) {
+    <dl><div><dt>Клієнт</dt><dd>{{ customer.customerName }}</dd></div><div><dt>Автомобіль</dt><dd>{{ customer.make }} {{ customer.model }}</dd></div>
+      <div><dt>Привід</dt><dd>{{ labels[reason()] }}</dd></div><div><dt>Телефон</dt><dd><a [href]="'tel:' + customer.customerPhone">{{ customer.customerPhone }}</a> <button type="button" class="text-link" (click)="copy(customer.customerPhone)">Копіювати телефон</button></dd></div></dl>
+    <p>{{ message(customer) }}</p><button type="button" class="button button--secondary" (click)="copy(message(customer))">Копіювати текст</button>
+    @if (reason() === 'RepairDateConflict' && customer.repairPlan; as plan) { <p>Раніше погоджений початок: {{ kyivDate(plan.plannedStartUtc) }}. @if (customer.alternativeStart) { Запропонована дата: {{ customer.alternativeStart }}. } @else { Альтернативу поки не знайдено. }</p> }
+    @if (copied()) { <p role="status">{{ copied() }}</p> }
+  }
+  <div class="dialog-actions"><button type="button" class="button button--secondary" [disabled]="saving()" (click)="close()">Закрити</button><button type="button" class="button button--primary" [disabled]="!item() || loading() || saving() || !!error()" (click)="confirm()">Позначити, що зв’язалися</button></div>
+</dialog>

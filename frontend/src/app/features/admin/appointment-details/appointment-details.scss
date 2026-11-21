@@ -2,6 +2,8 @@
 .detail-heading > div { min-width: 0; overflow-wrap: anywhere; }
 .section-heading p { margin: .5rem 0 0; color: var(--muted); font-size: .88rem; line-height: 1.5; }
 .status { display: inline-block; margin: .3rem 0 0; padding: .45rem .7rem; background: #e4eddb; border-radius: 2rem; color: #405c3a; font-size: .8rem; font-weight: 700; }
+.status--paused { background: #ffe7a3; color: #624400; }
+.date-conflict { margin: 1rem 0; padding: .9rem; border: 1px solid #b42318; border-radius: .5rem; background: #fff0ee; color: #8b1d16; }
 .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 1.5rem; margin: 1.4rem 0 0; }
 .detail-grid .full { grid-column: 1 / -1; }
 dt { color: var(--muted); font-size: .8rem; font-weight: 600; }

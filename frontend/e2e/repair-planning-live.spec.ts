@@ -42,7 +42,7 @@ test('workplaces and one-step repair planning work on mobile and desktop', async
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/admin/inspection-calendar');
   await page.getByRole('button', { name: 'Налаштування графіка' }).click();
-  await expect(page.getByText(/Фактично у роботі:/)).toBeVisible();
+  await expect(page.getByText(/Фактично зайнято:/)).toBeVisible();
   await page.getByText('Показати планову зайнятість за днями').click();
   await expect(page.getByText(/: 1 \/ 2/).first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

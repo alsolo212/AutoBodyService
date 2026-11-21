@@ -15,9 +15,9 @@ import { ConfirmDialog } from '../../../shared/confirm-dialog/confirm-dialog';
 import { BoardSnapshot, BoardState, StatusFilter } from './board-state';
 
 interface Column { status: AppointmentStatus; page: number; total: number; items: AdminBoardCard[]; filtered: boolean; }
-const statuses: AppointmentStatus[] = ['AwaitingInspection', 'Scheduled', 'InProgress', 'AwaitingPayment', 'Completed', 'Cancelled'];
+const statuses: AppointmentStatus[] = ['AwaitingInspection', 'Scheduled', 'InProgress', 'Paused', 'AwaitingPayment', 'Completed', 'Cancelled'];
 const successor: Partial<Record<AppointmentStatus, AppointmentStatus>> = {
-  AwaitingInspection: 'Scheduled', Scheduled: 'InProgress', InProgress: 'AwaitingPayment', AwaitingPayment: 'Completed',
+  AwaitingInspection: 'Scheduled', Scheduled: 'InProgress', InProgress: 'AwaitingPayment', Paused: 'InProgress', AwaitingPayment: 'Completed',
 };
 const emptyColumns = (): Column[] => statuses.map(status => ({ status, page: 1, total: 0, items: [], filtered: false }));
 
@@ -104,7 +104,7 @@ export class AppointmentsBoard {
     this.reload();
   }
   next(status: AppointmentStatus): AppointmentStatus | null { return successor[status] ?? null; }
-  canCancel(status: AppointmentStatus) { return status === 'AwaitingInspection' || status === 'Scheduled' || status === 'InProgress'; }
+  canCancel(status: AppointmentStatus) { return status === 'AwaitingInspection' || status === 'Scheduled' || status === 'InProgress' || status === 'Paused'; }
   readonly canEnter = (drag: CdkDrag<AdminBoardCard>, drop: CdkDropList<Column>) =>
     !this.loading() && !this.saving() && this.next(drag.data.status) === drop.data.status;
   dropped(event: CdkDragDrop<Column, Column, AdminBoardCard>) {
@@ -138,8 +138,8 @@ export class AppointmentsBoard {
   advance(card: AdminBoardCard, target = this.next(card.status)) {
     if (!target || target !== this.next(card.status) || this.loading() || this.saving()) return;
     this.actionMessage.set(''); this.success.set('');
-    if (target === 'Scheduled' || target === 'Completed') {
-      const action = target === 'Completed' ? 'complete' : card.repairPlan ? 'schedule' : 'plan';
+    if (target === 'Scheduled' || target === 'Completed' || card.status === 'Paused') {
+      const action = card.status === 'Paused' ? 'resume' : target === 'Completed' ? 'complete' : card.repairPlan ? 'schedule' : 'plan';
       void this.router.navigate(['/admin/appointments', card.id], { queryParams: { action, version: card.version } }); return;
     }
     this.pendingTransition.set({ card, target });

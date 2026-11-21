@@ -7,6 +7,7 @@ namespace AutoBodyService.Application.Audit;
 public interface IAdminAuditWriter
 {
     void RecordRepairCapacityChange(string actorId);
+    void RecordRepairOfferDeclined(string actorId, Guid pauseId, Guid appointmentId);
     void RecordWorkshopContactChange(string actorId, bool phone);
     void RecordWeeklyScheduleChange(string actorId, IReadOnlyList<WeeklyInterval> before, IReadOnlyList<WeeklyInterval> after);
     void RecordDateExceptionChange(string actorId, DateOnly date, InspectionException? before, InspectionException? after);

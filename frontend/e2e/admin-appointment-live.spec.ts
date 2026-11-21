@@ -70,8 +70,11 @@ test('administrative order handles a real version conflict and both completion f
 
   await page.getByRole('button', { name: 'Закрити', exact: true }).click();
   await page.getByLabel('Привід зв’язку').selectOption('Agreement');
+  await page.getByRole('button', { name: 'Зв’язатися з клієнтом' }).click();
+  const manualContact = page.getByRole('dialog', { name: 'Зв’язатися з клієнтом' });
+  await expect(manualContact).toContainText('Тестова Перша');
   const contact = page.waitForResponse(r => r.url().endsWith('/manual-contact') && r.request().method() === 'POST');
-  await page.getByRole('button', { name: 'Зв’язалися' }).click(); expect((await contact).status()).toBe(204);
+  await manualContact.getByRole('button', { name: 'Позначити, що зв’язалися' }).click(); expect((await contact).status()).toBe(204);
   await expect(page.getByRole('heading', { name: 'Історія зв’язку' })).toBeVisible();
   await expect(page.getByText('E2E test').first()).toBeVisible();
   for (const label of ['У роботі', 'Очікує оплати']) {

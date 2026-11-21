@@ -3,6 +3,13 @@
 ### Check that the AutoBodyService API is available
 GET {{baseUrl}}/api/health
 
+### Record a manual contact after loading the current administrative appointment details.
+POST {{baseUrl}}/api/admin/appointments/{{appointmentId}}/manual-contact
+Content-Type: application/json
+RequestVerificationToken: {{xsrfToken}}
+
+{ "reason": "Agreement", "version": {{appointmentVersion}}, "customerPhone": "{{customerPhone}}", "customerName": "{{customerName}}" }
+
 ### Administrative repair occupancy for a selected month (Admin/SuperAdmin cookie)
 GET {{baseUrl}}/api/admin/repair-capacity?date={{repairStartDate}}
 

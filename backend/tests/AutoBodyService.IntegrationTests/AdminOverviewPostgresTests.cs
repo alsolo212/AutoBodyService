@@ -57,12 +57,14 @@ public sealed class AdminOverviewPostgresTests(PostgresIdentityFixture fixture) 
         if (status != AppointmentStatus.AwaitingInspection)
         {
             item.Schedule(new RepairPlan(item.Id, 777m, slot, slot.AddDays(1), created), true);
-            if (status is AppointmentStatus.InProgress or AppointmentStatus.AwaitingPayment or AppointmentStatus.Completed) item.StartRepair();
+            if (status is AppointmentStatus.InProgress or AppointmentStatus.Paused or AppointmentStatus.AwaitingPayment or AppointmentStatus.Completed) item.StartRepair();
+            if (status == AppointmentStatus.Paused) item.PauseRepair();
             if (status is AppointmentStatus.AwaitingPayment or AppointmentStatus.Completed) item.FinishRepair();
             if (status == AppointmentStatus.Completed) item.Complete(true, true);
             if (status == AppointmentStatus.Cancelled) item.CancelByAdmin(true, "reason");
         }
         db.Appointments.Add(item);
+        if (status == AppointmentStatus.Paused) db.RepairPauses.Add(new RepairPause(item.Id, "Test", 2, true, DateOnly.FromDateTime(created.UtcDateTime), actorId!, created));
         if (status == AppointmentStatus.Scheduled) db.AppointmentStatusEvents.Add(AppointmentStatusEvent.ForTransition(item.Id, AppointmentStatus.AwaitingInspection, status, actorId!, created.AddSeconds(1)));
         if (status == AppointmentStatus.AwaitingPayment) db.AppointmentStatusEvents.Add(AppointmentStatusEvent.ForTransition(item.Id, AppointmentStatus.InProgress, status, actorId!, created.AddSeconds(1)));
         if (status == AppointmentStatus.Cancelled) db.AppointmentStatusEvents.Add(AppointmentStatusEvent.ForTransition(item.Id, AppointmentStatus.Scheduled, status, actorId!, Now.AddMinutes(-1), "reason"));
@@ -72,6 +74,40 @@ public sealed class AdminOverviewPostgresTests(PostgresIdentityFixture fixture) 
     private static async Task<JsonElement> Read(HttpResponseMessage response)
     {
         Assert.Equal(HttpStatusCode.OK, response.StatusCode); return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
+    private static async Task<HttpResponseMessage> Contact(HttpClient client, Guid id, string reason)
+    {
+        var details = await Read(await client.GetAsync($"/api/appointments/{id}"));
+        return await client.PostAsJsonAsync($"/api/admin/appointments/{id}/manual-contact", new
+        { reason, version = details.GetProperty("version").GetUInt32(), customerPhone = details.GetProperty("customerPhone").GetString(), customerName = details.GetProperty("customerName").GetString() });
+    }
+
+    [PostgresFact]
+    public async Task ContactRejectsPhoneChangedAfterDialogOpened()
+    {
+        var owner = await User("User", "Customer"); var admin = await User("Admin", "Operator");
+        var id = await Add(owner.Id, AppointmentStatus.AwaitingInspection, Now.AddDays(1).AddSeconds(7654), Now.AddMinutes(-1));
+        using var actor = await Login(admin.Phone);
+        var snapshot = await Read(await actor.GetAsync($"/api/appointments/{id}"));
+        var oldVersion = snapshot.GetProperty("version").GetUInt32();
+        var oldPhone = snapshot.GetProperty("customerPhone").GetString();
+        var newPhone = "+380" + RandomNumberGenerator.GetInt32(100_000_000, 1_000_000_000);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var customer = await db.Users.SingleAsync(u => u.Id == owner.Id);
+        customer.PhoneNormalized = newPhone; customer.PhoneNumber = newPhone; customer.UserName = newPhone; customer.NormalizedUserName = newPhone;
+        await db.SaveChangesAsync();
+        var stale = await actor.PostAsJsonAsync($"/api/admin/appointments/{id}/manual-contact", new { reason = "NewAppointment", version = oldVersion, customerPhone = oldPhone, customerName = "Customer" });
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Empty(await db.ManualContactEvents.AsNoTracking().Where(e => e.AppointmentId == id).ToListAsync());
+        Assert.Equal(HttpStatusCode.NoContent, (await Contact(actor, id, "NewAppointment")).StatusCode);
+        Assert.Single(await db.ManualContactEvents.AsNoTracking().Where(e => e.AppointmentId == id).ToListAsync());
+        var fresh = await Read(await actor.GetAsync($"/api/appointments/{id}"));
+        customer.Name = "Updated customer"; await db.SaveChangesAsync();
+        var renamed = await actor.PostAsJsonAsync($"/api/admin/appointments/{id}/manual-contact", new
+        { reason = "NewAppointment", version = fresh.GetProperty("version").GetUInt32(), customerPhone = newPhone, customerName = "Customer" });
+        Assert.Equal(HttpStatusCode.Conflict, renamed.StatusCode);
+        Assert.Single(await db.ManualContactEvents.AsNoTracking().Where(e => e.AppointmentId == id).ToListAsync());
     }
 
     [PostgresFact]
@@ -87,7 +123,7 @@ public sealed class AdminOverviewPostgresTests(PostgresIdentityFixture fixture) 
         var query = "?search=" + tag + "&pageSize=2&sort=inspection";
         var first = await Read(await actor.GetAsync("/api/admin/appointments" + query + "&page=1"));
         var second = await Read(await actor.GetAsync("/api/admin/appointments" + query + "&page=2"));
-        Assert.Equal(6, first.GetProperty("total").GetInt32()); Assert.Equal(2, first.GetProperty("items").GetArrayLength());
+        Assert.Equal(all.Length, first.GetProperty("total").GetInt32()); Assert.Equal(2, first.GetProperty("items").GetArrayLength());
         Assert.Equal(ids[0], first.GetProperty("items")[0].GetProperty("id").GetGuid());
         Assert.Equal(ids[2], second.GetProperty("items")[0].GetProperty("id").GetGuid());
         var reversed = await Read(await supervisor.GetAsync("/api/admin/appointments" + query + "&direction=desc"));
@@ -97,7 +133,7 @@ public sealed class AdminOverviewPostgresTests(PostgresIdentityFixture fixture) 
         var byCustomer = await Read(await actor.GetAsync("/api/admin/appointments?search=" + tag + "&sort=customer"));
         Assert.Equal(ids.Select(id => id.ToString()).Order(StringComparer.Ordinal), byCustomer.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetGuid().ToString()));
         var byPhone = await Read(await actor.GetAsync("/api/admin/appointments?search=" + Uri.EscapeDataString(owner.Phone)));
-        Assert.Equal(6, byPhone.GetProperty("total").GetInt32());
+        Assert.Equal(all.Length, byPhone.GetProperty("total").GetInt32());
         var local = first.GetProperty("items")[0].GetProperty("inspectionStartLocal").GetDateTimeOffset();
         Assert.Equal(TimeSpan.FromHours(2), local.Offset);
         Assert.Equal(first.GetProperty("items")[0].GetProperty("inspectionStartUtc").GetDateTimeOffset(), local);
@@ -156,10 +192,10 @@ public sealed class AdminOverviewPostgresTests(PostgresIdentityFixture fixture) 
         var raw = dashboard.GetRawText();
         foreach (var forbidden in new[] { "agreedPrice", "revenue", "expenses", "password", "customerPhone", "Private issue" })
             Assert.DoesNotContain(forbidden, raw, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(HttpStatusCode.NoContent, (await actor.PostAsJsonAsync($"/api/admin/appointments/{id}/manual-contact", new { reason = "NewAppointment" })).StatusCode);
-        Assert.Equal(HttpStatusCode.NoContent, (await actor.PostAsJsonAsync($"/api/admin/appointments/{id}/manual-contact", new { reason = "ScheduleConflictOrReschedule" })).StatusCode);
-        Assert.Equal(HttpStatusCode.NoContent, (await actor.PostAsJsonAsync($"/api/admin/appointments/{agreed}/manual-contact", new { reason = "Agreement" })).StatusCode);
-        Assert.Equal(HttpStatusCode.NoContent, (await actor.PostAsJsonAsync($"/api/admin/appointments/{ready}/manual-contact", new { reason = "ReadyForPayment" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Contact(actor, id, "NewAppointment")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Contact(actor, id, "ScheduleConflictOrReschedule")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Contact(actor, agreed, "Agreement")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Contact(actor, ready, "ReadyForPayment")).StatusCode);
         dashboard = await Read(await actor.GetAsync("/api/admin/dashboard"));
         Assert.DoesNotContain(dashboard.GetProperty("contactTasks").EnumerateArray(), x => x.GetProperty("appointmentId").GetGuid() == id);
         Assert.DoesNotContain(dashboard.GetProperty("contactTasks").EnumerateArray(), x => x.GetProperty("appointmentId").GetGuid() == agreed && x.GetProperty("reason").GetString() == "Agreement");
@@ -200,15 +236,20 @@ public sealed class AdminOverviewPostgresTests(PostgresIdentityFixture fixture) 
         var id = await Add(owner.Id, AppointmentStatus.AwaitingInspection, Now.AddDays(5).AddSeconds(RandomNumberGenerator.GetInt32(1, 20000)), Now.AddMinutes(-1));
         using var actor = await Login(admin.Phone); using var customer = await Login(owner.Phone); using var supervisor = await Login(super.Phone); using var anonymous = Client();
         var url = $"/api/admin/appointments/{id}/manual-contact";
-        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync(url, new { reason = "Agreement" })).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await customer.PostAsJsonAsync(url, new { reason = "Agreement" })).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await actor.PostAsJsonAsync($"/api/admin/appointments/{Guid.NewGuid()}/manual-contact", new { reason = "Agreement" })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await actor.PostAsJsonAsync(url, new { reason = 99 })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await actor.PostAsJsonAsync(url, new { reason = "Agreement", actorId = owner.Id })).StatusCode);
+        var body = new { reason = "Agreement", version = 1, customerPhone = owner.Phone, customerName = "User" };
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync(url, body)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.PostAsJsonAsync(url, body)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await actor.PostAsJsonAsync($"/api/admin/appointments/{Guid.NewGuid()}/manual-contact", body)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await actor.PostAsJsonAsync(url, new { reason = 99, version = 1, customerPhone = owner.Phone, customerName = "User" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await actor.PostAsJsonAsync(url, new { reason = "Agreement", version = 1, customerPhone = owner.Phone, customerName = "User", actorId = owner.Id })).StatusCode);
         actor.DefaultRequestHeaders.Remove("RequestVerificationToken");
-        Assert.Equal(HttpStatusCode.BadRequest, (await actor.PostAsJsonAsync(url, new { reason = "Agreement" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await actor.PostAsJsonAsync(url, body)).StatusCode);
         await Token(actor);
-        Assert.Equal(HttpStatusCode.NoContent, (await supervisor.PostAsJsonAsync(url, new { reason = "ReadyForPayment" })).StatusCode);
+        var details = await Read(await actor.GetAsync($"/api/appointments/{id}"));
+        var currentVersion = details.GetProperty("version").GetUInt32();
+        Assert.Equal(HttpStatusCode.Conflict, (await actor.PostAsJsonAsync(url, new { reason = "Agreement", version = currentVersion, customerPhone = "+380000000000", customerName = "User" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await actor.PostAsJsonAsync(url, new { reason = "Agreement", version = unchecked(currentVersion + 1), customerPhone = owner.Phone, customerName = "User" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Contact(supervisor, id, "ReadyForPayment")).StatusCode);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         await db.Database.ExecuteSqlRawAsync("""
             CREATE FUNCTION reject_manual_contact_audit_test() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -217,7 +258,7 @@ public sealed class AdminOverviewPostgresTests(PostgresIdentityFixture fixture) 
             """);
         try
         {
-            Assert.Equal(HttpStatusCode.InternalServerError, (await actor.PostAsJsonAsync(url, new { reason = "Agreement" })).StatusCode);
+            Assert.Equal(HttpStatusCode.InternalServerError, (await Contact(actor, id, "Agreement")).StatusCode);
             var events = await db.ManualContactEvents.Where(e => e.AppointmentId == id).ToListAsync();
             var existing = Assert.Single(events); Assert.Equal(ManualContactReason.ReadyForPayment, existing.Reason); Assert.Equal(super.Id, existing.ActorId);
             Assert.Single(await db.AdminAuditEvents.Where(e => e.ObjectId == id.ToString() && e.Action == "ManualContactRecorded").ToListAsync());
@@ -249,7 +290,7 @@ public sealed class AdminOverviewPostgresTests(PostgresIdentityFixture fixture) 
         Assert.Contains(day.EnumerateArray(), item => item.GetProperty("id").GetGuid() == cancelled);
         foreach (var id in new[] { completed, cancelled })
         {
-            using var response = await actor.PostAsJsonAsync($"/api/admin/appointments/{id}/manual-contact", new { reason = "ScheduleConflictOrReschedule" });
+            using var response = await actor.PostAsJsonAsync($"/api/admin/appointments/{id}/manual-contact", new { reason = "ScheduleConflictOrReschedule", version = before[id].GetProperty("version").GetUInt32(), customerPhone = owner.Phone, customerName = "Owner" });
             Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
             Assert.Equal(409, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("status").GetInt32());
             var after = await Read(await actor.GetAsync($"/api/appointments/{id}"));
@@ -279,7 +320,7 @@ public sealed class AdminOverviewPostgresTests(PostgresIdentityFixture fixture) 
             await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             await using var gate = await db.Database.BeginTransactionAsync();
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Appointments\" WHERE \"Id\" = {id} FOR UPDATE");
-            Task<HttpResponseMessage> Contact() => other.PostAsJsonAsync($"/api/admin/appointments/{id}/manual-contact", new { reason = "Agreement" });
+            Task<HttpResponseMessage> Contact() => other.PostAsJsonAsync($"/api/admin/appointments/{id}/manual-contact", new { reason = "Agreement", version, customerPhone = owner.Phone, customerName = "Owner" });
             Task<HttpResponseMessage> Finish() => terminal == "Completed"
                 ? actor.PostAsJsonAsync($"/api/admin/appointments/{id}/transition", new { version, target = terminal, paymentReceived = true, vehicleHandedOver = true })
                 : actor.PostAsJsonAsync($"/api/admin/appointments/{id}/cancel", new { version, confirmed = true, reason = "test" });

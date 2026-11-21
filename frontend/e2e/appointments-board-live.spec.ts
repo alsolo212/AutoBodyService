@@ -170,7 +170,7 @@ test('board uses real guarded transitions, server pages and confirmation forms',
     const outcomes = [];
     for (const id of orderIds) {
       const before = await (await fetch(`/api/appointments/${id}`)).json();
-      const response = await fetch(`/api/admin/appointments/${id}/manual-contact`, { method: 'POST', headers: headers(), body: JSON.stringify({ reason: 'ScheduleConflictOrReschedule' }) });
+      const response = await fetch(`/api/admin/appointments/${id}/manual-contact`, { method: 'POST', headers: headers(), body: JSON.stringify({ reason: 'ScheduleConflictOrReschedule', version: before.version, customerPhone: before.customerPhone, customerName: before.customerName }) });
       const after = await (await fetch(`/api/appointments/${id}`)).json();
       outcomes.push({ status: response.status, before: before.status, after: after.status, beforeContacts: before.manualContacts.length, afterContacts: after.manualContacts.length, beforeVersion: before.version, afterVersion: after.version });
     }

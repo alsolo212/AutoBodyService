@@ -34,8 +34,10 @@ public sealed class AppointmentStatusEvent
         if ((from, to) is not ((AppointmentStatus.AwaitingInspection, AppointmentStatus.Scheduled)
             or (AppointmentStatus.Scheduled, AppointmentStatus.InProgress)
             or (AppointmentStatus.InProgress, AppointmentStatus.AwaitingPayment)
+            or (AppointmentStatus.InProgress, AppointmentStatus.Paused)
+            or (AppointmentStatus.Paused, AppointmentStatus.InProgress)
             or (AppointmentStatus.AwaitingPayment, AppointmentStatus.Completed)
-            or (AppointmentStatus.AwaitingInspection or AppointmentStatus.Scheduled or AppointmentStatus.InProgress, AppointmentStatus.Cancelled)))
+            or (AppointmentStatus.AwaitingInspection or AppointmentStatus.Scheduled or AppointmentStatus.InProgress or AppointmentStatus.Paused, AppointmentStatus.Cancelled)))
             throw new ArgumentException("Invalid status transition.", nameof(to));
         if (to == AppointmentStatus.Cancelled) ArgumentException.ThrowIfNullOrWhiteSpace(reason);
         else if (reason is not null) throw new ArgumentException("Only cancellation has a reason.", nameof(reason));

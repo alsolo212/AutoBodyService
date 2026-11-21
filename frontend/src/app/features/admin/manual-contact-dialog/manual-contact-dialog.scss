@@ -1,0 +1,7 @@
+.contact-dialog { max-width: min(38rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; }
+dl { display: grid; gap: .8rem; }
+dt { font-weight: 700; }
+dd { margin: .2rem 0 0; overflow-wrap: anywhere; }
+a { text-decoration: underline; }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.25rem; }
+@media (max-width: 600px) { .dialog-actions .button { width: 100%; } }

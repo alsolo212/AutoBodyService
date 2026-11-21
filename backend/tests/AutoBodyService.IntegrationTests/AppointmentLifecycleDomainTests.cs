@@ -18,8 +18,10 @@ public sealed class AppointmentLifecycleDomainTests
                 (AppointmentStatus.AwaitingInspection, AppointmentStatus.Scheduled) or
                 (AppointmentStatus.Scheduled, AppointmentStatus.InProgress) or
                 (AppointmentStatus.InProgress, AppointmentStatus.AwaitingPayment) or
+                (AppointmentStatus.InProgress, AppointmentStatus.Paused) or
+                (AppointmentStatus.Paused, AppointmentStatus.InProgress) or
                 (AppointmentStatus.AwaitingPayment, AppointmentStatus.Completed) or
-                (AppointmentStatus.AwaitingInspection or AppointmentStatus.Scheduled or AppointmentStatus.InProgress, AppointmentStatus.Cancelled);
+                (AppointmentStatus.AwaitingInspection or AppointmentStatus.Scheduled or AppointmentStatus.InProgress or AppointmentStatus.Paused, AppointmentStatus.Cancelled);
             yield return [from, to, allowed];
         }
     }
@@ -63,6 +65,7 @@ public sealed class AppointmentLifecycleDomainTests
     [InlineData(AppointmentStatus.AwaitingInspection, true)]
     [InlineData(AppointmentStatus.Scheduled, true)]
     [InlineData(AppointmentStatus.InProgress, true)]
+    [InlineData(AppointmentStatus.Paused, true)]
     [InlineData(AppointmentStatus.AwaitingPayment, true)]
     [InlineData(AppointmentStatus.Completed, false)]
     [InlineData(AppointmentStatus.Cancelled, false)]
@@ -210,9 +213,10 @@ public sealed class AppointmentLifecycleDomainTests
             appointment.CancelByAdmin(true, "Reason");
             return appointment;
         }
-        if (status >= AppointmentStatus.Scheduled) appointment.Schedule(Plan(appointment.Id), true);
-        if (status >= AppointmentStatus.InProgress) appointment.StartRepair();
-        if (status >= AppointmentStatus.AwaitingPayment) appointment.FinishRepair();
+        if (status != AppointmentStatus.AwaitingInspection) appointment.Schedule(Plan(appointment.Id), true);
+        if (status is AppointmentStatus.InProgress or AppointmentStatus.Paused or AppointmentStatus.AwaitingPayment or AppointmentStatus.Completed) appointment.StartRepair();
+        if (status == AppointmentStatus.Paused) appointment.PauseRepair();
+        if (status is AppointmentStatus.AwaitingPayment or AppointmentStatus.Completed) appointment.FinishRepair();
         if (status == AppointmentStatus.Completed) appointment.Complete(true, true);
         return appointment;
     }
@@ -224,7 +228,8 @@ public sealed class AppointmentLifecycleDomainTests
         switch (target)
         {
             case AppointmentStatus.Scheduled: appointment.Schedule(Plan(appointment.Id), true); break;
-            case AppointmentStatus.InProgress: appointment.StartRepair(); break;
+            case AppointmentStatus.InProgress: if (appointment.Status == AppointmentStatus.Paused) appointment.ResumeRepair(); else appointment.StartRepair(); break;
+            case AppointmentStatus.Paused: appointment.PauseRepair(); break;
             case AppointmentStatus.AwaitingPayment: appointment.FinishRepair(); break;
             case AppointmentStatus.Completed: appointment.Complete(true, true); break;
             case AppointmentStatus.Cancelled: appointment.CancelByAdmin(true, "Reason"); break;

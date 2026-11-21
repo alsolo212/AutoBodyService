@@ -26,6 +26,8 @@ public sealed record AdminPaymentConfirmation(string ActorName, DateTimeOffset P
 /// <summary>Assignment history with the actor and worker snapshot.</summary>
 public sealed record AdminAssignmentDetails(Guid Id, Guid EmployeeId, string Name, string Specialization, string AssignedById,
     string AssignedByName, DateTimeOffset AssignedAtUtc, DateTimeOffset? ReleasedAtUtc, string? ReleasedById, string? ReleasedByName);
+public sealed record AdminPauseDetails(Guid Id, string Reason, int DurationDays, bool WorkplaceReleased, DateOnly StartedOn, DateOnly ExpectedReturn);
+public sealed record AdminPauseHistory(string Reason, int DurationDays, bool WorkplaceReleased, DateOnly StartedOn, DateOnly ExpectedReturn, DateTimeOffset StartedAtUtc, DateTimeOffset? EndedAtUtc);
 /// <summary>Owner-visible details, including the workers who participated.</summary>
 public sealed record CustomerAppointmentDetails(Guid Id, string? Vin, string Make, string Model, string ProblemDescription,
     DateTimeOffset InspectionStartUtc, AppointmentStatus Status, IReadOnlyList<CustomerStatusHistory> History,
@@ -34,7 +36,8 @@ public sealed record CustomerAppointmentDetails(Guid Id, string? Vin, string Mak
 public sealed record AdminAppointmentDetails(Guid Id, string? Vin, string Make, string Model, string ProblemDescription,
     DateTimeOffset InspectionStartUtc, AppointmentStatus Status, string CustomerName, string CustomerPhone,
     IReadOnlyList<AdminStatusHistory> History, AgreedRepairDetails? RepairPlan, IReadOnlyList<AppointmentParticipant> Participants, uint Version,
-    AdminPaymentConfirmation? PaymentConfirmation, IReadOnlyList<AdminManualContact> ManualContacts, IReadOnlyList<AdminAssignmentDetails> Assignments);
+    AdminPaymentConfirmation? PaymentConfirmation, IReadOnlyList<AdminManualContact> ManualContacts, IReadOnlyList<AdminAssignmentDetails> Assignments,
+    AdminPauseDetails? ActivePause = null, bool DateConflict = false, DateOnly? AlternativeStart = null, IReadOnlyList<AdminPauseHistory>? PauseHistory = null);
 
 public interface IAppointmentQueries
 {

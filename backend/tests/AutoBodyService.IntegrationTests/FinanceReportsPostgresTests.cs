@@ -384,6 +384,7 @@ public sealed class FinanceReportsPostgresTests : IDisposable
     private sealed class FailingAudit(ApplicationDbContext db, TimeProvider clock) : IAdminAuditWriter
     {
         public void RecordRepairCapacityChange(string actorId) => throw new InvalidOperationException("Audit failure");
+        public void RecordRepairOfferDeclined(string actorId, Guid pauseId, Guid appointmentId) => throw new InvalidOperationException("Audit failure");
         public void RecordWorkshopContactChange(string actorId, bool phone) => throw new NotSupportedException();
         public void RecordExpenseChange(string actorId, Guid expenseId, decimal? beforeAmount, decimal afterAmount, bool beforeHasDescription, bool afterHasDescription, bool descriptionChanged) =>
             new AdminAuditWriter(db, clock).RecordExpenseChange("missing-test-actor", expenseId, beforeAmount, afterAmount, beforeHasDescription, afterHasDescription, descriptionChanged);

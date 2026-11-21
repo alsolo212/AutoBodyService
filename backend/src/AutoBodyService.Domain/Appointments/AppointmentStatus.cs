@@ -10,5 +10,6 @@ public enum AppointmentStatus
     InProgress,
     AwaitingPayment,
     Completed,
-    Cancelled
+    Cancelled,
+    Paused
 }

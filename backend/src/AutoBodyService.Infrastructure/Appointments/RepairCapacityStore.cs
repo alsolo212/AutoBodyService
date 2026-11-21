@@ -21,19 +21,35 @@ public sealed class RepairCapacityStore(ApplicationDbContext db, IAdminAuditWrit
     internal static Task LockAsync(ApplicationDbContext db, CancellationToken ct) =>
         db.Database.ExecuteSqlRawAsync("SELECT 1 FROM \"RepairCapacity\" WHERE \"Id\" = 1 FOR UPDATE", ct);
 
-    internal static async Task<List<RepairPeriod>> ReservationsAsync(ApplicationDbContext db, Guid? excluded, CancellationToken ct)
+    internal static async Task<List<RepairPeriod>> ReservationsAsync(ApplicationDbContext db, Guid? excluded, DateOnly today, CancellationToken ct)
     {
         var plans = await db.Appointments.AsNoTracking().Where(a => a.Id != excluded &&
-            (a.Status == AppointmentStatus.Scheduled || a.Status == AppointmentStatus.InProgress) && a.RepairPlan != null)
-            .Select(a => new { a.RepairPlan!.PlannedStartUtc, a.RepairPlan.EstimatedFinishUtc }).ToListAsync(ct);
-        return plans.Select(p => new RepairPeriod(LocalDate(p.PlannedStartUtc), LocalDate(p.EstimatedFinishUtc))).ToList();
+            (a.Status == AppointmentStatus.Scheduled || a.Status == AppointmentStatus.InProgress || a.Status == AppointmentStatus.Paused) && a.RepairPlan != null)
+            .Select(a => new { a.Id, a.Status, a.RepairPlan!.PlannedStartUtc, a.RepairPlan.EstimatedFinishUtc }).ToListAsync(ct);
+        var pauses = await db.RepairPauses.AsNoTracking().Where(p => p.EndedAtUtc == null).ToDictionaryAsync(p => p.AppointmentId, ct);
+        return plans.Select(p =>
+        {
+            var start = LocalDate(p.PlannedStartUtc); var finish = LocalDate(p.EstimatedFinishUtc);
+            if (p.Status == AppointmentStatus.InProgress && finish < today) finish = today;
+            if (p.Status == AppointmentStatus.Paused && pauses.TryGetValue(p.Id, out var pause))
+            {
+                if (pause.WorkplaceReleased) start = pause.ExpectedReturn;
+                if (finish < pause.ExpectedReturn) finish = pause.ExpectedReturn;
+                if (finish < today) finish = today;
+            }
+            return new RepairPeriod(start, finish);
+        }).ToList();
     }
+
+    internal static Task<int> ActualCountAsync(ApplicationDbContext db, CancellationToken ct) =>
+        db.Appointments.CountAsync(a => a.Status == AppointmentStatus.InProgress ||
+            (a.Status == AppointmentStatus.Paused && db.RepairPauses.Any(p => p.AppointmentId == a.Id && p.EndedAtUtc == null && !p.WorkplaceReleased)), ct);
 
     public async Task<RepairCapacityOverview> OverviewAsync(DateOnly firstDay, CancellationToken cancellationToken)
     {
         var capacity = await db.RepairCapacity.AsNoTracking().SingleAsync(cancellationToken);
-        var actual = await db.Appointments.CountAsync(a => a.Status == AppointmentStatus.InProgress, cancellationToken);
-        var plans = await ReservationsAsync(db, null, cancellationToken);
+        var actual = await ActualCountAsync(db, cancellationToken);
+        var plans = await ReservationsAsync(db, null, LocalDate(clock.GetUtcNow()), cancellationToken);
         var first = new DateOnly(firstDay.Year, firstDay.Month, 1);
         var days = Enumerable.Range(0, DateTime.DaysInMonth(first.Year, first.Month)).Select(i => first.AddDays(i))
             .Select(day => new RepairCapacityDay(day, plans.Count(p => p.Start <= day && day <= p.Finish))).ToArray();
@@ -62,8 +78,8 @@ public sealed class RepairCapacityStore(ApplicationDbContext db, IAdminAuditWrit
         var latest = today.AddYears(1);
         if (start < today || start > latest || durationDays <= 0 || (long)start.DayNumber + durationDays > DateOnly.MaxValue.DayNumber) return null;
         var capacity = await db.RepairCapacity.AsNoTracking().SingleAsync(cancellationToken);
-        var plans = await ReservationsAsync(db, null, cancellationToken);
-        var actual = await db.Appointments.CountAsync(a => a.Status == AppointmentStatus.InProgress, cancellationToken);
+        var plans = await ReservationsAsync(db, null, today, cancellationToken);
+        var actual = await ActualCountAsync(db, cancellationToken);
         var end = start.AddDays(durationDays);
         return new(today, latest, capacity.Workplaces is int n ? RepairAvailability.Nearest(today, latest, durationDays, plans, n) : null,
             end, capacity.Workplaces is int count && RepairAvailability.Fits(new(start, end), plans, count), capacity.Workplaces, actual);

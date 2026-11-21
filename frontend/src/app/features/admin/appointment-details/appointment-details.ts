@@ -13,18 +13,23 @@ import { kyivInput, kyivLocalToUtc, kyivOffsets, kyivWithOffset } from './kyiv-d
 import { ConfirmDialog } from '../../../shared/confirm-dialog/confirm-dialog';
 import { RepairCapacityApi, RepairPreview } from '../repair-capacity-api';
 import { kyivDate } from '../../../shared/time/kyiv-time';
+import { ManualContactDialog } from '../manual-contact-dialog/manual-contact-dialog';
+import { RepairOffer } from '../repair-offer/repair-offer';
+import { DelayPreview, RepairPlanningApi } from '../repair-planning-api';
 
 const exactPrice: ValidatorFn = control => decimalLiteral(String(control.value ?? '')) === null ? { invalidAmount: true } : null;
 
 const contactLabels: Record<ContactReason, string> = {
   NewAppointment: 'Новий запис', ScheduleConflictOrReschedule: 'Конфлікт або перенесення огляду',
   Agreement: 'Узгодження ремонту', ReadyForPayment: 'Готовність до оплати та видачі',
+  RepairDateConflict: 'Конфлікт дати ремонту',
 };
 
-@Component({ selector: 'app-admin-appointment-details', imports: [RouterLink, ReactiveFormsModule, AdminShell, ConfirmDialog], templateUrl: './appointment-details.html', styleUrl: './appointment-details.scss' })
+@Component({ selector: 'app-admin-appointment-details', imports: [RouterLink, ReactiveFormsModule, AdminShell, ConfirmDialog, ManualContactDialog, RepairOffer], templateUrl: './appointment-details.html', styleUrl: './appointment-details.scss' })
 export class AppointmentDetailsAdmin {
   private readonly api = inject(AdminAppointmentApi);
   private readonly capacityApi = inject(RepairCapacityApi);
+  private readonly planningApi = inject(RepairPlanningApi);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private readonly fb = inject(NonNullableFormBuilder);
@@ -33,6 +38,7 @@ export class AppointmentDetailsAdmin {
   private readonly requests = new Subject<{ id: string; preserveDraft: boolean }>();
   private readonly cancelDialog = viewChild<ElementRef<HTMLDialogElement>>('cancelDialog');
   private readonly transitionDialog = viewChild<ConfirmDialog>('transitionDialog');
+  private readonly contactDialog = viewChild.required(ManualContactDialog);
   private id = '';
   private boardActionHandled = false;
   readonly item = signal<AdminAppointment | null>(null);
@@ -57,15 +63,22 @@ export class AppointmentDetailsAdmin {
   private readonly previewRequests = new Subject<{ start: string; duration: number; recommend: boolean }>();
   readonly transitionForm = this.fb.group({ inspectionPerformed: [false], paymentReceived: [false], vehicleHandedOver: [false] });
   readonly cancelForm = this.fb.group({ reason: ['', [Validators.required, Validators.maxLength(500)]] });
+  readonly pauseForm = this.fb.group({ reason: ['', [Validators.required, Validators.maxLength(500)]], durationDays: [1, [Validators.required, Validators.min(1)]], workplaceReleased: [false] });
+  readonly customerAgreed = this.fb.control(false);
+  readonly editingPause = signal(false);
+  readonly delayFinish = this.fb.control('', Validators.required);
+  readonly delayPreview = signal<DelayPreview | null>(null);
+  readonly delayLoading = signal(false);
   readonly contactForm = this.fb.group({ reason: this.fb.control<ContactReason>('NewAppointment') });
   readonly planError = signal('');
   readonly cancelError = signal('');
   readonly terminal = computed(() => this.item()?.status === 'Completed' || this.item()?.status === 'Cancelled');
-  readonly canCancel = computed(() => ['AwaitingInspection', 'Scheduled', 'InProgress'].includes(this.item()?.status ?? ''));
+  readonly canCancel = computed(() => ['AwaitingInspection', 'Scheduled', 'InProgress', 'Paused'].includes(this.item()?.status ?? ''));
   readonly nextStatus = computed<AppointmentStatus | null>(() => {
     switch (this.item()?.status) {
       case 'AwaitingInspection': return 'Scheduled';
       case 'Scheduled': return 'InProgress';
+      case 'Paused': return 'InProgress';
       case 'InProgress': return 'AwaitingPayment';
       case 'AwaitingPayment': return 'Completed';
       default: return null;
@@ -93,6 +106,7 @@ export class AppointmentDetailsAdmin {
       ScheduleConflictOrReschedule: `щодо узгодження часу огляду автомобіля${car}`,
       Agreement: `щодо узгодження ремонту автомобіля${car}`,
       ReadyForPayment: `щодо оплати та видачі автомобіля${car}`,
+      RepairDateConflict: `щодо перенесення ремонту автомобіля${car}`,
     };
     const reason = this.contactForm.controls.reason.value;
     return `Вітаємо! Будь ласка, зв’яжіться з автосервісом ${message[reason]}.`;
@@ -136,7 +150,7 @@ export class AppointmentDetailsAdmin {
   load(preserveDraft = false) { if (!this.id) { this.loading.set(false); this.error.set('missing'); return; } this.requests.next({ id: this.id, preserveDraft }); }
   editPlan() {
     if (this.terminal() || this.saving()) return;
-    this.editingPlan.set(true); this.planError.set('');
+    this.editingPlan.set(true); this.planError.set(''); this.customerAgreed.setValue(false);
     if (this.item()?.status === 'AwaitingInspection') {
       const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
       this.scheduleForm.reset({ start: today, durationDays: 1, price: this.item()?.repairPlan?.agreedPriceExact ?? '', inspectionPerformed: false }, { emitEvent: false });
@@ -161,6 +175,28 @@ export class AppointmentDetailsAdmin {
     this.planError.set('');
     this.run(this.api.schedule(this.id, { ...data, version: item.version, price: amount }), 'Ремонт заплановано.');
   }
+  pauseRepair() {
+    const item = this.item(); if (!item || item.status !== 'InProgress' || this.saving()) return;
+    const value = this.pauseForm.getRawValue(); this.pauseForm.markAllAsTouched();
+    if (this.pauseForm.invalid || !value.reason.trim() || !Number.isSafeInteger(value.durationDays)) { this.actionError.set('Вкажіть причину та додатну кількість календарних днів.'); return; }
+    this.editingPause.set(false);
+    this.run(this.api.pause(this.id, { ...value, reason: value.reason.trim(), version: item.version }), 'Ремонт призупинено.');
+  }
+  previewDelay() {
+    const finish = this.delayFinish.value, id = this.id;
+    if (!finish || this.delayLoading() || this.saving()) return;
+    this.delayPreview.set(null); this.actionError.set(''); this.delayLoading.set(true);
+    this.planningApi.delayPreview(id, finish).pipe(finalize(() => this.delayLoading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: result => { if (this.id === id && this.delayFinish.value === finish) this.delayPreview.set(result); },
+      error: () => this.actionError.set('Не вдалося перевірити затримку. Нова дата має бути пізнішою.'),
+    });
+  }
+  saveDelay() {
+    const item = this.item(), preview = this.delayPreview();
+    if (!item || !preview || preview.finish !== this.delayFinish.value || this.saving()) return;
+    this.run(this.planningApi.delay(this.id, item.version, preview), 'Затримку збережено. Перевірте конфлікти та зв’яжіться з клієнтами.');
+    this.delayPreview.set(null);
+  }
   closePlan() { this.editingPlan.set(false); this.planError.set(''); if (this.item()) this.fillPlan(this.item()!); }
   savePlan() {
     const item = this.item(); if (!item || item.status === 'AwaitingInspection' || this.terminal() || this.saving()) return;
@@ -182,10 +218,13 @@ export class AppointmentDetailsAdmin {
       const normalized = value.length === 16 ? `${value}:00` : value;
       return existing.local === normalized && existing.offset === offset ? original : converted;
     };
+    const plannedStartUtc = unchanged(data.start, startOffset, old?.plannedStartUtc, start);
+    const estimatedFinishUtc = unchanged(data.finish, finishOffset, old?.estimatedFinishUtc, finish);
+    const datesChanged = !!old && (Date.parse(plannedStartUtc) !== Date.parse(old.plannedStartUtc) || Date.parse(estimatedFinishUtc) !== Date.parse(old.estimatedFinishUtc));
+    if (item.status === 'Scheduled' && datesChanged && !this.customerAgreed.value) { this.planError.set('Підтвердіть, що нові дати погоджено з клієнтом.'); return; }
     this.run(this.api.plan(this.id, { version: item.version, price: amount,
-      plannedStartUtc: unchanged(data.start, startOffset, old?.plannedStartUtc, start),
-      estimatedFinishUtc: unchanged(data.finish, finishOffset, old?.estimatedFinishUtc, finish),
-      inspectionPerformed: data.inspectionPerformed }), 'Узгоджені дані збережено.');
+      plannedStartUtc, estimatedFinishUtc,
+      inspectionPerformed: data.inspectionPerformed, ...(item.status === 'Scheduled' && datesChanged ? { customerAgreed: true } : {}) }), 'Узгоджені дані збережено.');
   }
   advance() {
     const item = this.item(), target = this.nextStatus(); if (!item || !target || this.saving()) return;
@@ -193,7 +232,7 @@ export class AppointmentDetailsAdmin {
     if (target === 'Scheduled') { this.editPlan(); return; }
     if (target === 'Completed' && (!facts.paymentReceived || !facts.vehicleHandedOver)) { this.actionError.set('Підтвердіть оплату і передачу автомобіля клієнту.'); return; }
     const command: TransitionChange = { version: item.version, target, ...facts };
-    this.run(this.api.transition(this.id, command), 'Статус замовлення оновлено.');
+    this.run(item.status === 'Paused' ? this.api.resume(this.id, item.version) : this.api.transition(this.id, command), 'Статус замовлення оновлено.');
   }
   requestAdvance() {
     const target = this.nextStatus(), item = this.item();
@@ -221,8 +260,9 @@ export class AppointmentDetailsAdmin {
   }
   markContact() {
     if (!this.item() || this.terminal() || this.saving()) return;
-    this.run(this.api.contact(this.id, this.contactForm.getRawValue().reason), 'Ручний контакт зафіксовано.');
+    this.contactDialog().open(this.id, this.contactForm.getRawValue().reason, this.item()!);
   }
+  contactRecorded() { this.notice.set('Ручний контакт зафіксовано.'); this.load(true); }
   async copy(value: string, location: 'phone' | 'text') {
     this.copyLocation.set(location);
     try { await navigator.clipboard.writeText(value); this.copyMessage.set('Скопійовано.'); }
@@ -262,6 +302,7 @@ export class AppointmentDetailsAdmin {
     const allowed = (action === 'plan' && item.status === 'AwaitingInspection' && !item.repairPlan)
       || (action === 'schedule' && item.status === 'AwaitingInspection' && !!item.repairPlan)
       || (action === 'complete' && item.status === 'AwaitingPayment')
+      || (action === 'resume' && item.status === 'Paused')
       || (action === 'cancel' && this.canCancel());
     if (!allowed) { this.conflict.set(true); return; }
     if (action === 'plan' || action === 'schedule') this.editPlan();

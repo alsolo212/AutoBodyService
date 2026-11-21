@@ -45,7 +45,8 @@ public sealed class EmployeeAssignmentDomainTests
             if (status != AppointmentStatus.AwaitingInspection)
             {
                 order.Schedule(new RepairPlan(order.Id, 10m, now, now.AddDays(1), now), true);
-                if (status is AppointmentStatus.InProgress or AppointmentStatus.AwaitingPayment or AppointmentStatus.Completed or AppointmentStatus.Cancelled) order.StartRepair();
+                if (status is AppointmentStatus.InProgress or AppointmentStatus.Paused or AppointmentStatus.AwaitingPayment or AppointmentStatus.Completed or AppointmentStatus.Cancelled) order.StartRepair();
+                if (status == AppointmentStatus.Paused) order.PauseRepair();
                 if (status is AppointmentStatus.AwaitingPayment or AppointmentStatus.Completed) order.FinishRepair();
                 if (status == AppointmentStatus.Completed) order.Complete(true, true);
                 if (status == AppointmentStatus.Cancelled) order.CancelByAdmin(true, "Test");

@@ -13,7 +13,7 @@
     @else if (item(); as item) {
       <p class="eyebrow"><span class="eyebrow__line"></span> ЗАМОВЛЕННЯ</p>
       <div class="detail-heading">
-        <div><h1>{{ item.make }} {{ item.model }}</h1><p class="status">{{ status(item.status) }}</p></div>
+        <div><h1>{{ item.make }} {{ item.model }}</h1><p class="status" [class.status--paused]="item.status === 'Paused'">{{ status(item.status) }}</p></div>
         @if (canCancel()) {
           <details class="actions"><summary aria-label="Дії із замовленням" title="Дії із замовленням">⋯</summary><button type="button" [disabled]="saving()" (click)="openCancel()">Скасувати</button></details>
         }
@@ -22,6 +22,16 @@
       @if (conflict()) { <div class="auth-alert" role="alert">Замовлення або зайнятість змінилися чи вільного робочого місця немає. Перевірте актуальні дані та повторіть дію. @if (editingPlan()) { Введені дані плану збережено у формі. } @if (canCancel() && cancelForm.dirty) { Причину скасування збережено у формі. }</div> }
       @if (actionError()) { <div class="auth-alert" role="alert">{{ actionError() }}</div> }
       @if (saving()) { <p role="status">Зберігаємо зміни…</p> }
+      @if (item.dateConflict) { <div class="date-conflict" role="alert"><strong>Конфлікт дати</strong><p>План потребує узгодження з клієнтом. @if (item.alternativeStart) { Найближчий варіант: {{ item.alternativeStart }}. } @else { Вільний варіант поки не знайдено. }</p></div> }
+      @if (item.activePause; as pause) { <section class="profile-panel" aria-labelledby="pause-details"><h2 id="pause-details">Пауза ремонту</h2><p>Причина: {{ pause.reason }}</p><p>Орієнтовне повернення: {{ pause.expectedReturn }}. {{ pause.workplaceReleased ? 'Робоче місце звільнено.' : 'Автомобіль займає робоче місце.' }}</p></section> }
+      @if (item.activePause; as pause) { @if (pause.workplaceReleased) { <app-repair-offer [pauseId]="pause.id" /> } }
+      @if ((item.status === 'InProgress' || item.status === 'Paused') && item.repairPlan) { <section class="profile-panel" aria-labelledby="delay-heading"><h2 id="delay-heading">Затримка ремонту</h2><p>Вкажіть нове орієнтовне завершення, щоб перевірити наступні замовлення.</p><div class="field"><label class="field__label" for="delay-finish">Нова дата завершення</label><input id="delay-finish" class="field__input" type="date" [formControl]="delayFinish" (change)="delayPreview.set(null)" /></div><button class="button button--secondary" type="button" [disabled]="delayLoading() || !delayFinish.value" (click)="previewDelay()">Перевірити вплив</button>
+        @if (delayPreview(); as preview) { <p>Орієнтовне завершення: {{ preview.finish }}.</p>@if (preview.conflicts.length) { <p>Ці замовлення потребують узгодження:</p><ul>@for (affected of preview.conflicts; track affected.id) { <li><a [routerLink]="['/admin/appointments', affected.id]">{{ affected.make }} {{ affected.model }}</a> · {{ affected.customerName }} · <a [href]="'tel:' + affected.customerPhone">{{ affected.customerPhone }}</a> · було {{ affected.start }} · @if (affected.alternativeStart) { можливий початок {{ affected.alternativeStart }} } @else { альтернативу не знайдено }</li> }</ul> } @else { <p>Конфліктів не знайдено.</p> }<button class="button button--primary" type="button" [disabled]="saving()" (click)="saveDelay()">Підтвердити затримку</button> }
+      </section> }
+      @if (item.status === 'InProgress') { <section class="profile-panel" aria-labelledby="pause-heading"><h2 id="pause-heading">Призупинити ремонт</h2>
+        @if (!editingPause()) { <button type="button" class="button button--secondary" (click)="editingPause.set(true)">Призупинити</button> }
+        @else { <form class="profile-form" [formGroup]="pauseForm" (ngSubmit)="pauseRepair()"><div class="field"><label class="field__label" for="pause-reason">Причина паузи</label><textarea id="pause-reason" class="field__input" maxlength="500" formControlName="reason"></textarea></div><div class="field"><label class="field__label" for="pause-days">Орієнтовна тривалість, календарних днів</label><input id="pause-days" class="field__input" type="number" min="1" step="1" formControlName="durationDays" /></div><label class="check"><input type="checkbox" formControlName="workplaceReleased" /> Автомобіль прибрано з робочого місця</label><div class="form-actions"><button class="button button--primary" type="submit" [disabled]="saving()">Підтвердити паузу</button><button class="button button--secondary" type="button" (click)="editingPause.set(false)">Закрити</button></div></form> }
+      </section> }
 
       <section class="profile-panel" aria-labelledby="customer-heading"><h2 id="customer-heading">Огляд і клієнт</h2>
         <dl class="detail-grid">
@@ -61,6 +71,7 @@
             <div class="time-fields"><div class="field"><label class="field__label" for="plan-start">Плановий початок за Києвом</label><input class="field__input" id="plan-start" type="datetime-local" step="60" formControlName="start" /></div>@if (offsets(planForm.controls.start.value).length === 2) { <div class="field"><label class="field__label" for="plan-start-offset">Повторний час початку</label><select class="field__input" id="plan-start-offset" formControlName="startOffset"><option value="">Оберіть варіант</option><option value="+03:00">Перший (UTC+03:00)</option><option value="+02:00">Другий (UTC+02:00)</option></select><span class="field__hint">Ця година повторюється під час переведення годинника.</span></div> }</div>
             <div class="time-fields"><div class="field"><label class="field__label" for="plan-finish">Орієнтовне завершення за Києвом</label><input class="field__input" id="plan-finish" type="datetime-local" step="60" formControlName="finish" /></div>@if (offsets(planForm.controls.finish.value).length === 2) { <div class="field"><label class="field__label" for="plan-finish-offset">Повторний час завершення</label><select class="field__input" id="plan-finish-offset" formControlName="finishOffset"><option value="">Оберіть варіант</option><option value="+03:00">Перший (UTC+03:00)</option><option value="+02:00">Другий (UTC+02:00)</option></select><span class="field__hint">Ця година повторюється під час переведення годинника.</span></div> }</div>
             <p class="field__hint">Дата й час вказуються за Києвом. Час, якого немає через переведення годинника, обрати не можна.</p>
+            @if (item.status === 'Scheduled') { <label class="check"><input type="checkbox" [formControl]="customerAgreed" /> Нові дати погоджено з клієнтом</label> }
             @if (item.status === 'AwaitingInspection') { <label class="check"><input type="checkbox" formControlName="inspectionPerformed" /> Підтверджую, що огляд проведено</label> }
             @if (planError()) { <p class="field__error" role="alert">{{ planError() }}</p> }
             <div class="form-actions"><button class="button button--primary" type="submit" [disabled]="saving()">Зберегти план</button><button class="button button--secondary" type="button" [disabled]="saving()" (click)="closePlan()">Закрити</button></div>
@@ -71,7 +82,7 @@
       @if (nextStatus(); as next) { <section class="profile-panel" aria-labelledby="next-heading"><h2 id="next-heading" tabindex="-1">Наступний етап</h2><p>Доступний перехід: {{ status(item.status) }} → {{ status(next) }}.</p>
         <form class="profile-form" [formGroup]="transitionForm" (ngSubmit)="requestAdvance()">
           @if (next === 'Completed') { <fieldset><legend>Підтвердіть обидва факти</legend><label class="check"><input type="checkbox" formControlName="paymentReceived" /> Оплату отримано</label><label class="check"><input type="checkbox" formControlName="vehicleHandedOver" /> Автомобіль передано клієнту</label></fieldset> }
-          <button class="button button--primary" type="submit" [disabled]="saving()">{{ next === 'Scheduled' ? 'Запланувати ремонт' : 'Перевести: ' + status(next) }}</button>
+          <button class="button button--primary" type="submit" [disabled]="saving()">{{ item.status === 'Paused' ? 'Відновити роботу' : next === 'Scheduled' ? 'Запланувати ремонт' : 'Перевести: ' + status(next) }}</button>
         </form>
       </section> }
       <app-confirm-dialog #transitionDialog dialogId="detail-transition" title="Змінити етап замовлення?" [description]="'Замовлення перейде зі статусу «' + status(item.status) + '» до «' + status(nextStatus() || item.status) + '».'" confirmLabel="Змінити етап" confirmStyle="primary" (confirmed)="confirmAdvance()" (closed)="pendingTransition.set(null)" />
@@ -79,7 +90,7 @@
       <section class="profile-panel" aria-labelledby="contact-heading"><h2 id="contact-heading">Ручний зв’язок</h2><p>Позначка фіксує дію співробітника. Вона не підтверджує доставку повідомлення чи прочитання сповіщення.</p>
         @if (!terminal()) { <form class="profile-form" [formGroup]="contactForm" (ngSubmit)="markContact()"><div class="field"><label class="field__label" for="contact-reason">Привід зв’язку</label><select class="field__input" id="contact-reason" formControlName="reason">@for (reason of reasons; track reason) { <option [value]="reason">{{ contactLabels[reason] }}</option> }</select><p class="field__hint">Підказка за статусом: {{ contactLabels[suggestedReason()] }}.</p></div>
           <div class="copy-text"><p>{{ contactText() }}</p><button class="button button--secondary" type="button" (click)="copy(contactText(), 'text')">Копіювати текст</button></div>
-          <button class="button button--primary" type="submit" [disabled]="saving()">Зв’язалися</button></form> }
+          <button class="button button--primary" type="submit" [disabled]="saving()">Зв’язатися з клієнтом</button></form> }
         @if (copyMessage() && copyLocation() === 'text') { <p role="status">{{ copyMessage() }}</p> }
         <h3>Історія зв’язку</h3>
         @if (item.manualContacts.length) { <ol class="history">@for (event of item.manualContacts; track $index) { <li><strong>{{ contactLabels[event.reason] }}</strong><span>{{ event.actorName }}</span><time [attr.datetime]="event.recordedAtUtc">{{ format(event.recordedAtUtc) }}</time></li> }</ol> } @else { <p>Відміток про зв’язок ще немає.</p> }
@@ -101,8 +112,10 @@
       <section class="profile-panel" aria-labelledby="history-heading"><h2 id="history-heading">Історія статусів</h2>
         @if (item.history.length) { <ol class="history">@for (event of item.history; track $index) { <li><strong>@if (event.fromStatus) { {{ status(event.fromStatus) }} → } {{ status(event.toStatus) }}</strong><span>{{ event.actorName }}</span><time [attr.datetime]="event.changedAtUtc">{{ format(event.changedAtUtc) }}</time>@if (event.reason) { <span class="problem">Причина: {{ event.reason }}</span> }</li> }</ol> } @else { <p>Історія статусів поки відсутня.</p> }
         @if (item.paymentConfirmation; as payment) { <div class="payment"><h3>Оплата та видача</h3><p>Підтвердив(ла): {{ payment.actorName }}</p><p>Оплата: {{ format(payment.paidAtUtc) }}<br />Передача автомобіля: {{ format(payment.handedOverAtUtc) }}</p></div> }
+        @if (item.pauseHistory?.length) { <h3>Історія пауз</h3><ol class="history">@for (pause of item.pauseHistory; track $index) { <li><strong>{{ pause.reason }}</strong><span>{{ pause.startedOn }} → {{ pause.expectedReturn }} · {{ pause.workplaceReleased ? 'Місце звільнено' : 'Місце зайнято' }}</span>@if (pause.endedAtUtc) { <span>Завершено: {{ format(pause.endedAtUtc) }}</span> }</li> }</ol> }
       </section>
       @if (canCancel()) { <dialog #cancelDialog class="confirm-dialog" aria-labelledby="cancel-title" aria-describedby="cancel-description"><h2 id="cancel-title">Скасувати замовлення?</h2><p id="cancel-description">Замовлення залишиться в історії зі статусом «Скасовано».</p><form [formGroup]="cancelForm" (ngSubmit)="confirmCancel()" novalidate><div class="field"><label class="field__label" for="cancel-reason">Причина скасування</label><textarea class="field__input" id="cancel-reason" formControlName="reason" maxlength="500" rows="3"></textarea></div>@if (cancelError()) { <p class="field__error" role="alert">{{ cancelError() }}</p> }<div class="dialog-actions"><button class="button button--secondary" type="button" (click)="closeCancel()">Назад</button><button class="button button--danger" type="submit" [disabled]="saving()">Підтвердити</button></div></form></dialog> }
     }
   </div>
+  <app-manual-contact-dialog (recorded)="contactRecorded()" />
 </app-admin-shell>

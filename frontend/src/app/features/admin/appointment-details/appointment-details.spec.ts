@@ -4,6 +4,8 @@ import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { BehaviorSubject } from 'rxjs';
 import { vi } from 'vitest';
+import { By } from '@angular/platform-browser';
+import { ManualContactDialog } from '../manual-contact-dialog/manual-contact-dialog';
 import { AppointmentDetailsAdmin } from './appointment-details';
 import { AdminAppointment } from './admin-appointment-api';
 import { kyivInput, kyivLocalToUtc, kyivWithOffset } from './kyiv-date';
@@ -120,6 +122,7 @@ describe('administrative appointment details', () => {
   it('derives ordinary Kyiv offsets automatically and asks about repeated times only', () => {
     const fixture = create({ ...base, status: 'Scheduled', repairPlan: plan }); const component = fixture.componentInstance; component.editPlan();
     component.planForm.patchValue({ price: '100', start: '2026-07-01T12:00', finish: '2026-07-01T13:00', inspectionPerformed: true }); fixture.detectChanges();
+    component.customerAgreed.setValue(true);
     expect(fixture.nativeElement.querySelector('#plan-start-offset')).toBeNull();
     component.savePlan(); token();
     const request = http.expectOne('/api/admin/appointments/order-1/repair-plan');
@@ -128,6 +131,22 @@ describe('administrative appointment details', () => {
     component.editPlan(); component.planForm.patchValue({ price: '100', start: '2026-10-25T03:30', finish: '2026-10-25T05:00', inspectionPerformed: true }); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#plan-start-offset')).not.toBeNull();
     component.savePlan(); expect(component.planError()).toContain('повторного часу'); http.expectNone('/api/auth/antiforgery');
+  });
+
+  it('requires the administrator to confirm agreement before changing scheduled dates', () => {
+    const fixture = create({ ...base, status: 'Scheduled', repairPlan: plan }); const component = fixture.componentInstance;
+    component.editPlan(); component.planForm.patchValue({ price: '100', start: '2026-07-01T12:00', finish: '2026-07-01T13:00' });
+    component.savePlan(); expect(component.planError()).toContain('погоджено з клієнтом');
+    http.expectNone('/api/auth/antiforgery');
+  });
+
+  it('preserves original fractional timestamps when changing only the price', () => {
+    const precise = { ...plan, plannedStartUtc: '2026-07-01T09:00:00.123Z', estimatedFinishUtc: '2026-07-02T09:00:00.456Z' };
+    const fixture = create({ ...base, status: 'Scheduled', repairPlan: precise }); const component = fixture.componentInstance;
+    component.editPlan(); component.planForm.controls.price.setValue('200'); component.savePlan(); token();
+    const request = http.expectOne('/api/admin/appointments/order-1/repair-plan');
+    expect(JSON.parse(request.request.body)).toMatchObject({ plannedStartUtc: precise.plannedStartUtc, estimatedFinishUtc: precise.estimatedFinishUtc });
+    request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, status: 'Scheduled', repairPlan: precise });
   });
 
   it('asks for confirmation before a direct status transition and ignores cancellation', () => {
@@ -201,8 +220,12 @@ describe('administrative appointment details', () => {
     await component.copy(base.customerPhone, 'phone'); expect(writeText).toHaveBeenCalledWith(base.customerPhone);
     component.contactForm.controls.reason.setValue('ScheduleConflictOrReschedule');
     await component.copy(component.contactText(), 'text'); expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('узгодження часу огляду'));
-    component.markContact(); token(); const request = http.expectOne('/api/admin/appointments/order-1/manual-contact');
-    expect(request.request.body).toEqual({ reason: 'ScheduleConflictOrReschedule' }); request.flush(null);
+    (fixture.nativeElement.querySelector('dialog[aria-labelledby="manual-contact-title"]') as HTMLDialogElement).showModal = vi.fn();
+    (fixture.nativeElement.querySelector('dialog[aria-labelledby="manual-contact-title"]') as HTMLDialogElement).close = vi.fn();
+    component.markContact(); http.expectOne('/api/appointments/order-1').flush(base);
+    (fixture.debugElement.query(By.directive(ManualContactDialog)).componentInstance as ManualContactDialog).confirm();
+    token(); const request = http.expectOne('/api/admin/appointments/order-1/manual-contact');
+    expect(request.request.body).toEqual({ reason: 'ScheduleConflictOrReschedule', version: 41, customerPhone: base.customerPhone, customerName: base.customerName }); request.flush(null);
     http.expectOne('/api/appointments/order-1').flush({ ...base, manualContacts: [{ reason: 'ScheduleConflictOrReschedule', actorName: 'Оператор', recordedAtUtc: '2026-01-01T10:00:00Z' }] });
     fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('Оператор');
   });

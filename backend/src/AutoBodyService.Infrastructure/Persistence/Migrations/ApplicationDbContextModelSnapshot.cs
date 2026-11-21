@@ -96,7 +96,7 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_Appointment_RequiredText", "\"Make\" ~ '[^[:space:]]' AND \"Model\" ~ '[^[:space:]]' AND \"ProblemDescription\" ~ '[^[:space:]]'");
 
-                            t.HasCheckConstraint("CK_Appointment_Status", "\"Status\" BETWEEN 0 AND 5");
+                            t.HasCheckConstraint("CK_Appointment_Status", "\"Status\" BETWEEN 0 AND 6");
 
                             t.HasCheckConstraint("CK_Appointment_Vin", "\"Vin\" IS NULL OR \"Vin\" ~ '^[A-HJ-NPR-Z0-9]{17}$'");
                         });
@@ -141,7 +141,7 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
 
                     b.ToTable("AppointmentStatusEvents", t =>
                         {
-                            t.HasCheckConstraint("CK_AppointmentStatusEvent_Status", "(\"FromStatus\" BETWEEN 0 AND 5 OR \"FromStatus\" IS NULL) AND \"ToStatus\" BETWEEN 0 AND 5 AND (\"FromStatus\" IS NOT NULL OR \"ToStatus\" = 0)");
+                            t.HasCheckConstraint("CK_AppointmentStatusEvent_Status", "(\"FromStatus\" BETWEEN 0 AND 6 OR \"FromStatus\" IS NULL) AND \"ToStatus\" BETWEEN 0 AND 6 AND (\"FromStatus\" IS NOT NULL OR \"ToStatus\" = 0)");
                         });
                 });
 
@@ -172,7 +172,7 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
 
                     b.ToTable("ManualContactEvents", t =>
                         {
-                            t.HasCheckConstraint("CK_ManualContactEvent_Reason", "\"Reason\" BETWEEN 0 AND 3");
+                            t.HasCheckConstraint("CK_ManualContactEvent_Reason", "\"Reason\" BETWEEN 0 AND 4");
                         });
                 });
 
@@ -198,6 +198,90 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.HasIndex("HandedOverAtUtc");
 
                     b.ToTable("PaymentHandoverConfirmations");
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.Appointments.RepairOfferDecline", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("AppointmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PauseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("AppointmentId");
+
+                    b.HasIndex("PauseId", "AppointmentId")
+                        .IsUnique();
+
+                    b.ToTable("RepairOfferDeclines");
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.Appointments.RepairPause", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("AppointmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DurationDays")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("EndedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EndedById")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("ExpectedReturn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("StartedOn")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("WorkplaceReleased")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("AppointmentId")
+                        .IsUnique()
+                        .HasFilter("\"EndedAtUtc\" IS NULL");
+
+                    b.ToTable("RepairPauses", t =>
+                        {
+                            t.HasCheckConstraint("CK_RepairPause_Duration", "\"DurationDays\" > 0 AND \"ExpectedReturn\" > \"StartedOn\"");
+                        });
                 });
 
             modelBuilder.Entity("AutoBodyService.Domain.Appointments.RepairPlan", b =>
@@ -1106,6 +1190,42 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.HasOne("AutoBodyService.Domain.Appointments.Appointment", null)
                         .WithOne()
                         .HasForeignKey("AutoBodyService.Domain.Appointments.PaymentHandoverConfirmation", "AppointmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.Appointments.RepairOfferDecline", b =>
+                {
+                    b.HasOne("AutoBodyService.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AutoBodyService.Domain.Appointments.Appointment", null)
+                        .WithMany()
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AutoBodyService.Domain.Appointments.RepairPause", null)
+                        .WithMany()
+                        .HasForeignKey("PauseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.Appointments.RepairPause", b =>
+                {
+                    b.HasOne("AutoBodyService.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AutoBodyService.Domain.Appointments.Appointment", null)
+                        .WithMany()
+                        .HasForeignKey("AppointmentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AutoBodyService.Infrastructure.Appointments;
 
-public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWriter audit, TimeProvider clock, INotificationRealtimePublisher? publisher = null) : IAdminAppointmentStore
+public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWriter audit, TimeProvider clock, INotificationRealtimePublisher? publisher = null, IRepairPlanning? planning = null) : IAdminAppointmentStore
 {
     public async Task<AdminAppointmentResult> ExecuteAsync(Guid id, uint version, string actorId,
         Func<Domain.Appointments.Appointment, DateTimeOffset, AdminAppointmentMutation> mutate, CancellationToken cancellationToken)
@@ -23,19 +23,40 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
         if (db.Entry(appointment).Property<uint>("Version").CurrentValue != version) return AdminAppointmentResult.Conflict;
         var oldStatus = appointment.Status;
         var oldStart = appointment.RepairPlan?.PlannedStartUtc;
+        var activePause = oldStatus == AppointmentStatus.Paused
+            ? await db.RepairPauses.SingleOrDefaultAsync(p => p.AppointmentId == id && p.EndedAtUtc == null, cancellationToken) : null;
+        if (oldStatus == AppointmentStatus.Paused && activePause is null) return AdminAppointmentResult.Conflict;
         var mutation = mutate(appointment, clock.GetUtcNow());
         if (mutation.Result != AdminAppointmentResult.Success) return mutation.Result;
+        if (mutation.DelayToken is { } delayToken)
+        {
+            var finish = RepairCapacityStore.LocalDate(appointment.RepairPlan!.EstimatedFinishUtc);
+            if (planning is null || !await planning.VerifyDelayAsync(id, finish, delayToken, cancellationToken)) return AdminAppointmentResult.Conflict;
+        }
+        if (mutation.OfferPauseId is { } offerPause)
+        {
+            var offer = planning is null ? null : await planning.PauseOfferAsync(offerPause, cancellationToken);
+            if (offer?.Candidate?.Id != id || offer.Candidate.Version != version) return AdminAppointmentResult.Conflict;
+        }
+        if (mutation.EarlyOffer)
+        {
+            var offer = planning is null ? null : (await planning.OverviewAsync(cancellationToken)).EarlyOpportunity;
+            if (offer?.Id != id || offer.Version != version) return AdminAppointmentResult.Conflict;
+        }
         if (mutation.DatesChanged && appointment.RepairPlan is { } revised && oldStart != revised.PlannedStartUtc &&
             RepairCapacityStore.LocalDate(revised.PlannedStartUtc) > RepairCapacityStore.LocalDate(clock.GetUtcNow()).AddYears(1))
             return AdminAppointmentResult.Invalid;
         if (appointment.Status == AppointmentStatus.InProgress && oldStatus != AppointmentStatus.InProgress)
         {
             var places = (await db.RepairCapacity.SingleAsync(cancellationToken)).Workplaces;
-            var actual = await db.Appointments.CountAsync(a => a.Status == AppointmentStatus.InProgress, cancellationToken);
+            var actual = await RepairCapacityStore.ActualCountAsync(db, cancellationToken);
+            if (oldStatus == AppointmentStatus.Paused && activePause is { WorkplaceReleased: false }) actual--;
             if (places is null || actual >= places.Value) return AdminAppointmentResult.Conflict;
         }
+        if (appointment.Status == AppointmentStatus.Paused && mutation.DatesChanged && mutation.DelayToken is null)
+            return AdminAppointmentResult.Conflict;
         if (appointment.Status is AppointmentStatus.Scheduled or AppointmentStatus.InProgress &&
-            (oldStatus == AppointmentStatus.AwaitingInspection || mutation.DatesChanged))
+            (oldStatus == AppointmentStatus.AwaitingInspection || mutation.DatesChanged) && mutation.DelayToken is null)
         {
             var plan = appointment.RepairPlan!;
             var start = RepairCapacityStore.LocalDate(plan.PlannedStartUtc);
@@ -43,13 +64,15 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
             var today = RepairCapacityStore.LocalDate(clock.GetUtcNow());
             if (oldStart != plan.PlannedStartUtc && (start < today || start > today.AddYears(1))) return AdminAppointmentResult.Invalid;
             var places = (await db.RepairCapacity.SingleAsync(cancellationToken)).Workplaces;
-            var reservations = await RepairCapacityStore.ReservationsAsync(db, id, cancellationToken);
+            var reservations = await RepairCapacityStore.ReservationsAsync(db, id, today, cancellationToken);
             if (places is null || !RepairAvailability.Fits(new(start, end), reservations, places.Value)) return AdminAppointmentResult.Conflict;
         }
         if (mutation.StatusEvent is null && mutation.Confirmation is null && !mutation.PriceChanged && !mutation.DatesChanged)
             return AdminAppointmentResult.Success;
         if (mutation.StatusEvent is { } statusEvent)
         {
+            if (mutation.Pause is { } pause) db.RepairPauses.Add(pause);
+            if (statusEvent.FromStatus == AppointmentStatus.Paused && activePause is not null) activePause.End(actorId, statusEvent.ChangedAtUtc);
             if (statusEvent.FromStatus == AppointmentStatus.InProgress && statusEvent.ToStatus != AppointmentStatus.InProgress)
             {
                 var activeAssignments = await db.EmployeeAssignments.Where(a => a.AppointmentId == id && a.ReleasedAtUtc == null).ToListAsync(cancellationToken);
@@ -67,6 +90,7 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
             {
                 AppointmentStatus.Scheduled => ("Ремонт заплановано", "Умови ремонту погоджено. Перегляньте план замовлення."),
                 AppointmentStatus.InProgress => ("Ремонт розпочато", "Ваш автомобіль передано в роботу."),
+                AppointmentStatus.Paused => ("Ремонт призупинено", "Ремонт тимчасово призупинено. Зв’яжіться з майстернею для уточнень."),
                 AppointmentStatus.AwaitingPayment => ("Автомобіль готовий", "Ремонт завершено. Зв’яжіться з нами щодо оплати та отримання автомобіля."),
                 AppointmentStatus.Completed => ("Замовлення завершено", "Оплату та видачу автомобіля підтверджено."),
                 AppointmentStatus.Cancelled => ("Запис скасовано", "Ваш запис скасовано оператором."),

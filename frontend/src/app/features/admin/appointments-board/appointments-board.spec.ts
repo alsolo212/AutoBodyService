@@ -10,7 +10,7 @@ import { AppointmentsBoard } from './appointments-board';
 import { BoardSnapshot, BoardState } from './board-state';
 import { AuthService } from '../../../core/auth';
 
-const statuses: AppointmentStatus[] = ['AwaitingInspection', 'Scheduled', 'InProgress', 'AwaitingPayment', 'Completed', 'Cancelled'];
+const statuses: AppointmentStatus[] = ['AwaitingInspection', 'Scheduled', 'InProgress', 'Paused', 'AwaitingPayment', 'Completed', 'Cancelled'];
 const card = (status: AppointmentStatus, id = status): AdminBoardCard => ({ id, customerName: 'Клієнт', make: 'Марка', model: 'Авто', vin: '1HGCM82633A123456', inspectionStartUtc: '2026-01-01T10:00:00Z', inspectionStartLocal: '2026-01-01T12:00:00+02:00', status, repairPlan: null, version: 42 });
 
 describe('administrative board', () => {
@@ -42,7 +42,7 @@ describe('administrative board', () => {
     component.dropped({ previousContainer: source, container: target, item: drag, isPointerOverContainer: true } as unknown as Parameters<AppointmentsBoard['dropped']>[0]);
   }
 
-  it('loads six separate server pages and displays plan and terminal read-only cards', () => {
+  it('loads separate status pages and displays plan and terminal read-only cards', () => {
     const ready = { ...card('Scheduled'), repairPlan: { agreedPriceExact: '200', currency: 'UAH', plannedStartUtc: '2026-01-01T10:00:00Z', estimatedFinishUtc: '2026-01-02T10:00:00Z' } };
     const fixture = create([ready, card('Completed'), card('Cancelled')]);
     expect(fixture.componentInstance.columns().map(c => c.status)).toEqual(statuses);
@@ -119,7 +119,7 @@ describe('administrative board', () => {
   it('applies server filters and independent column pagination', () => {
     const fixture = create([], 13); const component = fixture.componentInstance;
     component.changePage('Scheduled', 1); const pages = http.match(r => r.url === '/api/admin/appointments');
-    expect(pages).toHaveLength(6);
+    expect(pages).toHaveLength(statuses.length);
     for (const req of pages) { const status = req.request.params.get('status'); expect(req.request.params.get('page')).toBe(status === 'Scheduled' ? '2' : '1'); req.flush({ items: [], page: status === 'Scheduled' ? 2 : 1, pageSize: 5, total: 13 }); }
     component.filterForm.patchValue({ search: 'VIN', status: 'Completed', from: '2026-01-01', to: '2026-12-31', sort: 'created', direction: 'desc', pageSize: 10 });
     component.applyFilters(); const filtered = http.expectOne(r => r.url === '/api/admin/appointments');
@@ -127,7 +127,7 @@ describe('administrative board', () => {
     expect(filtered.request.params.get('from')).toBe('2026-01-01'); expect(filtered.request.params.get('to')).toBe('2026-12-31');
     expect(filtered.request.params.get('sort')).toBe('created'); expect(filtered.request.params.get('direction')).toBe('desc'); expect(filtered.request.params.get('pageSize')).toBe('10');
     filtered.flush({ items: [card('Completed')], page: 1, pageSize: 10, total: 1 }); fixture.detectChanges();
-    expect(component.columns().filter(c => c.filtered)).toHaveLength(5); expect(component.columns().find(c => c.status === 'Completed')!.items).toHaveLength(1);
+    expect(component.columns().filter(c => c.filtered)).toHaveLength(statuses.length - 1); expect(component.columns().find(c => c.status === 'Completed')!.items).toHaveLength(1);
     component.filterForm.patchValue({ from: '2026-12-31', to: '2026-01-01' }); component.applyFilters();
     expect(component.error()).toContain('діапазон дат'); http.expectNone(r => r.url === '/api/admin/appointments');
   });

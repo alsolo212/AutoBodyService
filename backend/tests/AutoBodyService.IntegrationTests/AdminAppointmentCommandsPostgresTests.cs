@@ -78,6 +78,77 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
         client.PostAsJsonAsync(Url(id) + "/schedule", new { version, price = 100m, start = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(PlanStart, TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv")).DateTime), durationDays = 1, inspectionPerformed = true });
 
     [PostgresFact]
+    public async Task RepairPlanningRequiresAdministratorAndAntiforgeryToken()
+    {
+        var owner = await User("User"); var admin = await User("Admin");
+        var id = await Add(owner.Id, AppointmentStatus.InProgress);
+        using var customer = await Login(owner.Phone); using var actor = await Login(admin.Phone); using var anonymous = Client();
+        var version = await Version(actor, id);
+        var pause = new { version, reason = "Parts", durationDays = 10, workplaceReleased = true };
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/admin/repair-planning")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.GetAsync("/api/admin/repair-planning")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.PostAsJsonAsync(Url(id) + "/pause", pause)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.PostAsJsonAsync($"/api/admin/repair-planning/{id}/accept-earlier", new { version, customerAgreed = true })).StatusCode);
+        actor.DefaultRequestHeaders.Remove("RequestVerificationToken");
+        Assert.Equal(HttpStatusCode.BadRequest, (await actor.PostAsJsonAsync(Url(id) + "/pause", pause)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await actor.PostAsJsonAsync($"/api/admin/repair-planning/{id}/delay", new { version, finish = "2027-01-01", confirmationToken = new string('A', 64), confirmed = true })).StatusCode);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Equal(AppointmentStatus.InProgress, (await db.Appointments.AsNoTracking().SingleAsync(a => a.Id == id)).Status);
+        Assert.False(await db.RepairPauses.AnyAsync(p => p.AppointmentId == id));
+    }
+
+    [PostgresFact]
+    public async Task PauseRetainsHistoryAndOnlyReleasedPlaceChangesActualLoad()
+    {
+        var owner = await User("User"); var admin = await User("Admin");
+        using var actor = await Login(admin.Phone); using var customer = await Login(owner.Phone);
+        foreach (var released in new[] { false, true })
+        {
+            var id = await Add(owner.Id, AppointmentStatus.InProgress);
+            await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var before = await db.Appointments.CountAsync(a => a.Status == AppointmentStatus.InProgress) +
+                await db.RepairPauses.CountAsync(p => p.EndedAtUtc == null && !p.WorkplaceReleased);
+            var version = await Version(actor, id);
+            var denied = await customer.PostAsJsonAsync(Url(id) + "/pause", new { version, reason = "Parts", durationDays = 10, workplaceReleased = released });
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await actor.PostAsJsonAsync(Url(id) + "/pause", new { version, reason = "Parts", durationDays = 10, workplaceReleased = released })).StatusCode);
+            var detail = await Details(actor, id); Assert.Equal("Paused", detail.GetProperty("status").GetString());
+            var pause = detail.GetProperty("activePause"); Assert.Equal("Parts", pause.GetProperty("reason").GetString());
+            Assert.Equal(released, pause.GetProperty("workplaceReleased").GetBoolean());
+            Assert.Equal(10, DateOnly.Parse(pause.GetProperty("expectedReturn").GetString()!).DayNumber - DateOnly.Parse(pause.GetProperty("startedOn").GetString()!).DayNumber);
+            var after = await db.Appointments.CountAsync(a => a.Status == AppointmentStatus.InProgress) +
+                await db.RepairPauses.CountAsync(p => p.EndedAtUtc == null && !p.WorkplaceReleased);
+            Assert.Equal(before - (released ? 1 : 0), after);
+            Assert.Equal(HttpStatusCode.NoContent, (await actor.PostAsJsonAsync(Url(id) + "/resume", new { version = detail.GetProperty("version").GetUInt32() })).StatusCode);
+            var history = await db.RepairPauses.AsNoTracking().SingleAsync(p => p.AppointmentId == id);
+            Assert.NotNull(history.EndedAtUtc); Assert.Equal(admin.Id, history.EndedById);
+        }
+    }
+
+    [PostgresFact]
+    public async Task ConcurrentResumeAndStartCannotOccupyTheLastPlaceTwice()
+    {
+        var owner = await User("User"); var admin = await User("Admin"); var secondAdmin = await User("SuperAdmin");
+        var pausedId = await Add(owner.Id, AppointmentStatus.InProgress); var candidateId = await Add(owner.Id, AppointmentStatus.Scheduled);
+        using var first = await Login(admin.Phone); using var second = await Login(secondAdmin.Phone);
+        Assert.Equal(HttpStatusCode.NoContent, (await first.PostAsJsonAsync(Url(pausedId) + "/pause", new { version = await Version(first, pausedId), reason = "Parts", durationDays = 10, workplaceReleased = true })).StatusCode);
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var capacity = await db.RepairCapacity.SingleAsync(); var previous = capacity.Workplaces;
+        capacity.Workplaces = await db.Appointments.CountAsync(a => a.Status == AppointmentStatus.InProgress) +
+            await db.RepairPauses.CountAsync(p => p.EndedAtUtc == null && !p.WorkplaceReleased) + 1;
+        await db.SaveChangesAsync();
+        try
+        {
+            var pauseVersion = await Version(first, pausedId); var candidateVersion = await Version(second, candidateId);
+            var results = await Task.WhenAll(first.PostAsJsonAsync(Url(pausedId) + "/resume", new { version = pauseVersion }), Transition(second, candidateId, candidateVersion, "InProgress"));
+            Assert.Equal(1, results.Count(r => r.StatusCode == HttpStatusCode.NoContent));
+            Assert.Equal(1, results.Count(r => r.StatusCode == HttpStatusCode.Conflict));
+        }
+        finally { capacity.Workplaces = previous; await db.SaveChangesAsync(); }
+    }
+
+    [PostgresFact]
     public async Task ParallelSchedulesForLastPlaceHaveOneWinnerAndPreserveLoser()
     {
         var owner = await User("User"); var admin = await User("Admin"); var other = await User("SuperAdmin");
@@ -132,7 +203,7 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
         var finish = detail.GetProperty("repairPlan").GetProperty("estimatedFinishUtc").GetDateTimeOffset();
         Assert.Equal(today.AddYears(1).AddDays(10), DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(finish, zone).DateTime));
         var initialStart = detail.GetProperty("repairPlan").GetProperty("plannedStartUtc").GetDateTimeOffset();
-        var correction = new { version = detail.GetProperty("version").GetUInt32(), price = 10m, plannedStartUtc = initialStart.AddDays(2), estimatedFinishUtc = finish.AddDays(2), inspectionPerformed = true };
+        var correction = new { version = detail.GetProperty("version").GetUInt32(), price = 10m, plannedStartUtc = initialStart.AddDays(2), estimatedFinishUtc = finish.AddDays(2), inspectionPerformed = true, customerAgreed = true };
         Assert.Equal(HttpStatusCode.BadRequest, (await actor.PutAsJsonAsync(Url(id) + "/repair-plan", correction)).StatusCode);
     }
 
@@ -402,7 +473,7 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
         using var outsiderClient = await Login(outsider.Phone);
         var version = await Version(operatorClient, id);
         Assert.Equal(HttpStatusCode.NoContent, (await operatorClient.PutAsJsonAsync(Url(id) + "/repair-plan", Plan(version))).StatusCode);
-        var revised = new { version, price = 100m, plannedStartUtc = PlanStart, estimatedFinishUtc = PlanStart.AddDays(2), inspectionPerformed = true };
+        var revised = new { version, price = 100m, plannedStartUtc = PlanStart, estimatedFinishUtc = PlanStart.AddDays(2), inspectionPerformed = true, customerAgreed = true };
         Assert.Equal(HttpStatusCode.NoContent, (await operatorClient.PutAsJsonAsync(Url(id) + "/repair-plan", revised)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await operatorClient.PutAsJsonAsync(Url(id) + "/repair-plan", revised)).StatusCode);
         await using var verify = factory.Services.CreateAsyncScope();
@@ -420,7 +491,7 @@ public sealed class AdminAppointmentCommandsPostgresTests(PostgresIdentityFixtur
         Assert.Contains(ownerHistory, n => n.GetProperty("type").GetString() == "AdminContactPlanChanged" && n.GetProperty("link").GetString() == $"/admin/appointments/{id}");
         Assert.DoesNotContain((await outsiderClient.GetFromJsonAsync<JsonElement[]>("/api/notifications"))!, n => n.GetProperty("id").GetGuid() == personal.Id);
         Assert.Equal(HttpStatusCode.NotFound, (await outsiderClient.PatchAsync($"/api/notifications/{personal.Id}/read", null)).StatusCode);
-        Assert.Equal(HttpStatusCode.NoContent, (await operatorClient.PostAsJsonAsync(Url(id) + "/manual-contact", new { reason = "Agreement" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await operatorClient.PostAsJsonAsync(Url(id) + "/manual-contact", new { reason = "Agreement", version = await Version(operatorClient, id), customerPhone = owner.Phone, customerName = "Test" })).StatusCode);
         var afterContact = await dbContext.Notifications.AsNoTracking().Where(n => n.AppointmentId == id).ToListAsync();
         Assert.Equal(notifications.Select(n => n.Id).Order(), afterContact.Select(n => n.Id).Order());
         Assert.All(afterContact, n => Assert.Null(n.ReadAtUtc));

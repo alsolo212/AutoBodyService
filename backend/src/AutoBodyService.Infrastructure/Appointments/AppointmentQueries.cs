@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AutoBodyService.Infrastructure.Appointments;
 
-public sealed class AppointmentQueries(ApplicationDbContext db) : IAppointmentQueries
+public sealed class AppointmentQueries(ApplicationDbContext db, IRepairPlanning planning) : IAppointmentQueries
 {
     public async Task<IReadOnlyList<AppointmentSummary>> GetMineAsync(string userId, AppointmentCategory? category, CancellationToken cancellationToken)
     {
@@ -72,8 +72,14 @@ public sealed class AppointmentQueries(ApplicationDbContext db) : IAppointmentQu
                                      a.AssignedById, actor.Name, a.AssignedAtUtc, a.ReleasedAtUtc, a.ReleasedById,
                                      db.Users.Where(u => u.Id == a.ReleasedById).Select(u => u.Name).SingleOrDefault())).ToListAsync(cancellationToken);
         var participants = await ParticipantsAsync(id, cancellationToken);
+        var pause = await db.RepairPauses.AsNoTracking().Where(p => p.AppointmentId == id && p.EndedAtUtc == null)
+            .Select(p => new AdminPauseDetails(p.Id, p.Reason, p.DurationDays, p.WorkplaceReleased, p.StartedOn, p.ExpectedReturn))
+            .SingleOrDefaultAsync(cancellationToken);
+        var conflict = (await planning.OverviewAsync(cancellationToken)).Conflicts.SingleOrDefault(c => c.Id == id);
+        var pauseHistory = await db.RepairPauses.AsNoTracking().Where(p => p.AppointmentId == id).OrderByDescending(p => p.StartedAtUtc)
+            .Select(p => new AdminPauseHistory(p.Reason, p.DurationDays, p.WorkplaceReleased, p.StartedOn, p.ExpectedReturn, p.StartedAtUtc, p.EndedAtUtc)).ToListAsync(cancellationToken);
         return new AdminAppointmentDetails(row.Id, row.Vin, row.Make, row.Model, row.ProblemDescription, row.InspectionStartUtc,
-            row.Status, row.CustomerName, row.CustomerPhone, history, row.Plan, participants, row.Version, payment, contacts, assignments);
+            row.Status, row.CustomerName, row.CustomerPhone, history, row.Plan, participants, row.Version, payment, contacts, assignments, pause, conflict is not null, conflict?.AlternativeStart, pauseHistory);
     }
     private async Task<IReadOnlyList<AppointmentParticipant>> ParticipantsAsync(Guid id, CancellationToken cancellationToken)
     {

@@ -17,12 +17,12 @@ const actions: Record<string, string> = {
   AccountPasswordReset: 'Скидання пароля', AccountAdminChanged: 'Зміна ролі адміністратора', AccountBlockedChanged: 'Зміна блокування',
   ExpenseCreated: 'Додавання витрати', ExpenseCorrected: 'Виправлення витрати',
   PriceItemCreated: 'Додавання послуги', PriceItemChanged: 'Зміна послуги', ManualContactRecorded: 'Ручний контакт',
-  WorkshopPhoneChanged: 'Зміна телефону майстерні', WorkshopAddressChanged: 'Зміна адреси майстерні', RepairCapacityChanged: 'Зміна кількості робочих місць',
+  WorkshopPhoneChanged: 'Зміна телефону майстерні', WorkshopAddressChanged: 'Зміна адреси майстерні', RepairCapacityChanged: 'Зміна кількості робочих місць', RepairOfferDeclined: 'Відмова від пропозиції почати раніше',
 };
 const objects: Record<string, string> = { WorkshopContacts: 'Контакти майстерні', Appointment: 'Замовлення', EmployeeAssignment: 'Призначення', ApplicationUser: 'Обліковий запис', MonthlyExpense: 'Витрата', InspectionSchedule: 'Тижневий розклад', InspectionDate: 'Дата огляду', PriceListItem: 'Послуга' };
-const statuses: Record<string, string> = { AwaitingInspection: 'Очікує огляду', Scheduled: 'Заплановано', InProgress: 'У роботі', AwaitingPayment: 'Очікує оплати', Completed: 'Завершено', Cancelled: 'Скасовано' };
+const statuses: Record<string, string> = { AwaitingInspection: 'Очікує огляду', Scheduled: 'Заплановано', InProgress: 'У роботі', Paused: 'Призупинено', AwaitingPayment: 'Очікує оплати', Completed: 'Завершено', Cancelled: 'Скасовано' };
 const modes: Record<string, string> = { Weekly: 'За тижневим розкладом', Closed: 'Закрито', Replace: 'Окремий розклад', Open: 'Відкрито' };
-const contacts: Record<string, string> = { NewAppointment: 'Новий запис', ScheduleConflictOrReschedule: 'Конфлікт розкладу або перенесення', Agreement: 'Узгодження', ReadyForPayment: 'Готовність до оплати і видачі' };
+const contacts: Record<string, string> = { NewAppointment: 'Новий запис', ScheduleConflictOrReschedule: 'Конфлікт розкладу або перенесення', Agreement: 'Узгодження', ReadyForPayment: 'Готовність до оплати і видачі', RepairDateConflict: 'Конфлікт дати ремонту' };
 const yesNo = (value: unknown) => value === true ? 'так' : value === false ? 'ні' : '—';
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 function dayStart(date: string, next = false): string | null {

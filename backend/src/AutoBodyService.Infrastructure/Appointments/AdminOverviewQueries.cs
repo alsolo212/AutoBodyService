@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AutoBodyService.Infrastructure.Appointments;
 
-public sealed class AdminOverviewQueries(ApplicationDbContext db, IInspectionCalendarService calendar, TimeProvider clock) : IAdminOverviewQueries
+public sealed class AdminOverviewQueries(ApplicationDbContext db, IInspectionCalendarService calendar, TimeProvider clock, IRepairPlanning planning) : IAdminOverviewQueries
 {
     private static readonly TimeZoneInfo Zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
     private static DateTimeOffset Local(DateTimeOffset utc) => TimeZoneInfo.ConvertTime(utc, Zone);
@@ -42,8 +42,9 @@ public sealed class AdminOverviewQueries(ApplicationDbContext db, IInspectionCal
             .Select(x => new { x.Appointment.Id, x.Customer, x.Appointment.Vin, x.Appointment.Make, x.Appointment.Model, x.Appointment.InspectionStartUtc,
                 x.Appointment.Status, Version = EF.Property<uint>(x.Appointment, "Version"), Plan = x.Appointment.RepairPlan == null ? null : new AgreedRepairDetails(x.Appointment.RepairPlan.AgreedPrice,
                     x.Appointment.RepairPlan.Currency, x.Appointment.RepairPlan.PlannedStartUtc, x.Appointment.RepairPlan.EstimatedFinishUtc, x.Appointment.RepairPlan.CalendarDatesOnly) }).ToListAsync(cancellationToken);
+        var conflicts = (await planning.OverviewAsync(cancellationToken)).Conflicts.Select(c => c.Id).ToHashSet();
         return new(rows.Select(x => new AdminAppointmentListItem(x.Id, x.Customer, x.Vin, x.Make, x.Model, x.InspectionStartUtc,
-            Local(x.InspectionStartUtc), x.Status, x.Plan, x.Version)).ToArray(), filter.Page, filter.PageSize, total);
+            Local(x.InspectionStartUtc), x.Status, x.Plan, x.Version, conflicts.Contains(x.Id))).ToArray(), filter.Page, filter.PageSize, total);
     }
 
     public async Task<AdminDashboard> GetDashboardAsync(CancellationToken cancellationToken)
@@ -115,6 +116,9 @@ public sealed class AdminOverviewQueries(ApplicationDbContext db, IInspectionCal
                     tasks.Add(new AdminContactTask(c.Id, c.CustomerName, c.Make, c.Model, ManualContactReason.ScheduleConflictOrReschedule, trigger));
             }
         }
+        var repairConflicts = (await planning.OverviewAsync(cancellationToken)).Conflicts;
+        foreach (var conflict in repairConflicts)
+            tasks.Add(new AdminContactTask(conflict.Id, conflict.CustomerName, conflict.Make, conflict.Model, ManualContactReason.RepairDateConflict, null));
         // Round-robin keeps each reason visible when another reason has a large backlog.
         var queues = tasks.GroupBy(t => t.Reason).OrderBy(g => g.Key).Select(g => new Queue<AdminContactTask>(g)).ToArray();
         var selected = new List<AdminContactTask>();

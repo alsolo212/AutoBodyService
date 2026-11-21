@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, switchMap } from 'rxjs';
 import { AppointmentDetails, AppointmentStatus, RepairPlan, StatusHistory } from '../../appointments/appointments-api';
 
-export type ContactReason = 'NewAppointment' | 'ScheduleConflictOrReschedule' | 'Agreement' | 'ReadyForPayment';
+export type ContactReason = 'NewAppointment' | 'ScheduleConflictOrReschedule' | 'Agreement' | 'ReadyForPayment' | 'RepairDateConflict';
 export interface AdminStatusHistory extends StatusHistory { actorName: string; reason: string | null; }
 export interface ManualContact { reason: ContactReason; actorName: string; recordedAtUtc: string; }
 export interface PaymentConfirmation { actorName: string; paidAtUtc: string; handedOverAtUtc: string; }
@@ -11,10 +11,13 @@ export interface AdminAppointment extends Omit<AppointmentDetails, 'history'> {
   customerName: string; customerPhone: string; version: number; history: AdminStatusHistory[];
   paymentConfirmation: PaymentConfirmation | null; manualContacts: ManualContact[];
   assignments: { id: string; employeeId: string; name: string; specialization: string; assignedById: string; assignedByName: string; assignedAtUtc: string; releasedAtUtc: string | null; releasedById: string | null; releasedByName: string | null }[] | null;
+  activePause?: { id: string; reason: string; durationDays: number; workplaceReleased: boolean; startedOn: string; expectedReturn: string } | null;
+  dateConflict?: boolean; alternativeStart?: string | null;
+  pauseHistory?: { reason: string; durationDays: number; workplaceReleased: boolean; startedOn: string; expectedReturn: string; startedAtUtc: string; endedAtUtc: string | null }[];
 }
-export interface RepairPlanChange { version: number; price: string; plannedStartUtc: string; estimatedFinishUtc: string; inspectionPerformed: boolean; }
+export interface RepairPlanChange { version: number; price: string; plannedStartUtc: string; estimatedFinishUtc: string; inspectionPerformed: boolean; customerAgreed?: boolean; }
 export interface TransitionChange { version: number; target: AppointmentStatus; inspectionPerformed?: boolean; paymentReceived?: boolean; vehicleHandedOver?: boolean; }
-export interface AdminBoardCard { id: string; customerName: string; vin: string | null; make: string; model: string; inspectionStartUtc: string; inspectionStartLocal: string; status: AppointmentStatus; repairPlan: RepairPlan | null; version: number; }
+export interface AdminBoardCard { id: string; customerName: string; vin: string | null; make: string; model: string; inspectionStartUtc: string; inspectionStartLocal: string; status: AppointmentStatus; repairPlan: RepairPlan | null; version: number; dateConflict?: boolean; }
 export interface AdminBoardPage { items: AdminBoardCard[]; page: number; pageSize: number; total: number; }
 export interface AdminBoardFilter { search: string; from: string; to: string; sort: string; direction: string; pageSize: number; }
 export interface DashboardItem { id: string; customerName: string; make: string; model: string; status: AppointmentStatus; inspectionStartUtc: string; inspectionStartLocal: string; occurredAtUtc: string; }
@@ -52,8 +55,10 @@ export class AdminAppointmentApi {
     return this.token().pipe(switchMap(() => this.http.post<void>(`${this.path(id)}/schedule`, json, { headers: new HttpHeaders({ 'Content-Type': 'application/json' }) })));
   }
   transition(id: string, body: TransitionChange) { return this.token().pipe(switchMap(() => this.http.post<void>(`${this.path(id)}/transition`, body))); }
+  pause(id: string, body: { version: number; reason: string; durationDays: number; workplaceReleased: boolean }) { return this.token().pipe(switchMap(() => this.http.post<void>(`${this.path(id)}/pause`, body))); }
+  resume(id: string, version: number) { return this.token().pipe(switchMap(() => this.http.post<void>(`${this.path(id)}/resume`, { version }))); }
   cancel(id: string, version: number, reason: string) { return this.token().pipe(switchMap(() => this.http.post<void>(`${this.path(id)}/cancel`, { version, confirmed: true, reason }))); }
-  contact(id: string, reason: ContactReason) { return this.token().pipe(switchMap(() => this.http.post<void>(`${this.path(id)}/manual-contact`, { reason }))); }
+  contact(id: string, reason: ContactReason, snapshot: { version: number; customerPhone: string; customerName: string }) { return this.token().pipe(switchMap(() => this.http.post<void>(`${this.path(id)}/manual-contact`, { reason, ...snapshot }))); }
   private path(id: string) { return `/api/admin/appointments/${encodeURIComponent(id)}`; }
   private token() { return this.http.get<void>('/api/auth/antiforgery'); }
 }

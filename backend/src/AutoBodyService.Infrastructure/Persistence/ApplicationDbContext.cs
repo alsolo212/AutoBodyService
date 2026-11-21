@@ -30,6 +30,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<EmployeeAssignment> EmployeeAssignments => Set<EmployeeAssignment>();
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<RepairPause> RepairPauses => Set<RepairPause>();
+    public DbSet<RepairOfferDecline> RepairOfferDeclines => Set<RepairOfferDecline>();
     public DbSet<AppointmentStatusEvent> AppointmentStatusEvents => Set<AppointmentStatusEvent>();
     public DbSet<PaymentHandoverConfirmation> PaymentHandoverConfirmations => Set<PaymentHandoverConfirmation>();
     public DbSet<ManualContactEvent> ManualContactEvents => Set<ManualContactEvent>();
@@ -107,6 +109,23 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.Entity<RepairPause>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Reason).HasMaxLength(500).IsRequired();
+            entity.HasOne<Appointment>().WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.AppointmentId).IsUnique().HasFilter("\"EndedAtUtc\" IS NULL");
+            entity.ToTable(t => t.HasCheckConstraint("CK_RepairPause_Duration", "\"DurationDays\" > 0 AND \"ExpectedReturn\" > \"StartedOn\""));
+        });
+        builder.Entity<RepairOfferDecline>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasOne<RepairPause>().WithMany().HasForeignKey(x => x.PauseId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Appointment>().WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.PauseId, x.AppointmentId }).IsUnique();
+        });
         builder.Entity<RepairCapacityRecord>(entity =>
         {
             entity.HasKey(x => x.Id);
@@ -207,7 +226,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Navigation(x => x.StatusEvents).UsePropertyAccessMode(PropertyAccessMode.Field);
             entity.ToTable(table =>
             {
-                table.HasCheckConstraint("CK_Appointment_Status", "\"Status\" BETWEEN 0 AND 5");
+                table.HasCheckConstraint("CK_Appointment_Status", "\"Status\" BETWEEN 0 AND 6");
                 table.HasCheckConstraint("CK_Appointment_Vin", "\"Vin\" IS NULL OR \"Vin\" ~ '^[A-HJ-NPR-Z0-9]{17}$'");
                 table.HasCheckConstraint("CK_Appointment_Customer", "(\"UserId\" IS NOT NULL AND \"CustomerName\" IS NULL AND \"CustomerPhone\" IS NULL) OR (\"UserId\" IS NULL AND \"CustomerName\" IS NOT NULL AND \"CustomerPhone\" IS NOT NULL AND \"CustomerName\" ~ '[^[:space:]]' AND \"CustomerPhone\" ~ '^\\+380[0-9]{9}$')");
                 table.HasCheckConstraint("CK_Appointment_RequiredText", "\"Make\" ~ '[^[:space:]]' AND \"Model\" ~ '[^[:space:]]' AND \"ProblemDescription\" ~ '[^[:space:]]'");
@@ -270,7 +289,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne<Appointment>().WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.AppointmentId, x.Reason, x.RecordedAtUtc });
-            entity.ToTable(t => t.HasCheckConstraint("CK_ManualContactEvent_Reason", "\"Reason\" BETWEEN 0 AND 3"));
+            entity.ToTable(t => t.HasCheckConstraint("CK_ManualContactEvent_Reason", "\"Reason\" BETWEEN 0 AND 4"));
         });
         builder.Entity<Notification>(entity =>
         {
@@ -305,7 +324,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasIndex(x => new { x.AppointmentId, x.ChangedAtUtc });
             entity.HasIndex(x => new { x.ToStatus, x.ChangedAtUtc });
             entity.HasIndex(x => x.AppointmentId).IsUnique().HasFilter("\"FromStatus\" IS NULL");
-            entity.ToTable(table => table.HasCheckConstraint("CK_AppointmentStatusEvent_Status", "(\"FromStatus\" BETWEEN 0 AND 5 OR \"FromStatus\" IS NULL) AND \"ToStatus\" BETWEEN 0 AND 5 AND (\"FromStatus\" IS NOT NULL OR \"ToStatus\" = 0)"));
+            entity.ToTable(table => table.HasCheckConstraint("CK_AppointmentStatusEvent_Status", "(\"FromStatus\" BETWEEN 0 AND 6 OR \"FromStatus\" IS NULL) AND \"ToStatus\" BETWEEN 0 AND 6 AND (\"FromStatus\" IS NOT NULL OR \"ToStatus\" = 0)"));
         });
         builder.Entity<InspectionDateOverride>(entity =>
         {

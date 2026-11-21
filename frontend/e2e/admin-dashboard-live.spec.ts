@@ -67,8 +67,15 @@ test('common dashboard reflects real orders and manual contacts for Admin and Su
   expect(contactState()).toEqual({ unread: 1, contacts: 0 });
   const task = dashboard.locator('.contact-entry').filter({ hasText: 'Dashboard0' }).filter({ hasText: 'Нова заявка' });
   await expect(task).toBeVisible();
-  const refresh = page.waitForResponse(response => response.url().endsWith('/api/admin/dashboard') && response.request().method() === 'GET');
   await task.getByRole('button').focus(); await page.keyboard.press('Enter');
+  const contactDialog = page.getByRole('dialog', { name: 'Зв’язатися з клієнтом' });
+  await expect(contactDialog).toContainText('Dashboard0');
+  await expect(contactDialog.getByRole('link', { name: process.env['E2E_ADMIN_PHONE']! })).toBeVisible();
+  await contactDialog.getByRole('button', { name: 'Закрити' }).click();
+  expect(contactState()).toEqual({ unread: 1, contacts: 0 });
+  await task.getByRole('button').click();
+  const refresh = page.waitForResponse(response => response.url().endsWith('/api/admin/dashboard') && response.request().method() === 'GET');
+  await contactDialog.getByRole('button', { name: 'Позначити, що зв’язалися' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Ручний контакт відмічено' })).toBeVisible();
   expect((await refresh).status()).toBe(200);
   await expect(page.getByRole('heading', { name: 'Ручний зв’язок' })).toBeVisible();

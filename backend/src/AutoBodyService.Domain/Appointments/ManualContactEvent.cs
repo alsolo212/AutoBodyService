@@ -1,7 +1,7 @@
 namespace AutoBodyService.Domain.Appointments;
 
 /// <summary>The purpose for which staff recorded a manual contact.</summary>
-public enum ManualContactReason { NewAppointment, ScheduleConflictOrReschedule, Agreement, ReadyForPayment }
+public enum ManualContactReason { NewAppointment, ScheduleConflictOrReschedule, Agreement, ReadyForPayment, RepairDateConflict }
 
 /// <summary>A staff member's record of manual contact, not proof of message delivery.</summary>
 public sealed class ManualContactEvent

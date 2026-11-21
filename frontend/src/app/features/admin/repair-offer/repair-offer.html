@@ -1,0 +1,14 @@
+<section class="profile-panel" aria-labelledby="offer-heading"><h2 id="offer-heading">{{ pauseId ? 'Ремонт на час паузи' : 'Можна запропонувати почати раніше' }}</h2>
+  @if (loading()) { <p role="status">Перевіряємо завантаження…</p> }
+  @if (error()) { <p role="alert">{{ error() }} <button type="button" (click)="load()">Оновити</button></p> }
+  @if (notice()) { <p role="status">{{ notice() }}</p> }
+  @if (candidate(); as offer) {
+    <p><a [routerLink]="['/admin/appointments', offer.id]">{{ offer.make }} {{ offer.model }}</a> · {{ offer.customerName }}</p>
+    <p>Телефон: <a [href]="'tel:' + offer.customerPhone">{{ offer.customerPhone }}</a>. Раніше погоджено: {{ offer.start }} – {{ offer.finish }}. Можливий початок: {{ offer.alternativeStart }}.</p>
+    @if (expectedReturn()) { <p>Місце потрібне для повернення {{ expectedReturn() }}; враховано запас два дні.</p> }
+    <p>Спочатку зв’яжіться з клієнтом. Без підтвердження дати не змінюються.</p>
+    <div class="form-actions"><button class="button button--secondary" type="button" (click)="call()">Зв’язатися з клієнтом</button><button class="button button--secondary" type="button" [disabled]="saving()" (click)="decline()">{{ pauseId ? 'Клієнт відмовився' : 'Залишити як є' }}</button><button class="button button--primary" type="button" [disabled]="saving()" (click)="requestAccept()">Клієнт погодився</button></div>
+  } @else if (!loading() && !error()) { <p>{{ pauseId ? 'Підходящих ремонтів на час паузи немає.' : 'Зараз немає відповідних пропозицій.' }}</p> }
+  <app-confirm-dialog dialogId="accept-earlier" title="Підтвердити погоджену дату?" description="Дата зміниться лише після повторної перевірки вільного місця." confirmLabel="Підтвердити" confirmStyle="primary" (confirmed)="accept()" />
+  <app-manual-contact-dialog dialogId="offer-contact" />
+</section>

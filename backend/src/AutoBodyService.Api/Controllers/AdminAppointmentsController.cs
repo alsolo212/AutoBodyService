@@ -54,7 +54,7 @@ public sealed class AdminAppointmentsController(IAdminAppointmentCommands comman
     {
         var actor = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (actor is null) return Unauthorized();
-        var result = await contacts.RecordAsync(id, request.Reason!.Value, actor, cancellationToken);
+        var result = await contacts.RecordAsync(id, request.Reason!.Value, actor, request.Version!.Value, request.CustomerPhone, request.CustomerName, cancellationToken);
         return result switch
         {
             ManualContactResult.Recorded => NoContent(),
@@ -71,7 +71,7 @@ public sealed class AdminAppointmentsController(IAdminAppointmentCommands comman
         if (actor is null) return Unauthorized();
         if (!ExactDecimal.TryNonnegative(request.Price, out var price))
             return BadRequest(new ProblemDetails { Status = 400, Title = "Вкажіть точну невід’ємну вартість ремонту." });
-        var command = new RepairPlanCommand(price, request.PlannedStartUtc!.Value, request.EstimatedFinishUtc!.Value, request.InspectionPerformed == true);
+        var command = new RepairPlanCommand(price, request.PlannedStartUtc!.Value, request.EstimatedFinishUtc!.Value, request.InspectionPerformed == true, request.CustomerAgreed == true);
         return Result(await commands.PutPlanAsync(id, request.Version!.Value, actor, command, cancellationToken));
     }
 
@@ -93,6 +93,25 @@ public sealed class AdminAppointmentsController(IAdminAppointmentCommands comman
         if (actor is null) return Unauthorized();
         var command = new TransitionCommand(request.Target!.Value, request.InspectionPerformed == true, request.PaymentReceived == true, request.VehicleHandedOver == true);
         return Result(await commands.TransitionAsync(id, request.Version!.Value, actor, command, cancellationToken));
+    }
+
+    /// <summary>Pause a repair and record its expected return and workspace state.</summary>
+    [HttpPost("{id:guid}/pause")]
+    public async Task<IActionResult> Pause(Guid id, PauseRepairRequest request, CancellationToken cancellationToken)
+    {
+        var actor = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (actor is null) return Unauthorized();
+        return Result(await commands.PauseAsync(id, request.Version!.Value, actor,
+            new(request.Reason, request.DurationDays!.Value, request.WorkplaceReleased!.Value), cancellationToken));
+    }
+
+    /// <summary>Resume a paused repair after checking actual occupancy.</summary>
+    [HttpPost("{id:guid}/resume")]
+    public async Task<IActionResult> Resume(Guid id, ResumeRepairRequest request, CancellationToken cancellationToken)
+    {
+        var actor = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (actor is null) return Unauthorized();
+        return Result(await commands.ResumeAsync(id, request.Version!.Value, actor, cancellationToken));
     }
 
     [HttpPost("{id:guid}/cancel")]
@@ -130,6 +149,9 @@ public sealed record CreateGuestAppointmentRequest
 public sealed record ManualContactRequest
 {
     [Required] public required ManualContactReason? Reason { get; init; }
+    [Required] public required uint? Version { get; init; }
+    [Required, StringLength(32)] public required string CustomerPhone { get; init; }
+    [Required, StringLength(200)] public required string CustomerName { get; init; }
 }
 
 /// <summary>Agreed repair terms and the version returned by the existing administrative details endpoint.</summary>
@@ -141,6 +163,7 @@ public sealed record RepairPlanRequest
     [Required] public required DateTimeOffset? PlannedStartUtc { get; init; }
     [Required] public required DateTimeOffset? EstimatedFinishUtc { get; init; }
     public bool? InspectionPerformed { get; init; }
+    public bool? CustomerAgreed { get; init; }
 }
 
 /// <summary>Calendar dates and agreed price for the initial repair plan.</summary>
@@ -164,6 +187,20 @@ public sealed record TransitionRequest
     public bool? PaymentReceived { get; init; }
     public bool? VehicleHandedOver { get; init; }
 }
+
+/// <summary>Required facts about a temporary interruption.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record PauseRepairRequest
+{
+    [Required] public required uint? Version { get; init; }
+    [Required, StringLength(500)] public required string Reason { get; init; }
+    [Required] public required int? DurationDays { get; init; }
+    [Required] public required bool? WorkplaceReleased { get; init; }
+}
+
+/// <summary>Version of the paused order to resume.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ResumeRepairRequest([Required] uint? Version);
 
 /// <summary>An explicit administrative cancellation and its reason.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
