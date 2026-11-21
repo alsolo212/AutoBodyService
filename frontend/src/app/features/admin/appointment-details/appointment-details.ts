@@ -16,6 +16,7 @@ import { kyivDate } from '../../../shared/time/kyiv-time';
 import { ManualContactDialog } from '../manual-contact-dialog/manual-contact-dialog';
 import { RepairOffer } from '../repair-offer/repair-offer';
 import { DelayPreview, RepairPlanningApi } from '../repair-planning-api';
+import { InspectionCalendarApi } from '../inspection-calendar/inspection-calendar-api';
 
 const exactPrice: ValidatorFn = control => decimalLiteral(String(control.value ?? '')) === null ? { invalidAmount: true } : null;
 
@@ -30,6 +31,7 @@ export class AppointmentDetailsAdmin {
   private readonly api = inject(AdminAppointmentApi);
   private readonly capacityApi = inject(RepairCapacityApi);
   private readonly planningApi = inject(RepairPlanningApi);
+  private readonly calendarApi = inject(InspectionCalendarApi);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private readonly fb = inject(NonNullableFormBuilder);
@@ -38,6 +40,7 @@ export class AppointmentDetailsAdmin {
   private readonly requests = new Subject<{ id: string; preserveDraft: boolean }>();
   private readonly cancelDialog = viewChild<ElementRef<HTMLDialogElement>>('cancelDialog');
   private readonly transitionDialog = viewChild<ConfirmDialog>('transitionDialog');
+  private readonly correctionDialog = viewChild<ConfirmDialog>('correctionDialog');
   private readonly contactDialog = viewChild.required(ManualContactDialog);
   private id = '';
   private boardActionHandled = false;
@@ -65,6 +68,22 @@ export class AppointmentDetailsAdmin {
   readonly cancelForm = this.fb.group({ reason: ['', [Validators.required, Validators.maxLength(500)]] });
   readonly pauseForm = this.fb.group({ reason: ['', [Validators.required, Validators.maxLength(500)]], durationDays: [1, [Validators.required, Validators.min(1)]], workplaceReleased: [false] });
   readonly customerAgreed = this.fb.control(false);
+  readonly priceReason = this.fb.control('', Validators.maxLength(1000));
+  readonly correcting = signal(false);
+  readonly correctionForm = this.fb.group({ target: this.fb.control<AppointmentStatus | ''>(''), reason: ['', [Validators.required, Validators.maxLength(500)]], date: [''], slot: [''] });
+  readonly correctionSlots = signal<{ startUtc: string; endUtc: string }[]>([]);
+  readonly slotMessage = signal('');
+  readonly correctionTargets = computed<AppointmentStatus[]>(() => {
+    const item = this.item(); if (!item) return [];
+    if (item.status === 'Cancelled') {
+      const previous = [...item.history].reverse().find(e => e.toStatus === 'Cancelled')?.fromStatus;
+      return previous && previous !== 'Cancelled' && previous !== 'Completed' ? [previous] : [];
+    }
+    const seen = new Set(item.history.flatMap(e => [e.fromStatus, e.toStatus]));
+    return (['AwaitingInspection', 'Scheduled', 'InProgress', 'Paused', 'AwaitingPayment'] as AppointmentStatus[]).filter(s => s !== item.status && seen.has(s));
+  });
+  readonly today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  readonly latestInspection = (() => { const [y, m] = this.today.split('-').map(Number); return new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10); })();
   readonly editingPause = signal(false);
   readonly delayFinish = this.fb.control('', Validators.required);
   readonly delayPreview = signal<DelayPreview | null>(null);
@@ -143,6 +162,7 @@ export class AppointmentDetailsAdmin {
       this.id = params.get('id') ?? '';
       this.boardActionHandled = false;
       this.notice.set(''); this.conflict.set(false); this.actionError.set(''); this.editingPlan.set(false); this.saving.set(false);
+      this.correcting.set(false); this.correctionSlots.set([]); this.slotMessage.set(''); this.correctionForm.reset();
       this.load();
     });
   }
@@ -150,7 +170,7 @@ export class AppointmentDetailsAdmin {
   load(preserveDraft = false) { if (!this.id) { this.loading.set(false); this.error.set('missing'); return; } this.requests.next({ id: this.id, preserveDraft }); }
   editPlan() {
     if (this.terminal() || this.saving()) return;
-    this.editingPlan.set(true); this.planError.set(''); this.customerAgreed.setValue(false);
+    this.editingPlan.set(true); this.planError.set(''); this.customerAgreed.setValue(false); this.priceReason.reset();
     if (this.item()?.status === 'AwaitingInspection') {
       const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
       this.scheduleForm.reset({ start: today, durationDays: 1, price: this.item()?.repairPlan?.agreedPriceExact ?? '', inspectionPerformed: false }, { emitEvent: false });
@@ -173,7 +193,9 @@ export class AppointmentDetailsAdmin {
       this.planError.set('Перевірте доступність, тривалість, вартість і підтвердження огляду.'); return;
     }
     this.planError.set('');
-    this.run(this.api.schedule(this.id, { ...data, version: item.version, price: amount }), 'Ремонт заплановано.');
+    const changed = !!item.repairPlan && decimalLiteral(item.repairPlan.agreedPriceExact) !== amount;
+    if (changed && (!this.priceReason.value.trim() || this.priceReason.invalid)) { this.planError.set('Вкажіть причину зміни вартості.'); return; }
+    this.run(this.api.schedule(this.id, { ...data, version: item.version, price: amount, ...(changed ? { priceReason: this.priceReason.value.trim() } : {}) }), 'Ремонт заплановано.');
   }
   pauseRepair() {
     const item = this.item(); if (!item || item.status !== 'InProgress' || this.saving()) return;
@@ -221,10 +243,47 @@ export class AppointmentDetailsAdmin {
     const plannedStartUtc = unchanged(data.start, startOffset, old?.plannedStartUtc, start);
     const estimatedFinishUtc = unchanged(data.finish, finishOffset, old?.estimatedFinishUtc, finish);
     const datesChanged = !!old && (Date.parse(plannedStartUtc) !== Date.parse(old.plannedStartUtc) || Date.parse(estimatedFinishUtc) !== Date.parse(old.estimatedFinishUtc));
+    const priceChanged = !!old && decimalLiteral(old.agreedPriceExact) !== amount;
+    if (priceChanged && (!this.priceReason.value.trim() || this.priceReason.invalid)) { this.planError.set('Вкажіть причину зміни вартості.'); return; }
     if (item.status === 'Scheduled' && datesChanged && !this.customerAgreed.value) { this.planError.set('Підтвердіть, що нові дати погоджено з клієнтом.'); return; }
     this.run(this.api.plan(this.id, { version: item.version, price: amount,
       plannedStartUtc, estimatedFinishUtc,
-      inspectionPerformed: data.inspectionPerformed, ...(item.status === 'Scheduled' && datesChanged ? { customerAgreed: true } : {}) }), 'Узгоджені дані збережено.');
+      inspectionPerformed: data.inspectionPerformed, ...(priceChanged ? { priceReason: this.priceReason.value.trim() } : {}), ...(item.status === 'Scheduled' && datesChanged ? { customerAgreed: true } : {}) }), 'Узгоджені дані збережено.');
+  }
+  openCorrection() {
+    const item = this.item(); if (!item || !this.correctionTargets().length) return;
+    this.correcting.set(true); this.correctionForm.reset({ target: this.correctionTargets()[0], reason: '', date: '', slot: '' });
+    this.correctionSlots.set([]); this.slotMessage.set('');
+    if (item.status === 'Cancelled') {
+      const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(item.inspectionStartUtc));
+      if (date >= this.today && date <= this.latestInspection) { this.correctionForm.controls.date.setValue(date); this.loadCorrectionSlots(); }
+      else this.slotMessage.set('Попередній час уже недоступний. Оберіть іншу дату та вільний час.');
+    }
+  }
+  loadCorrectionSlots() {
+    const date = this.correctionForm.controls.date.value; this.correctionForm.controls.slot.setValue(''); this.correctionSlots.set([]);
+    if (!date || date < this.today || date > this.latestInspection) { this.slotMessage.set('Оберіть дату в поточному або наступному місяці.'); return; }
+    this.slotMessage.set('Перевіряємо вільний час…');
+    this.calendarApi.available(date).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: result => {
+      if (this.correctionForm.controls.date.value !== date) return;
+      this.correctionSlots.set(result.slots);
+      const old = this.item()?.inspectionStartUtc;
+      if (old && result.slots.some(s => Date.parse(s.startUtc) === Date.parse(old))) { this.correctionForm.controls.slot.setValue(result.slots.find(s => Date.parse(s.startUtc) === Date.parse(old))!.startUtc); this.slotMessage.set('Попередній час вільний.'); }
+      else this.slotMessage.set(result.slots.length ? 'Попередній час недоступний. Оберіть інший вільний час.' : 'На цю дату вільного часу немає. Оберіть іншу дату.');
+    }, error: () => this.slotMessage.set('Не вдалося перевірити вільний час.') });
+  }
+  requestCorrection() {
+    const item = this.item(), value = this.correctionForm.getRawValue();
+    if (!item || !value.target || !this.correctionTargets().includes(value.target) || !value.reason.trim() || this.correctionForm.invalid || (item.status === 'Cancelled' && !value.slot)) {
+      this.actionError.set('Оберіть допустимий статус, вкажіть причину та, для відновлення, вільний час огляду.'); return;
+    }
+    this.actionError.set(''); this.correctionDialog()?.open();
+  }
+  confirmCorrection() {
+    const item = this.item(), value = this.correctionForm.getRawValue();
+    if (!item || !value.target || this.saving()) return;
+    this.run(this.api.correctStatus(this.id, { version: item.version, target: value.target, reason: value.reason.trim(), confirmed: true,
+      ...(item.status === 'Cancelled' ? { inspectionStartUtc: value.slot } : {}) }), 'Статус виправлено.', () => this.correcting.set(false));
   }
   advance() {
     const item = this.item(), target = this.nextStatus(); if (!item || !target || this.saving()) return;
@@ -268,15 +327,16 @@ export class AppointmentDetailsAdmin {
     try { await navigator.clipboard.writeText(value); this.copyMessage.set('Скопійовано.'); }
     catch { this.copyMessage.set('Не вдалося скопіювати. Виділіть текст і скопіюйте вручну.'); }
   }
-  private run(action: Observable<void>, message: string) {
+  private run(action: Observable<void>, message: string, onSuccess?: () => void) {
     const id = this.id; this.saving.set(true); this.actionError.set(''); this.notice.set(''); this.conflict.set(false);
     action.pipe(finalize(() => { if (this.id === id) this.saving.set(false); }), takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => { if (this.id !== id) return; this.notice.set(message); this.editingPlan.set(false); this.load(); },
+      next: () => { if (this.id !== id) return; onSuccess?.(); this.notice.set(message); this.editingPlan.set(false); this.load(); },
       error: (error: unknown) => {
         if (this.id !== id) return;
         if (error instanceof HttpErrorResponse && error.status === 409) {
           this.conflict.set(true); this.transitionForm.reset(); this.load(true);
           if (this.editingPlan()) this.previewSchedule();
+          if (this.correcting() && this.correctionForm.controls.date.value) this.loadCorrectionSlots();
           return;
         }
         if (error instanceof HttpErrorResponse && [401, 403, 404].includes(error.status)) {

@@ -233,6 +233,43 @@ public sealed class FinanceReportsPostgresTests : IDisposable
     }
 
     [PostgresFact]
+    public async Task CorrectedCompletionLeavesReportUntilFreshPaymentAndHandoverInNewKyivMonth()
+    {
+        clock.SetUtcNow(new DateTimeOffset(2075, 3, 10, 12, 0, 0, TimeSpan.Zero));
+        var super = await CreateUser("SuperAdmin"); var admin = await CreateUser("Admin"); var owner = await CreateUser("User");
+        var id = await Seed(owner.Id, clock.GetUtcNow(), 246.80m);
+        using var report = await Login(super); using var actor = await Login(admin); using var customer = await Login(owner);
+        var url = $"/api/admin/appointments/{id}";
+        async Task<JsonElement> Details() => await Json(await actor.GetAsync($"/api/appointments/{id}"));
+        async Task<JsonElement> Month(int month) => await Json(await report.GetAsync($"/api/admin/reports/finance?year=2075&month={month}"));
+        var originalMonth = await Month(3);
+        Assert.Equal(1, originalMonth.GetProperty("completedCount").GetInt32()); Assert.Equal(246.80m, Number(originalMonth, "revenue"));
+        var version = (await Details()).GetProperty("version").GetUInt32();
+        var body = new { version, target = "AwaitingPayment", reason = "Wrong status", confirmed = true };
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.PostAsJsonAsync(url + "/correct-status", body)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await actor.PostAsJsonAsync(url + "/correct-status", body)).StatusCode);
+        var reversed = await Details();
+        Assert.Equal("AwaitingPayment", reversed.GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.Null, reversed.GetProperty("paymentConfirmation").ValueKind);
+        var earlierProof = Assert.Single(reversed.GetProperty("paymentHistory").EnumerateArray());
+        Assert.Equal(clock.GetUtcNow(), earlierProof.GetProperty("paidAtUtc").GetDateTimeOffset());
+        Assert.Equal(clock.GetUtcNow(), earlierProof.GetProperty("handedOverAtUtc").GetDateTimeOffset());
+        Assert.Contains(reversed.GetProperty("history").EnumerateArray(), e => e.GetProperty("isCorrection").GetBoolean() && e.GetProperty("reason").GetString() == "Wrong status");
+        var march = await Month(3); Assert.Equal(0, march.GetProperty("completedCount").GetInt32()); Assert.Equal(0m, Number(march, "revenue"));
+        version = reversed.GetProperty("version").GetUInt32();
+        Assert.Equal(HttpStatusCode.Conflict, (await actor.PostAsJsonAsync(url + "/transition", new { version, target = "Completed", paymentReceived = true, vehicleHandedOver = false })).StatusCode);
+        clock.SetUtcNow(new DateTimeOffset(2075, 4, 3, 12, 0, 0, TimeSpan.Zero));
+        using var laterActor = await Login(admin); using var laterReport = await Login(super);
+        Assert.Equal(HttpStatusCode.NoContent, (await laterActor.PostAsJsonAsync(url + "/transition", new { version, target = "Completed", paymentReceived = true, vehicleHandedOver = true })).StatusCode);
+        Assert.Equal(0m, Number(await Json(await laterReport.GetAsync("/api/admin/reports/finance?year=2075&month=3")), "revenue"));
+        var april = await Json(await laterReport.GetAsync("/api/admin/reports/finance?year=2075&month=4")); Assert.Equal(1, april.GetProperty("completedCount").GetInt32()); Assert.Equal(246.80m, Number(april, "revenue"));
+        var history = (await Json(await laterActor.GetAsync($"/api/appointments/{id}"))).GetProperty("paymentHistory");
+        Assert.Equal(2, history.GetArrayLength());
+        Assert.Contains(history.EnumerateArray(), p => p.GetProperty("paidAtUtc").GetDateTimeOffset() == new DateTimeOffset(2075, 3, 10, 12, 0, 0, TimeSpan.Zero));
+        Assert.Contains(history.EnumerateArray(), p => p.GetProperty("paidAtUtc").GetDateTimeOffset() == clock.GetUtcNow() && p.GetProperty("handedOverAtUtc").GetDateTimeOffset() == clock.GetUtcNow());
+    }
+
+    [PostgresFact]
     public async Task ActualCompletionRequiresPaymentAndHandoverBeforeReportIncludesOrder()
     {
         clock.SetUtcNow(new DateTimeOffset(2074, 10, 15, 12, 0, 0, TimeSpan.Zero));

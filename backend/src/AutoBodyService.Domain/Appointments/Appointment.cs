@@ -80,7 +80,7 @@ public sealed class Appointment
     public string? CustomerName { get; }
     public string? CustomerPhone { get; }
 
-    public DateTimeOffset InspectionStartUtc { get; }
+    public DateTimeOffset InspectionStartUtc { get; private set; }
 
     public string? Vin { get; }
 
@@ -187,6 +187,21 @@ public sealed class Appointment
             throw new InvalidOperationException("Payment and vehicle handover must both be confirmed.");
 
         Status = AppointmentStatus.Completed;
+    }
+
+    public void CorrectStatus(AppointmentStatus target, DateTimeOffset? inspectionStartUtc)
+    {
+        if (target is AppointmentStatus.Completed or AppointmentStatus.Cancelled || !Enum.IsDefined(target) || target == Status)
+            throw new InvalidOperationException("Invalid correction target.");
+        if (target != AppointmentStatus.AwaitingInspection && RepairPlan is null)
+            throw new InvalidOperationException("A repair plan is required for this status.");
+        if (inspectionStartUtc is not null)
+        {
+            if (Status != AppointmentStatus.Cancelled || inspectionStartUtc.Value.Offset != TimeSpan.Zero || inspectionStartUtc.Value.Year is < 2 or > 9998)
+                throw new ArgumentException("Only a cancelled inspection can be rescheduled.");
+            InspectionStartUtc = inspectionStartUtc.Value;
+        }
+        Status = target;
     }
 
     /// <summary>Cancels a repair after the caller has verified operator authorization.</summary>

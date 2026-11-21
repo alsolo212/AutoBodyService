@@ -33,8 +33,9 @@ public sealed class AppointmentQueries(ApplicationDbContext db, IRepairPlanning 
             .SingleOrDefaultAsync(cancellationToken);
         if (row is null) return null;
         var participants = await ParticipantsAsync(id, cancellationToken);
+        var prices = await PricesAsync(id, cancellationToken);
         return new CustomerAppointmentDetails(row.Id, row.Vin, row.Make, row.Model, row.ProblemDescription,
-            row.InspectionStartUtc, row.Status, row.History, row.Plan, participants);
+            row.InspectionStartUtc, row.Status, row.History, row.Plan, participants, prices);
     }
 
     public async Task<AdminAppointmentDetails?> GetForAdminAsync(Guid id, CancellationToken cancellationToken)
@@ -53,12 +54,13 @@ public sealed class AppointmentQueries(ApplicationDbContext db, IRepairPlanning 
                              join actor in db.Users.AsNoTracking() on e.ActorId equals actor.Id
                              where e.AppointmentId == id
                              orderby e.ChangedAtUtc, e.Id
-                             select new AdminStatusHistory(e.FromStatus, e.ToStatus, e.ChangedAtUtc, actor.Name, e.Reason))
+                             select new AdminStatusHistory(e.FromStatus, e.ToStatus, e.ChangedAtUtc, actor.Name, e.Reason, e.IsCorrection, e.PreviousInspectionStartUtc, e.NewInspectionStartUtc))
             .ToListAsync(cancellationToken);
         var payment = await (from p in db.PaymentHandoverConfirmations.AsNoTracking()
                              join actor in db.Users.AsNoTracking() on p.ActorId equals actor.Id
                              where p.AppointmentId == id
-                             select new AdminPaymentConfirmation(actor.Name, p.PaidAtUtc, p.HandedOverAtUtc)).SingleOrDefaultAsync(cancellationToken);
+                             orderby p.PaidAtUtc descending, p.Id descending
+                             select new AdminPaymentConfirmation(actor.Name, p.PaidAtUtc, p.HandedOverAtUtc)).ToListAsync(cancellationToken);
         var contacts = await (from e in db.ManualContactEvents.AsNoTracking()
                               join actor in db.Users.AsNoTracking() on e.ActorId equals actor.Id
                               where e.AppointmentId == id
@@ -79,8 +81,13 @@ public sealed class AppointmentQueries(ApplicationDbContext db, IRepairPlanning 
         var pauseHistory = await db.RepairPauses.AsNoTracking().Where(p => p.AppointmentId == id).OrderByDescending(p => p.StartedAtUtc)
             .Select(p => new AdminPauseHistory(p.Reason, p.DurationDays, p.WorkplaceReleased, p.StartedOn, p.ExpectedReturn, p.StartedAtUtc, p.EndedAtUtc)).ToListAsync(cancellationToken);
         return new AdminAppointmentDetails(row.Id, row.Vin, row.Make, row.Model, row.ProblemDescription, row.InspectionStartUtc,
-            row.Status, row.CustomerName, row.CustomerPhone, history, row.Plan, participants, row.Version, payment, contacts, assignments, pause, conflict is not null, conflict?.AlternativeStart, pauseHistory);
+            row.Status, row.CustomerName, row.CustomerPhone, history, row.Plan, participants, row.Version,
+            row.Status == AppointmentStatus.Completed ? payment.FirstOrDefault() : null, contacts, assignments, pause, conflict is not null, conflict?.AlternativeStart, pauseHistory,
+            payment, await PricesAsync(id, cancellationToken));
     }
+    private async Task<IReadOnlyList<PriceChangeDetails>> PricesAsync(Guid id, CancellationToken ct) =>
+        await db.RepairPriceChanges.AsNoTracking().Where(p => p.AppointmentId == id).OrderByDescending(p => p.ChangedAtUtc).ThenByDescending(p => p.Id)
+            .Select(p => new PriceChangeDetails(p.OldPrice, p.NewPrice, p.Reason, p.ChangedAtUtc)).ToListAsync(ct);
     private async Task<IReadOnlyList<AppointmentParticipant>> ParticipantsAsync(Guid id, CancellationToken cancellationToken)
     {
         // Use the most recent assignment snapshot once per employee, including inactive workers.

@@ -34,6 +34,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<RepairOfferDecline> RepairOfferDeclines => Set<RepairOfferDecline>();
     public DbSet<AppointmentStatusEvent> AppointmentStatusEvents => Set<AppointmentStatusEvent>();
     public DbSet<PaymentHandoverConfirmation> PaymentHandoverConfirmations => Set<PaymentHandoverConfirmation>();
+    public DbSet<RepairPriceChange> RepairPriceChanges => Set<RepairPriceChange>();
     public DbSet<ManualContactEvent> ManualContactEvents => Set<ManualContactEvent>();
     public DbSet<AdminAuditEvent> AdminAuditEvents => Set<AdminAuditEvent>();
     public DbSet<MonthlyExpense> MonthlyExpenses => Set<MonthlyExpense>();
@@ -276,11 +277,21 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         });
         builder.Entity<PaymentHandoverConfirmation>(entity =>
         {
-            entity.HasKey(x => x.AppointmentId);
+            entity.HasKey(x => x.Id);
             entity.Property(x => x.ActorId).IsRequired();
-            entity.HasOne<Appointment>().WithOne().HasForeignKey<PaymentHandoverConfirmation>(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Appointment>().WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => x.HandedOverAtUtc);
+        });
+        builder.Entity<RepairPriceChange>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.OldPrice).HasColumnType("numeric");
+            entity.Property(x => x.NewPrice).HasColumnType("numeric");
+            entity.HasOne<Appointment>().WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.AppointmentId, x.ChangedAtUtc });
         });
         builder.Entity<ManualContactEvent>(entity =>
         {

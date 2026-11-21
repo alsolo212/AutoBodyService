@@ -5,10 +5,12 @@ using AutoBodyService.Infrastructure.Persistence;
 using AutoBodyService.Infrastructure.Notifications;
 using AutoBodyService.Application.Notifications;
 using Microsoft.EntityFrameworkCore;
+using AutoBodyService.Application.InspectionSchedule;
+using Npgsql;
 
 namespace AutoBodyService.Infrastructure.Appointments;
 
-public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWriter audit, TimeProvider clock, INotificationRealtimePublisher? publisher = null, IRepairPlanning? planning = null) : IAdminAppointmentStore
+public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWriter audit, TimeProvider clock, INotificationRealtimePublisher? publisher = null, IRepairPlanning? planning = null, IInspectionSlotsService? slots = null) : IAdminAppointmentStore
 {
     public async Task<AdminAppointmentResult> ExecuteAsync(Guid id, uint version, string actorId,
         Func<Domain.Appointments.Appointment, DateTimeOffset, AdminAppointmentMutation> mutate, CancellationToken cancellationToken)
@@ -16,6 +18,8 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         // Serialize capacity changes with all administrative status and plan writes.
         await RepairCapacityStore.LockAsync(db, cancellationToken);
+        // The inspection schedule lock is also used by booking and calendar edits.
+        await db.Database.ExecuteSqlRawAsync("SELECT 1 FROM \"InspectionSchedules\" WHERE \"Id\" = 1 FOR UPDATE", cancellationToken);
         // Customer cancellation uses the same row lock; xmin also rejects other stale writers.
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Appointments\" WHERE \"Id\" = {id} FOR UPDATE", cancellationToken);
         var appointment = await db.Appointments.Include(a => a.RepairPlan).SingleOrDefaultAsync(a => a.Id == id, cancellationToken);
@@ -28,6 +32,49 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
         if (oldStatus == AppointmentStatus.Paused && activePause is null) return AdminAppointmentResult.Conflict;
         var mutation = mutate(appointment, clock.GetUtcNow());
         if (mutation.Result != AdminAppointmentResult.Success) return mutation.Result;
+        RepairPause? restoredPause = null;
+        if (mutation.StatusEvent is { IsCorrection: true } correction)
+        {
+            var visited = await db.AppointmentStatusEvents.AsNoTracking().AnyAsync(e => e.AppointmentId == id &&
+                (e.FromStatus == appointment.Status || e.ToStatus == appointment.Status), cancellationToken);
+            if (!visited) return AdminAppointmentResult.Conflict;
+            if (oldStatus == AppointmentStatus.Cancelled)
+            {
+                var prior = await db.AppointmentStatusEvents.AsNoTracking().Where(e => e.AppointmentId == id && e.ToStatus == AppointmentStatus.Cancelled)
+                    .OrderByDescending(e => e.ChangedAtUtc).ThenByDescending(e => e.Id).Select(e => e.FromStatus).FirstOrDefaultAsync(cancellationToken);
+                if (prior != appointment.Status || slots is null) return AdminAppointmentResult.Conflict;
+                var now = clock.GetUtcNow(); var today = RepairCapacityStore.LocalDate(now); var date = RepairCapacityStore.LocalDate(appointment.InspectionStartUtc);
+                var limit = new DateOnly(today.Year, today.Month, 1).AddMonths(2);
+                if (date < today || date >= limit || appointment.InspectionStartUtc <= now ||
+                    !(await slots.GetAvailableAsync(date, cancellationToken)).Any(s => s.StartUtc == appointment.InspectionStartUtc))
+                    return AdminAppointmentResult.Conflict;
+            }
+            if (appointment.Status == AppointmentStatus.Paused)
+            {
+                var previousPause = await db.RepairPauses.AsNoTracking().Where(p => p.AppointmentId == id)
+                    .OrderByDescending(p => p.StartedAtUtc).FirstOrDefaultAsync(cancellationToken);
+                if (previousPause is null) return AdminAppointmentResult.Conflict;
+                restoredPause = new RepairPause(id, previousPause.Reason, previousPause.DurationDays, previousPause.WorkplaceReleased,
+                    previousPause.StartedOn, actorId, clock.GetUtcNow());
+            }
+            if (appointment.Status is AppointmentStatus.Scheduled or AppointmentStatus.InProgress or AppointmentStatus.Paused)
+            {
+                var plan = appointment.RepairPlan!; var today = RepairCapacityStore.LocalDate(clock.GetUtcNow());
+                var start = RepairCapacityStore.LocalDate(plan.PlannedStartUtc); var finish = RepairCapacityStore.LocalDate(plan.EstimatedFinishUtc);
+                if (restoredPause is { WorkplaceReleased: true }) start = restoredPause.ExpectedReturn;
+                if (restoredPause is not null && finish < restoredPause.ExpectedReturn) finish = restoredPause.ExpectedReturn;
+                if (appointment.Status is AppointmentStatus.InProgress or AppointmentStatus.Paused && finish < today) finish = today;
+                var places = (await db.RepairCapacity.SingleAsync(cancellationToken)).Workplaces;
+                var reservations = await RepairCapacityStore.ReservationsAsync(db, id, today, cancellationToken);
+                if (places is null || !RepairAvailability.Fits(new(start, finish), reservations, places.Value)) return AdminAppointmentResult.Conflict;
+                if (appointment.Status == AppointmentStatus.Paused && restoredPause is { WorkplaceReleased: false })
+                {
+                    var actual = await RepairCapacityStore.ActualCountAsync(db, cancellationToken);
+                    if (oldStatus == AppointmentStatus.InProgress) actual--;
+                    if (actual >= places.Value) return AdminAppointmentResult.Conflict;
+                }
+            }
+        }
         if (mutation.DelayToken is { } delayToken)
         {
             var finish = RepairCapacityStore.LocalDate(appointment.RepairPlan!.EstimatedFinishUtc);
@@ -72,6 +119,7 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
         if (mutation.StatusEvent is { } statusEvent)
         {
             if (mutation.Pause is { } pause) db.RepairPauses.Add(pause);
+            if (restoredPause is not null) db.RepairPauses.Add(restoredPause);
             if (statusEvent.FromStatus == AppointmentStatus.Paused && activePause is not null) activePause.End(actorId, statusEvent.ChangedAtUtc);
             if (statusEvent.FromStatus == AppointmentStatus.InProgress && statusEvent.ToStatus != AppointmentStatus.InProgress)
             {
@@ -86,7 +134,18 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
             if (statusEvent.ToStatus == AppointmentStatus.Cancelled)
                 await db.ScheduledReminders.Where(r => r.AppointmentId == id && r.ProcessedAtUtc == null)
                     .ExecuteUpdateAsync(set => set.SetProperty(r => r.ProcessedAtUtc, statusEvent.ChangedAtUtc).SetProperty(r => r.Outcome, "SkippedCancelled"), cancellationToken);
-            var (title, message) = statusEvent.ToStatus switch
+            if (statusEvent.IsCorrection && statusEvent.FromStatus == AppointmentStatus.Cancelled && statusEvent.ToStatus == AppointmentStatus.AwaitingInspection)
+            {
+                foreach (var (type, lead) in new[] { ("Client24Hours", TimeSpan.FromHours(24)), ("Client2Hours", TimeSpan.FromHours(2)), ("Admin30Minutes", TimeSpan.FromMinutes(30)) })
+                {
+                    var due = appointment.InspectionStartUtc - lead;
+                    if (due <= statusEvent.ChangedAtUtc || (type != "Admin30Minutes" && appointment.UserId is null)) continue;
+                    db.ScheduledReminders.Add(new ScheduledReminder { Id = Guid.NewGuid(), AppointmentId = id,
+                        RecipientId = type == "Admin30Minutes" ? null : appointment.UserId, Type = type, DueAtUtc = due,
+                        EventKey = $"status:{statusEvent.Id}:reminder:{type}" });
+                }
+            }
+            var (title, message) = statusEvent.IsCorrection ? ("Статус замовлення виправлено", "Перегляньте актуальний стан замовлення.") : statusEvent.ToStatus switch
             {
                 AppointmentStatus.Scheduled => ("Ремонт заплановано", "Умови ремонту погоджено. Перегляньте план замовлення."),
                 AppointmentStatus.InProgress => ("Ремонт розпочато", "Ваш автомобіль передано в роботу."),
@@ -108,6 +167,7 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
             audit.RecordAppointmentStatusChange(actorId, id, statusEvent.FromStatus!.Value, statusEvent.ToStatus, statusEvent.Id);
         }
         if (mutation.Confirmation is not null) db.PaymentHandoverConfirmations.Add(mutation.Confirmation);
+        if (mutation.PriceChange is not null) db.RepairPriceChanges.Add(mutation.PriceChange);
         if (mutation.PriceChanged || mutation.DatesChanged)
         {
             audit.RecordRepairPlanChange(actorId, id, mutation.PriceChanged, mutation.DatesChanged);
@@ -128,5 +188,6 @@ public sealed class AdminAppointmentStore(ApplicationDbContext db, IAdminAuditWr
             return AdminAppointmentResult.Success;
         }
         catch (DbUpdateConcurrencyException) { return AdminAppointmentResult.Conflict; }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "IX_Appointments_InspectionStartUtc" }) { return AdminAppointmentResult.Conflict; }
     }
 }

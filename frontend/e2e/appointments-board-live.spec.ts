@@ -108,7 +108,7 @@ test('board uses real guarded transitions, server pages and confirmation forms',
     const changed = await other.evaluate(async id => {
       const item = await (await fetch(`/api/appointments/${id}`)).json(); await fetch('/api/auth/antiforgery');
       const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
-      return (await fetch(`/api/admin/appointments/${id}/repair-plan`, { method: 'PUT', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token }, body: JSON.stringify({ version: item.version, price: 1700, plannedStartUtc: item.repairPlan.plannedStartUtc, estimatedFinishUtc: item.repairPlan.estimatedFinishUtc, inspectionPerformed: true }) })).status;
+      return (await fetch(`/api/admin/appointments/${id}/repair-plan`, { method: 'PUT', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token }, body: JSON.stringify({ version: item.version, price: 1700, priceReason: 'Додаткові роботи', plannedStartUtc: item.repairPlan.plannedStartUtc, estimatedFinishUtc: item.repairPlan.estimatedFinishUtc, inspectionPerformed: true }) })).status;
     }, ids[1]);
     expect(changed).toBe(204);
     const conflict = page.waitForResponse(r => r.url().endsWith(`/${ids[1]}/transition`));

@@ -10,12 +10,14 @@ public sealed class PaymentHandoverConfirmation
         ArgumentOutOfRangeException.ThrowIfEqual(appointmentId, Guid.Empty);
         ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
         if (confirmedAtUtc.Offset != TimeSpan.Zero) throw new ArgumentException("Time must use UTC.", nameof(confirmedAtUtc));
+        Id = Guid.NewGuid();
         AppointmentId = appointmentId;
         ActorId = actorId;
         PaidAtUtc = confirmedAtUtc;
         HandedOverAtUtc = confirmedAtUtc;
     }
 
+    public Guid Id { get; private set; }
     public Guid AppointmentId { get; private set; }
     public string ActorId { get; private set; }
     public DateTimeOffset PaidAtUtc { get; private set; }

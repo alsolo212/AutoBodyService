@@ -71,7 +71,7 @@ public sealed class AdminAppointmentsController(IAdminAppointmentCommands comman
         if (actor is null) return Unauthorized();
         if (!ExactDecimal.TryNonnegative(request.Price, out var price))
             return BadRequest(new ProblemDetails { Status = 400, Title = "Вкажіть точну невід’ємну вартість ремонту." });
-        var command = new RepairPlanCommand(price, request.PlannedStartUtc!.Value, request.EstimatedFinishUtc!.Value, request.InspectionPerformed == true, request.CustomerAgreed == true);
+        var command = new RepairPlanCommand(price, request.PlannedStartUtc!.Value, request.EstimatedFinishUtc!.Value, request.InspectionPerformed == true, request.CustomerAgreed == true, request.PriceReason);
         return Result(await commands.PutPlanAsync(id, request.Version!.Value, actor, command, cancellationToken));
     }
 
@@ -83,7 +83,7 @@ public sealed class AdminAppointmentsController(IAdminAppointmentCommands comman
         if (actor is null) return Unauthorized();
         if (!ExactDecimal.TryNonnegative(request.Price, out var price)) return BadRequest();
         return Result(await commands.ScheduleAsync(id, request.Version!.Value, actor,
-            new(request.Start!.Value, request.DurationDays!.Value, price, request.InspectionPerformed == true), cancellationToken));
+            new(request.Start!.Value, request.DurationDays!.Value, price, request.InspectionPerformed == true, request.PriceReason), cancellationToken));
     }
 
     [HttpPost("{id:guid}/transition")]
@@ -120,6 +120,18 @@ public sealed class AdminAppointmentsController(IAdminAppointmentCommands comman
         var actor = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (actor is null) return Unauthorized();
         return Result(await commands.CancelAsync(id, request.Version!.Value, actor, request.Confirmed == true, request.Reason, cancellationToken));
+    }
+
+    [HttpPost("{id:guid}/correct-status")]
+    public async Task<IActionResult> CorrectStatus(Guid id, StatusCorrectionRequest request, CancellationToken cancellationToken)
+    {
+        var actor = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (actor is null) return Unauthorized();
+        var result = await commands.CorrectStatusAsync(id, request.Version!.Value, actor, request.Target!.Value,
+            request.Reason, request.Confirmed == true, request.InspectionStartUtc, cancellationToken);
+        return result == AdminAppointmentResult.Conflict
+            ? Conflict(new ProblemDetails { Status = 409, Title = "Замовлення або завантаження змінилися. Час огляду може бути зайнятий чи недоступний; оберіть інший вільний час." })
+            : Result(result);
     }
 
     private IActionResult Result(AdminAppointmentResult result) => result switch
@@ -164,7 +176,12 @@ public sealed record RepairPlanRequest
     [Required] public required DateTimeOffset? EstimatedFinishUtc { get; init; }
     public bool? InspectionPerformed { get; init; }
     public bool? CustomerAgreed { get; init; }
+    [StringLength(1000)] public string? PriceReason { get; init; }
 }
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record StatusCorrectionRequest([Required] uint? Version, [Required] AppointmentStatus? Target,
+    [Required, StringLength(500)] string Reason, [Required] bool? Confirmed, DateTimeOffset? InspectionStartUtc);
 
 /// <summary>Calendar dates and agreed price for the initial repair plan.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -175,6 +192,7 @@ public sealed record ScheduleRepairRequest
     [Required] public required int? DurationDays { get; init; }
     public JsonElement Price { get; init; }
     [Required] public required bool? InspectionPerformed { get; init; }
+    [StringLength(1000)] public string? PriceReason { get; init; }
 }
 
 /// <summary>One forward transition, with explicit facts where required.</summary>

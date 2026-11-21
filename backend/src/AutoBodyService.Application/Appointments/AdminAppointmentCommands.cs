@@ -6,6 +6,18 @@ public sealed class AdminAppointmentCommands(IAdminAppointmentStore store) : IAd
 {
     private static readonly TimeZoneInfo Kyiv = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
 
+    public Task<AdminAppointmentResult> CorrectStatusAsync(Guid id, uint version, string actorId, AppointmentStatus target,
+        string reason, bool confirmed, DateTimeOffset? inspectionStartUtc, CancellationToken cancellationToken) =>
+        store.ExecuteAsync(id, version, actorId, (appointment, now) => Guard(() =>
+        {
+            if (!confirmed) return new(AdminAppointmentResult.Invalid);
+            var previous = appointment.Status; var oldSlot = appointment.InspectionStartUtc;
+            appointment.CorrectStatus(target, inspectionStartUtc);
+            return new(AdminAppointmentResult.Success, AppointmentStatusEvent.ForCorrection(id, previous, target, actorId, now, reason,
+                previous == AppointmentStatus.Cancelled ? oldSlot : null,
+                previous == AppointmentStatus.Cancelled ? appointment.InspectionStartUtc : null));
+        }), cancellationToken);
+
     public Task<AdminAppointmentResult> PauseAsync(Guid id, uint version, string actorId, PauseRepairCommand command, CancellationToken cancellationToken) =>
         store.ExecuteAsync(id, version, actorId, (appointment, now) => Guard(() =>
         {
@@ -62,10 +74,12 @@ public sealed class AdminAppointmentCommands(IAdminAppointmentStore store) : IAd
             var startUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(command.Start.ToDateTime(TimeOnly.MinValue), Kyiv));
             var endUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(end.ToDateTime(TimeOnly.MinValue), Kyiv));
             var plan = new RepairPlan(id, command.Price, startUtc, endUtc, now, calendarDatesOnly: true);
+            var priceChange = appointment.RepairPlan is { } old && old.AgreedPrice != command.Price
+                ? new RepairPriceChange(id, old.AgreedPrice, command.Price, command.PriceReason ?? "", actorId, now) : null;
             var from = appointment.Status;
             appointment.AgreeRepairPlan(plan, true);
             appointment.Schedule(appointment.RepairPlan!, true);
-            return new(AdminAppointmentResult.Success, AppointmentStatusEvent.ForTransition(id, from, appointment.Status, actorId, now), PriceChanged: true, DatesChanged: true);
+            return new(AdminAppointmentResult.Success, AppointmentStatusEvent.ForTransition(id, from, appointment.Status, actorId, now), PriceChanged: true, DatesChanged: true, PriceChange: priceChange);
         }), cancellationToken);
 
     public Task<AdminAppointmentResult> PutPlanAsync(Guid id, uint version, string actorId, RepairPlanCommand command, CancellationToken cancellationToken) =>
@@ -76,6 +90,8 @@ public sealed class AdminAppointmentCommands(IAdminAppointmentStore store) : IAd
             var previous = appointment.RepairPlan;
             var priceChanged = previous is null || previous.AgreedPrice != plan.AgreedPrice;
             var datesChanged = previous is null || previous.PlannedStartUtc != plan.PlannedStartUtc || previous.EstimatedFinishUtc != plan.EstimatedFinishUtc;
+            var priceChange = priceChanged && previous is not null
+                ? new RepairPriceChange(id, previous.AgreedPrice, plan.AgreedPrice, command.PriceReason ?? "", actorId, now) : null;
             if (appointment.Status == AppointmentStatus.Scheduled && datesChanged && !command.CustomerAgreed) return new(AdminAppointmentResult.Conflict);
             if (!priceChanged && !datesChanged)
             {
@@ -86,7 +102,7 @@ public sealed class AdminAppointmentCommands(IAdminAppointmentStore store) : IAd
             }
             if (appointment.Status == AppointmentStatus.AwaitingInspection) appointment.AgreeRepairPlan(plan, command.InspectionPerformed);
             else appointment.ReviseRepairPlan(plan.AgreedPrice, plan.PlannedStartUtc, plan.EstimatedFinishUtc, now);
-            return new(AdminAppointmentResult.Success, PriceChanged: priceChanged, DatesChanged: datesChanged);
+            return new(AdminAppointmentResult.Success, PriceChanged: priceChanged, DatesChanged: datesChanged, PriceChange: priceChange);
         }), cancellationToken);
 
     public Task<AdminAppointmentResult> TransitionAsync(Guid id, uint version, string actorId, TransitionCommand command, CancellationToken cancellationToken) =>

@@ -45,8 +45,9 @@ test('administrative order handles a real version conflict and both completion f
   const saved = page.waitForResponse(r => r.url().endsWith('/schedule') && r.request().method() === 'POST');
   await page.getByRole('button', { name: 'Підтвердити і запланувати' }).click(); expect((await saved).status()).toBe(204);
   await expect(page.getByText('Ремонт заплановано.')).toBeVisible();
-  await page.getByRole('button', { name: 'Змінити план' }).click();
+  await page.getByRole('button', { name: 'Змінити вартість або терміни' }).click();
   await page.getByLabel('Узгоджена вартість, ₴').fill('1600');
+  await page.getByLabel('Причина зміни вартості (якщо змінилася)').fill('Додаткові роботи');
 
   const otherContext = await browser.newContext({ ignoreHTTPSErrors: true });
   try {
@@ -56,14 +57,14 @@ test('administrative order handles a real version conflict and both completion f
       await fetch('/api/auth/antiforgery');
       const token = decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]);
       return (await fetch(`/api/admin/appointments/${id}/repair-plan`, { method: 'PUT', headers: { 'Content-Type': 'application/json', RequestVerificationToken: token },
-        body: JSON.stringify({ version: item.version, price: 1700, plannedStartUtc: item.repairPlan.plannedStartUtc, estimatedFinishUtc: item.repairPlan.estimatedFinishUtc, inspectionPerformed: true }) })).status;
+        body: JSON.stringify({ version: item.version, price: 1700, priceReason: 'Додаткові роботи', plannedStartUtc: item.repairPlan.plannedStartUtc, estimatedFinishUtc: item.repairPlan.estimatedFinishUtc, inspectionPerformed: true }) })).status;
     }, created[0]);
     expect(changed).toBe(204);
     const conflict = page.waitForResponse(r => r.url().endsWith('/repair-plan') && r.request().method() === 'PUT');
     await page.getByRole('button', { name: 'Зберегти план' }).click(); expect((await conflict).status()).toBe(409);
     await expect(page.getByRole('alert').filter({ hasText: 'Замовлення або зайнятість змінилися' })).toBeVisible();
     await expect(page.getByLabel('Узгоджена вартість, ₴')).toHaveValue('1600');
-    await expect(page.getByText(/1 700,00/)).toBeVisible();
+    await expect(page.getByText('1 700,00 ₴', { exact: true })).toBeVisible();
     const currentPrice = await other.evaluate(async id => (await (await fetch(`/api/appointments/${id}`)).json()).repairPlan.agreedPrice, created[0]);
     expect(currentPrice).toBe(1700);
   } finally { await otherContext.close(); }
@@ -90,7 +91,7 @@ test('administrative order handles a real version conflict and both completion f
   await page.getByLabel('Автомобіль передано клієнту').check();
   const completion = page.waitForResponse(r => r.url().endsWith('/transition') && r.request().method() === 'POST');
   await page.getByRole('button', { name: 'Перевести: Завершено' }).click(); expect((await completion).status()).toBe(204);
-  await expect(page.getByRole('heading', { name: 'Оплата та видача' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Історія підтверджень оплати та видачі' })).toBeVisible();
   await expect(page.getByLabel('Дії із замовленням')).toHaveCount(0);
   await expect(page.locator('main form')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

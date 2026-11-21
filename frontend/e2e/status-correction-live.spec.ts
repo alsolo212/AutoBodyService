@@ -1,0 +1,76 @@
+import { expect, test } from '@playwright/test';
+import { login } from './admin-users-helpers';
+
+test('admin corrects completion and restores an occupied inspection without losing history', async ({ page }) => {
+  test.skip(process.env['E2E_LIVE_API'] !== '1', 'Requires isolated API and PostgreSQL.');
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 375, height: 800 });
+  await login(page, process.env['E2E_ADMIN_PHONE']!, process.env['E2E_ADMIN_PASSWORD']!);
+  await expect(page).toHaveURL(/\/admin$/);
+  const setup = await page.evaluate(async () => {
+    await fetch('/api/auth/antiforgery');
+    const headers = () => ({ 'Content-Type': 'application/json', RequestVerificationToken: decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]) });
+    const check = async (r: Response, expected: number) => { if (r.status !== expected) throw new Error(`${r.url} returned ${r.status}`); return r; };
+    const schedule = await (await check(await fetch('/api/admin/inspection-schedule'), 200)).json();
+    const intervals = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(dayOfWeek => ({ dayOfWeek, start: '09:00', end: '12:00' }));
+    const preview = await (await check(await fetch('/api/admin/inspection-schedule/preview', { method: 'POST', headers: headers(), body: JSON.stringify({ version: schedule.version, intervals }) }), 200)).json();
+    await check(await fetch('/api/admin/inspection-schedule', { method: 'PUT', headers: headers(), body: JSON.stringify({ version: schedule.version, intervals, confirmationToken: preview.confirmationToken }) }), 204);
+    await check(await fetch('/api/admin/repair-capacity', { method: 'PUT', headers: headers(), body: JSON.stringify({ workplaces: 2 }) }), 204);
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const tomorrow = new Date(`${today}T12:00:00Z`); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1); const day = tomorrow.toISOString().slice(0, 10);
+    const slots = (await (await check(await fetch(`/api/inspection-slots?date=${day}`), 200)).json()).slots;
+    const create = async (slot: string, model: string) => (await (await check(await fetch('/api/appointments', { method: 'POST', headers: headers(), body: JSON.stringify({ inspectionStartUtc: slot, make: 'Тест', model, problemDescription: 'Опис' }) }), 201)).json()).id as string;
+    const details = async (id: string) => (await (await check(await fetch(`/api/appointments/${id}`), 200)).json());
+    const id = await create(slots[0].startUtc, 'Завершення');
+    await check(await fetch(`/api/admin/appointments/${id}/schedule`, { method: 'POST', headers: headers(), body: JSON.stringify({ version: (await details(id)).version, start: today, durationDays: 1, price: 100, inspectionPerformed: true }) }), 204);
+    const cancelled = await create(slots[1].startUtc, 'Відновлення');
+    await check(await fetch(`/api/admin/appointments/${cancelled}/cancel`, { method: 'POST', headers: headers(), body: JSON.stringify({ version: (await details(cancelled)).version, confirmed: true, reason: 'Помилка' }) }), 204);
+    await create(slots[1].startUtc, 'Зайнятий час');
+    return { id, cancelled, day };
+  });
+  await page.goto(`/admin/appointments/${setup.id}`);
+  await page.getByRole('button', { name: 'Змінити вартість або терміни' }).click();
+  await page.getByLabel('Узгоджена вартість, ₴').fill('150');
+  await page.getByRole('button', { name: 'Зберегти план' }).click();
+  await expect(page.getByText('Вкажіть причину зміни вартості.')).toBeVisible();
+  await page.getByLabel('Причина зміни вартості (якщо змінилася)').fill('Додаткові роботи');
+  await page.getByRole('button', { name: 'Зберегти план' }).click();
+  await expect(page.getByText('Узгоджені дані збережено.')).toBeVisible();
+  await page.goto(`/account/appointments/${setup.id}`);
+  await expect(page.getByText('Додаткові роботи')).toBeVisible();
+  await page.evaluate(async id => {
+    await fetch('/api/auth/antiforgery');
+    const headers = () => ({ 'Content-Type': 'application/json', RequestVerificationToken: decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))!.split('=')[1]) });
+    for (const target of ['InProgress', 'AwaitingPayment', 'Completed']) {
+      const item = await (await fetch(`/api/appointments/${id}`)).json();
+      const response = await fetch(`/api/admin/appointments/${id}/transition`, { method: 'POST', headers: headers(), body: JSON.stringify({ version: item.version, target, paymentReceived: true, vehicleHandedOver: true }) });
+      if (response.status !== 204) throw new Error(`Transition ${target}: ${response.status}`);
+    }
+  }, setup.id);
+  await page.goto(`/admin/appointments/${setup.id}`);
+  await page.getByRole('button', { name: 'Виправити статус', exact: true }).click();
+  await page.getByLabel('Повернути статус').selectOption('AwaitingPayment');
+  await page.getByLabel('Причина виправлення').fill('Помилкове завершення');
+  await expect(page.getByText(/не повертає і не отримує кошти/)).toBeVisible();
+  await page.getByRole('button', { name: 'Перевірити і продовжити' }).click();
+  await page.getByRole('dialog', { name: 'Підтвердити виправлення статусу?' }).getByRole('button', { name: 'Виправити' }).click();
+  await expect(page.getByText('Статус виправлено.')).toBeVisible();
+  await expect(page.getByText('Для поточного стану оплата і видача не підтверджені.')).toBeVisible();
+  await page.getByLabel('Оплату отримано').check(); await page.getByLabel('Автомобіль передано клієнту').check();
+  await page.getByRole('button', { name: 'Перевести: Завершено' }).click();
+  await expect(page.getByText('Статус замовлення оновлено.')).toBeVisible();
+  await expect(page.getByText('Підтвердив(ла):', { exact: false })).toHaveCount(2);
+  await page.goto(`/admin/appointments/${setup.cancelled}`);
+  await page.getByRole('button', { name: 'Виправити статус', exact: true }).click();
+  await expect(page.getByText('Попередній час недоступний. Оберіть інший вільний час.')).toBeVisible();
+  await page.getByLabel('Причина виправлення').fill('Помилкове скасування');
+  const choices = page.getByLabel('Вільний час'); await choices.selectOption({ index: 1 });
+  await page.getByRole('button', { name: 'Перевірити і продовжити' }).click();
+  await page.getByRole('dialog', { name: 'Підтвердити виправлення статусу?' }).getByRole('button', { name: 'Виправити' }).click();
+  await expect(page.getByText('Статус виправлено.')).toBeVisible();
+  await expect(page.getByText('Помилкове скасування')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(page.getByText('Помилкове скасування')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

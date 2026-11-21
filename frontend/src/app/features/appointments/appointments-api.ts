@@ -9,7 +9,8 @@ export interface RepairPlan { agreedPriceExact: string; currency: string; planne
 export interface AppointmentSummary { id: string; make: string; model: string; maskedVin: string | null; inspectionStartUtc: string; status: AppointmentStatus; repairPlan: RepairPlan | null; }
 export interface StatusHistory { fromStatus: AppointmentStatus | null; toStatus: AppointmentStatus; changedAtUtc: string; }
 export interface Participant { name: string; specialization: string; }
-export interface AppointmentDetails { id: string; vin: string | null; make: string; model: string; problemDescription: string; inspectionStartUtc: string; status: AppointmentStatus; history: StatusHistory[]; repairPlan: RepairPlan | null; participants: Participant[] | null; }
+export interface PriceChange { oldPriceExact: string; newPriceExact: string; reason: string; changedAtUtc: string; }
+export interface AppointmentDetails { id: string; vin: string | null; make: string; model: string; problemDescription: string; inspectionStartUtc: string; status: AppointmentStatus; history: StatusHistory[]; repairPlan: RepairPlan | null; participants: Participant[] | null; priceChanges?: PriceChange[]; }
 
 const labels: Record<AppointmentStatus, string> = { AwaitingInspection: 'Очікує огляду', Scheduled: 'Заплановано', InProgress: 'У роботі', Paused: 'Призупинено', AwaitingPayment: 'Очікує оплати', Completed: 'Завершено', Cancelled: 'Скасовано' };
 export function statusLabel(status: AppointmentStatus): string { return labels[status] ?? 'Невідомий статус'; }

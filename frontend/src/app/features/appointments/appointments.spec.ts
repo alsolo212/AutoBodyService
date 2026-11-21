@@ -76,6 +76,13 @@ describe('personal appointments pages', () => {
     for (const value of ['1HGCM82633A004352', 'Опис проблеми', 'Очікує огляду', 'Майстер', 'Маляр', '11:00', '10:00', '₴']) expect(text).toContain(value);
     expect(text).not.toContain('СЕКРЕТ'); expect(text).not.toContain('ВНУТРІШНЄ');
   });
+  it('shows the owner the reason and amounts for a repair price change', () => {
+    const fixture = TestBed.createComponent(AppointmentDetail); fixture.detectChanges();
+    http.expectOne('/api/appointments/my').flush([]);
+    http.expectOne('/api/appointments/my/one').flush({ ...detail, priceChanges: [{ oldPriceExact: '100', newPriceExact: '150', reason: 'Додаткові роботи', changedAtUtc: '2026-12-01T08:00:00Z' }] }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Додаткові роботи');
+    expect(fixture.nativeElement.textContent).toContain('100,00 ₴'); expect(fixture.nativeElement.textContent).toContain('150,00 ₴');
+  });
   it('shows calendar-only repair dates without inventing a midnight appointment', () => {
     const fixture = TestBed.createComponent(AppointmentDetail); fixture.detectChanges();
     http.expectOne('/api/appointments/my').flush([]);

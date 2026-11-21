@@ -111,10 +111,10 @@ describe('administrative appointment details', () => {
     component.planForm.setValue({ price: '0', start: '2026-03-29T03:30', startOffset: '+02:00', finish: '2026-03-29T05:00', finishOffset: '+03:00', inspectionPerformed: true });
     component.savePlan(); expect(component.planError()).toContain('час за Києвом'); http.expectNone('/api/auth/antiforgery');
     component.planForm.patchValue({ start: '2026-10-25T03:30', startOffset: '+03:00', finish: '2026-10-25T03:30', finishOffset: '+02:00', inspectionPerformed: true });
-    component.savePlan(); token();
+    component.priceReason.setValue('Змінився обсяг робіт'); component.savePlan(); token();
     const request = http.expectOne('/api/admin/appointments/order-1/repair-plan');
     expect(request.request.method).toBe('PUT');
-    expect(JSON.parse(request.request.body)).toEqual({ version: 41, price: 0, plannedStartUtc: plan.plannedStartUtc, estimatedFinishUtc: plan.estimatedFinishUtc, inspectionPerformed: true });
+    expect(JSON.parse(request.request.body)).toEqual({ version: 41, price: 0, priceReason: 'Змінився обсяг робіт', plannedStartUtc: plan.plannedStartUtc, estimatedFinishUtc: plan.estimatedFinishUtc, inspectionPerformed: true });
     request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, status: 'Scheduled', repairPlan: plan, version: 42 }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Узгоджені дані збережено');
   });
@@ -123,6 +123,7 @@ describe('administrative appointment details', () => {
     const fixture = create({ ...base, status: 'Scheduled', repairPlan: plan }); const component = fixture.componentInstance; component.editPlan();
     component.planForm.patchValue({ price: '100', start: '2026-07-01T12:00', finish: '2026-07-01T13:00', inspectionPerformed: true }); fixture.detectChanges();
     component.customerAgreed.setValue(true);
+    component.priceReason.setValue('Змінився обсяг робіт');
     expect(fixture.nativeElement.querySelector('#plan-start-offset')).toBeNull();
     component.savePlan(); token();
     const request = http.expectOne('/api/admin/appointments/order-1/repair-plan');
@@ -135,15 +136,55 @@ describe('administrative appointment details', () => {
 
   it('requires the administrator to confirm agreement before changing scheduled dates', () => {
     const fixture = create({ ...base, status: 'Scheduled', repairPlan: plan }); const component = fixture.componentInstance;
-    component.editPlan(); component.planForm.patchValue({ price: '100', start: '2026-07-01T12:00', finish: '2026-07-01T13:00' });
+    component.editPlan(); component.planForm.patchValue({ price: '100', start: '2026-07-01T12:00', finish: '2026-07-01T13:00' }); component.priceReason.setValue('Причина');
     component.savePlan(); expect(component.planError()).toContain('погоджено з клієнтом');
     http.expectNone('/api/auth/antiforgery');
+  });
+
+  it('requires a customer-visible reason only when the repair price changes', () => {
+    const fixture = create({ ...base, status: 'Scheduled', repairPlan: plan }); const component = fixture.componentInstance;
+    component.editPlan(); component.planForm.controls.price.setValue('1500'); component.savePlan();
+    expect(component.planError()).toContain('причину зміни вартості'); http.expectNone('/api/auth/antiforgery');
+    component.priceReason.setValue('Додаткові роботи'); component.savePlan(); token();
+    const request = http.expectOne('/api/admin/appointments/order-1/repair-plan');
+    expect(JSON.parse(request.request.body).priceReason).toBe('Додаткові роботи');
+    expect(JSON.parse(request.request.body)).not.toHaveProperty('customerAgreed');
+    request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, status: 'Scheduled', repairPlan: plan });
+  });
+
+  it('explains report consequences and confirms a status correction with its reason', () => {
+    const fixture = create({ ...base, status: 'Completed', repairPlan: plan,
+      history: [{ fromStatus: 'AwaitingPayment', toStatus: 'Completed', changedAtUtc: '2026-01-01T10:00:00Z', actorName: 'Адміністратор', reason: null }] });
+    const component = fixture.componentInstance; component.openCorrection(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('виключені зі звіту');
+    expect(fixture.nativeElement.textContent).toContain('не повертає і не отримує кошти');
+    component.correctionForm.controls.reason.setValue('Помилковий статус');
+    const dialog = fixture.nativeElement.querySelector('dialog[aria-labelledby="correction-confirm-title"]') as HTMLDialogElement;
+    dialog.showModal = vi.fn(); component.requestCorrection(); expect(dialog.showModal).toHaveBeenCalledOnce();
+    http.expectNone('/api/auth/antiforgery'); component.confirmCorrection(); token();
+    const request = http.expectOne('/api/admin/appointments/order-1/correct-status');
+    expect(request.request.body).toEqual({ version: 41, target: 'AwaitingPayment', reason: 'Помилковий статус', confirmed: true });
+    request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, status: 'AwaitingPayment', repairPlan: plan });
+  });
+
+  it('keeps the restoration reason and refreshes available slots after a conflict', () => {
+    const cancelled: AdminAppointment = { ...base, status: 'Cancelled', inspectionStartUtc: '2020-01-01T10:00:00Z', history: [
+      { fromStatus: 'AwaitingInspection', toStatus: 'Cancelled', changedAtUtc: '2026-01-01T10:00:00Z', actorName: 'Адміністратор', reason: 'Помилка' },
+    ] };
+    const fixture = create(cancelled), component = fixture.componentInstance; component.openCorrection(); fixture.detectChanges();
+    component.correctionForm.patchValue({ date: component.today, reason: 'Відновити', slot: '2026-11-22T07:00:00Z' });
+    component.confirmCorrection(); token();
+    http.expectOne('/api/admin/appointments/order-1/correct-status').flush(null, { status: 409, statusText: 'Conflict' });
+    http.expectOne('/api/appointments/order-1').flush(cancelled);
+    http.expectOne(r => r.url === '/api/inspection-slots' && r.params.get('date') === component.today).flush({ slots: [] }); fixture.detectChanges();
+    expect(component.correcting()).toBe(true); expect(component.correctionForm.controls.reason.value).toBe('Відновити');
+    expect(fixture.nativeElement.textContent).toContain('вільного часу немає');
   });
 
   it('preserves original fractional timestamps when changing only the price', () => {
     const precise = { ...plan, plannedStartUtc: '2026-07-01T09:00:00.123Z', estimatedFinishUtc: '2026-07-02T09:00:00.456Z' };
     const fixture = create({ ...base, status: 'Scheduled', repairPlan: precise }); const component = fixture.componentInstance;
-    component.editPlan(); component.planForm.controls.price.setValue('200'); component.savePlan(); token();
+    component.editPlan(); component.planForm.controls.price.setValue('200'); component.priceReason.setValue('Додаткові роботи'); component.savePlan(); token();
     const request = http.expectOne('/api/admin/appointments/order-1/repair-plan');
     expect(JSON.parse(request.request.body)).toMatchObject({ plannedStartUtc: precise.plannedStartUtc, estimatedFinishUtc: precise.estimatedFinishUtc });
     request.flush(null); http.expectOne('/api/appointments/order-1').flush({ ...base, status: 'Scheduled', repairPlan: precise });
@@ -165,6 +206,7 @@ describe('administrative appointment details', () => {
     const fixture = create({ ...base, status: 'Scheduled', repairPlan: plan }); const component = fixture.componentInstance;
     component.editPlan();
     component.planForm.setValue({ price: '9007199254740993,01', start: '2026-10-25T03:30', startOffset: '+03:00', finish: '2026-10-25T03:30', finishOffset: '+02:00', inspectionPerformed: true });
+    component.priceReason.setValue('Додаткові роботи');
     component.savePlan(); token();
     const request = http.expectOne('/api/admin/appointments/order-1/repair-plan');
     expect(request.request.body).toContain('"price":9007199254740993.01');
@@ -189,7 +231,7 @@ describe('administrative appointment details', () => {
 
   it('reloads on conflict without replaying the action or overwriting the plan draft', () => {
     const fixture = create({ ...base, status: 'Scheduled', repairPlan: plan }); const component = fixture.componentInstance;
-    component.editPlan(); component.planForm.controls.price.setValue('4567'); component.savePlan(); token();
+    component.editPlan(); component.planForm.controls.price.setValue('4567'); component.priceReason.setValue('Додаткові роботи'); component.savePlan(); token();
     const pending = http.expectOne('/api/admin/appointments/order-1/repair-plan');
     expect(JSON.parse(pending.request.body).plannedStartUtc).toBe(plan.plannedStartUtc);
     expect(JSON.parse(pending.request.body).estimatedFinishUtc).toBe(plan.estimatedFinishUtc);

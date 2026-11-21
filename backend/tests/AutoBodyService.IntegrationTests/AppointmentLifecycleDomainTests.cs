@@ -199,8 +199,9 @@ public sealed class AppointmentLifecycleDomainTests
         var setter = typeof(Appointment).GetProperty(nameof(Appointment.Status))!.SetMethod;
         Assert.NotNull(setter);
         Assert.False(setter.IsPublic);
-        Assert.DoesNotContain(typeof(Appointment).GetMethods(BindingFlags.Public | BindingFlags.Instance),
-            method => method.GetParameters().Any(parameter => parameter.ParameterType == typeof(AppointmentStatus)));
+        var fresh = At(AppointmentStatus.AwaitingInspection);
+        Assert.Throws<InvalidOperationException>(() => fresh.CorrectStatus(AppointmentStatus.Completed, null));
+        Assert.Throws<InvalidOperationException>(() => fresh.CorrectStatus(AppointmentStatus.Cancelled, null));
         const string json = """{"InspectionStartUtc":"2045-01-02T10:00:00Z","Vin":"1HGCM82633A123456","Make":"Test","Model":"Model","ProblemDescription":"Issue","Status":"Completed"}""";
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CreateAppointmentRequest>(json));
     }

@@ -22,10 +22,11 @@ public sealed class FinanceReports(ApplicationDbContext db, IAdminAuditWriter au
         // from multiplying either the count or the agreed price.
         var eligible = from appointment in db.Appointments.AsNoTracking()
                        join plan in db.Set<RepairPlan>().AsNoTracking() on appointment.Id equals plan.AppointmentId
-                       join confirmation in db.PaymentHandoverConfirmations.AsNoTracking() on appointment.Id equals confirmation.AppointmentId
+                       let paid = db.PaymentHandoverConfirmations.Where(p => p.AppointmentId == appointment.Id).Max(p => (DateTimeOffset?)p.PaidAtUtc)
+                       let handed = db.PaymentHandoverConfirmations.Where(p => p.AppointmentId == appointment.Id && p.PaidAtUtc == paid).Max(p => (DateTimeOffset?)p.HandedOverAtUtc)
                        let completed = db.AppointmentStatusEvents.Where(e => e.AppointmentId == appointment.Id &&
                            e.FromStatus == AppointmentStatus.AwaitingPayment && e.ToStatus == AppointmentStatus.Completed &&
-                           e.ChangedAtUtc >= confirmation.PaidAtUtc && e.ChangedAtUtc >= confirmation.HandedOverAtUtc)
+                           e.ChangedAtUtc >= paid && e.ChangedAtUtc >= handed)
                            .Select(e => (DateTimeOffset?)e.ChangedAtUtc).Min()
                        where appointment.Status == AppointmentStatus.Completed && completed >= start && completed < end
                        select new { appointment.Id, appointment.Make, appointment.Model, plan.AgreedPrice, Completed = completed!.Value };

@@ -121,6 +121,15 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.Property<int?>("FromStatus")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("IsCorrection")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("NewInspectionStartUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("PreviousInspectionStartUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Reason")
                         .HasColumnType("text");
 
@@ -178,12 +187,16 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AutoBodyService.Domain.Appointments.PaymentHandoverConfirmation", b =>
                 {
-                    b.Property<Guid>("AppointmentId")
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<string>("ActorId")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<Guid>("AppointmentId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("HandedOverAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -191,9 +204,11 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("PaidAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("AppointmentId");
+                    b.HasKey("Id");
 
                     b.HasIndex("ActorId");
+
+                    b.HasIndex("AppointmentId");
 
                     b.HasIndex("HandedOverAtUtc");
 
@@ -325,6 +340,42 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_RepairPlan_Price", "\"AgreedPrice\" >= 0 AND \"AgreedPrice\" <> 'NaN'::numeric AND \"AgreedPrice\" <> 'Infinity'::numeric");
                         });
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.Appointments.RepairPriceChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("AppointmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("NewPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("OldPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("AppointmentId", "ChangedAtUtc");
+
+                    b.ToTable("RepairPriceChanges");
                 });
 
             modelBuilder.Entity("AutoBodyService.Domain.Assignments.EmployeeAssignment", b =>
@@ -1188,8 +1239,8 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.HasOne("AutoBodyService.Domain.Appointments.Appointment", null)
-                        .WithOne()
-                        .HasForeignKey("AutoBodyService.Domain.Appointments.PaymentHandoverConfirmation", "AppointmentId")
+                        .WithMany()
+                        .HasForeignKey("AppointmentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -1235,6 +1286,21 @@ namespace AutoBodyService.Infrastructure.Persistence.Migrations
                     b.HasOne("AutoBodyService.Domain.Appointments.Appointment", null)
                         .WithOne("RepairPlan")
                         .HasForeignKey("AutoBodyService.Domain.Appointments.RepairPlan", "AppointmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AutoBodyService.Domain.Appointments.RepairPriceChange", b =>
+                {
+                    b.HasOne("AutoBodyService.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AutoBodyService.Domain.Appointments.Appointment", null)
+                        .WithMany()
+                        .HasForeignKey("AppointmentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

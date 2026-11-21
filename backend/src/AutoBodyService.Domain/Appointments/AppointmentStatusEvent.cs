@@ -24,6 +24,21 @@ public sealed class AppointmentStatusEvent
     public string ActorId { get; private set; }
     public DateTimeOffset ChangedAtUtc { get; private set; }
     public string? Reason { get; private set; }
+    public bool IsCorrection { get; private set; }
+    public DateTimeOffset? PreviousInspectionStartUtc { get; private set; }
+    public DateTimeOffset? NewInspectionStartUtc { get; private set; }
+
+    public static AppointmentStatusEvent ForCorrection(Guid appointmentId, AppointmentStatus from, AppointmentStatus to,
+        string actorId, DateTimeOffset now, string reason, DateTimeOffset? previousSlot, DateTimeOffset? newSlot)
+    {
+        ArgumentOutOfRangeException.ThrowIfEqual(appointmentId, Guid.Empty);
+        ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (reason.Trim().Length > 500 || now.Offset != TimeSpan.Zero || (previousSlot is null) != (newSlot is null))
+            throw new ArgumentException("Invalid status correction.");
+        return new AppointmentStatusEvent(Guid.NewGuid(), appointmentId, from, to, actorId, now, reason.Trim())
+        { IsCorrection = true, PreviousInspectionStartUtc = previousSlot, NewInspectionStartUtc = newSlot };
+    }
 
     public static AppointmentStatusEvent ForTransition(Guid appointmentId, AppointmentStatus from, AppointmentStatus to,
         string actorId, DateTimeOffset changedAtUtc, string? reason = null)
